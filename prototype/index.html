@@ -1,0 +1,1208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Abụ Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Figtree:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: one phone running the app, with a guide panel beside it on wide screens.
+   On phones the app fills the screen and the guide folds into a thin bar at the top. Single light theme on purpose. */
+:root {
+  color-scheme: light;
+  --red: #D93A1E;
+  --red-deep: #A3261A;
+  --red-tint: #FCEAE5;
+  --gold: #E6A325;
+  --ink: #22160F;
+  --muted: #76655C;
+  --line: #E9DED8;
+  --sand: #F7F1ED;
+  --white: #FFFFFF;
+  --board: #EDE4DE;
+  --ok: #1C8173;
+  --part-s: #D93A1E;
+  --part-a: #C98410;
+  --part-t: #1C8173;
+  --part-b: #3A4AA6;
+  --part-solo: #8A3FA0;
+  --display: "Marcellus", Georgia, serif;
+  --body: "Figtree", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--board); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.45; }
+h1, h2, h3, h4 { margin: 0; text-wrap: balance; }
+button { font: inherit; color: inherit; cursor: pointer; }
+input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+
+/* Stage */
+.stage { min-height: 100%; display: flex; justify-content: center; align-items: flex-start; gap: 40px; padding: 28px 20px; }
+.guide { width: 330px; display: flex; flex-direction: column; gap: 18px; padding-top: 10px; }
+.brandline { display: flex; align-items: center; gap: 12px; }
+.mark { width: 40px; height: 40px; border-radius: 10px; background: var(--red); color: var(--white); display: grid; place-items: center; flex: none; }
+.mark svg { width: 24px; height: 24px; }
+.wordmark { font-family: var(--display); font-size: 28px; letter-spacing: .04em; }
+.guide h1 { font-family: var(--display); font-weight: 400; font-size: 30px; line-height: 1.15; }
+.guide p { margin: 0; color: var(--muted); }
+.gpanel { background: var(--white); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.gpanel h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.persona { display: flex; align-items: center; gap: 10px; border: 1.5px solid var(--line); border-radius: 12px; padding: 8px 10px; background: var(--white); text-align: left; width: 100%; }
+.persona.on { border-color: var(--ink); background: var(--sand); }
+.persona b { display: block; font-size: 14px; color: var(--ink); }
+.persona .avatar { color: var(--white); font-size: 13px; }
+.persona span { font-size: 12px; color: var(--muted); }
+.trylist { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 14px; }
+.linkbtn { background: none; border: 0; padding: 0; color: var(--red-deep); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+
+.device { flex: none; }
+.phone { width: 380px; height: 790px; max-height: calc(100vh - 40px); min-height: 640px; background: var(--white); border-radius: 44px; border: 10px solid #1d1714; box-shadow: 0 24px 50px -20px rgba(60,25,10,.5); overflow: hidden; display: flex; flex-direction: column; position: relative; }
+.status { height: 30px; flex: none; display: flex; justify-content: space-between; align-items: center; padding: 0 24px; font-size: 12px; font-weight: 700; background: var(--white); }
+.status.red { background: var(--red); color: var(--white); }
+.status.dark { background: #140D0A; color: #fff; }
+.protobar { display: none; }
+#screen { flex: 1; display: flex; flex-direction: column; min-height: 0; position: relative; }
+
+@media (max-width: 760px) {
+  .stage { padding: 0; display: block; height: 100%; }
+  .guide { display: none; }
+  .device { height: 100%; }
+  .phone { width: 100%; height: 100%; max-height: none; min-height: 0; border: 0; border-radius: 0; box-shadow: none; }
+  .status { display: none; }
+  .protobar { display: flex; flex: none; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 14px; background: var(--ink); color: #fff; font-size: 12px; }
+  .protobar button { background: rgba(255,255,255,.14); border: 0; border-radius: 8px; padding: 4px 10px; color: #fff; font-weight: 700; font-size: 12px; }
+}
+
+/* App chrome */
+.app { flex: 1; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; min-height: 0; }
+.topbar { display: flex; align-items: center; gap: 10px; padding: 8px 16px 10px; }
+.topbar h3 { font-size: 18px; font-weight: 800; flex: 1; line-height: 1.2; min-width: 0; }
+.topbar .sub { display: block; font-size: 12.5px; color: var(--muted); font-weight: 500; }
+.iconbtn { width: 38px; height: 38px; border-radius: 11px; border: 1px solid var(--line); background: var(--white); display: grid; place-items: center; flex: none; padding: 0; }
+.iconbtn svg { width: 19px; height: 19px; }
+.body { padding: 0 16px 20px; display: flex; flex-direction: column; gap: 12px; }
+.tabbar { flex: none; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--line); padding: 6px 4px 10px; background: var(--white); }
+.tab { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11.5px; color: var(--muted); font-weight: 700; background: none; border: 0; padding: 4px 0; }
+.tab svg { width: 23px; height: 23px; }
+.tab.on { color: var(--red); }
+
+.card { border-radius: 14px; border: 1px solid var(--line); background: var(--white); padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; text-align: left; width: 100%; }
+button.card:hover { border-color: #D7C7BE; }
+.card.hero { background: var(--red); border-color: var(--red); color: var(--white); }
+.card.hero .k { color: #FFD9CF; }
+.card.hero .small { color: #FFE7E0; }
+.card.sand { background: var(--sand); border-color: var(--sand); }
+.k { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; font-weight: 800; color: var(--muted); }
+.row { display: flex; align-items: center; gap: 10px; }
+.row.wrap { flex-wrap: wrap; gap: 6px; }
+.between { justify-content: space-between; }
+.grow { flex: 1; min-width: 0; }
+.title { font-weight: 700; font-size: 15px; line-height: 1.25; }
+.small { font-size: 12.5px; color: var(--muted); }
+.btn { border: 0; border-radius: 12px; padding: 12px 14px; font-weight: 800; font-size: 14.5px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; }
+.btn svg { width: 16px; height: 16px; }
+.btn.primary { background: var(--red); color: var(--white); }
+.btn.primary:hover { background: var(--red-deep); }
+.btn.primary:disabled { background: #E3B5AA; cursor: not-allowed; }
+.btn.light { background: var(--white); color: var(--red-deep); }
+.btn.ghost { background: var(--white); border: 1.5px solid var(--line); color: var(--ink); }
+.btn.outline-w { background: transparent; color: #fff; border: 1.5px solid rgba(255,255,255,.55); }
+.btn.sm { padding: 7px 12px; font-size: 13px; border-radius: 10px; }
+.btn.block { width: 100%; }
+.chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+.chip { flex: none; border: 1.5px solid var(--line); border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 700; background: var(--white); }
+.chip.on { background: var(--ink); border-color: var(--ink); color: var(--white); }
+.search { display: flex; align-items: center; gap: 8px; border-radius: 12px; background: var(--sand); padding: 0 12px; }
+.search svg { width: 17px; height: 17px; color: var(--muted); flex: none; }
+.search input { border: 0; background: transparent; padding: 11px 0; flex: 1; min-width: 0; font-size: 15px; outline: none; }
+.list { display: flex; flex-direction: column; }
+.li { display: flex; align-items: center; gap: 12px; padding: 11px 0; border: 0; border-bottom: 1px solid var(--line); background: none; text-align: left; width: 100%; }
+.li:last-child { border-bottom: 0; }
+.badge { font-size: 11.5px; font-weight: 800; padding: 3px 9px; border-radius: 999px; background: var(--sand); color: var(--muted); white-space: nowrap; border: 0; }
+.badge.ok { background: #E1F2EE; color: var(--ok); }
+.badge.warn { background: #FDF1D8; color: #8A5A00; }
+.badge.red { background: var(--red-tint); color: var(--red-deep); }
+.badge.dark { background: var(--ink); color: #fff; }
+button.badge { cursor: pointer; padding: 6px 11px; font-size: 12.5px; min-width: 76px; }
+.thumb { width: 42px; height: 42px; border-radius: 11px; background: var(--red-tint); color: var(--red-deep); display: grid; place-items: center; font-family: var(--mono); font-weight: 700; font-size: 13px; flex: none; }
+.thumb.sheet { background: var(--sand); color: var(--muted); }
+.avatar { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 13px; color: var(--white); flex: none; }
+.ord { width: 28px; height: 28px; border-radius: 8px; background: var(--sand); display: grid; place-items: center; font-family: var(--mono); font-size: 12px; font-weight: 700; flex: none; }
+.fab { position: absolute; right: 16px; bottom: 78px; box-shadow: 0 8px 20px -8px rgba(163,38,26,.7); z-index: 5; }
+.empty { text-align: center; padding: 26px 10px; color: var(--muted); display: grid; gap: 10px; justify-items: center; }
+.pp { display: inline-flex; align-items: center; justify-content: center; min-width: 26px; height: 24px; padding: 0 8px; border-radius: 7px; font-weight: 800; font-size: 12px; color: var(--white); }
+.secthead { display: flex; justify-content: space-between; align-items: baseline; }
+
+/* Forms */
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field > label, .field > .lbltxt { font-size: 12px; font-weight: 800; color: var(--muted); }
+.input, select.input, textarea.input { border: 1.5px solid var(--line); border-radius: 11px; padding: 10px 12px; font-size: 15px; background: var(--white); width: 100%; }
+.input:focus { border-color: var(--ink); outline: none; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+textarea.code { font-family: var(--mono); font-size: 12.5px; line-height: 1.7; min-height: 210px; resize: vertical; white-space: pre; overflow-x: auto; }
+.err { color: #9C2A10; font-size: 13px; font-weight: 600; }
+.checks { display: flex; flex-direction: column; gap: 6px; }
+.checks .bad { font-size: 13px; color: #8A2710; background: #FDEDE8; border-radius: 9px; padding: 7px 10px; }
+.checks .warnline { font-size: 13px; color: #7A5200; background: #FDF4DF; border-radius: 9px; padding: 7px 10px; }
+.opt { border: 1.5px solid var(--line); border-radius: 13px; padding: 11px 13px; background: var(--white); text-align: left; width: 100%; display: flex; align-items: center; gap: 10px; }
+.opt.on { border: 2px solid var(--red); background: var(--red-tint); padding: 10.5px 12.5px; }
+.seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: var(--sand); border-radius: 11px; padding: 3px; gap: 3px; }
+.seg button { border: 0; background: none; text-align: center; padding: 7px 0; font-size: 13px; font-weight: 800; border-radius: 9px; color: var(--muted); }
+.seg button.on { background: var(--white); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.codebox { display: flex; gap: 6px; }
+.codeinput { width: 100%; height: 54px; border-radius: 12px; background: rgba(255,255,255,.14); border: 1.5px solid rgba(255,255,255,.45); text-align: center; font-family: var(--mono); font-size: 24px; font-weight: 700; letter-spacing: .3em; color: #fff; text-transform: uppercase; }
+.codeinput::placeholder { color: rgba(255,255,255,.5); }
+.codeinput.dark { background: var(--sand); border-color: var(--line); color: var(--ink); }
+.codeinput.dark::placeholder { color: #B9A79D; }
+.switch { width: 42px; height: 24px; border-radius: 99px; background: #D8CCC5; border: 0; position: relative; padding: 0; flex: none; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--white); transition: left .15s; }
+.switch[aria-checked="true"] { background: var(--red); }
+.switch[aria-checked="true"]::after { left: 21px; }
+
+/* Welcome */
+.welcome { flex: 1; display: flex; flex-direction: column; justify-content: space-between; gap: 20px; padding: 28px 22px 22px; background: var(--red); color: var(--white); overflow-y: auto; }
+.bigmark { width: 76px; height: 76px; border-radius: 19px; background: var(--white); color: var(--red); display: grid; place-items: center; }
+.bigmark svg { width: 44px; height: 44px; }
+.welcome h1 { font-family: var(--display); font-weight: 400; font-size: 52px; margin: 18px 0 6px; letter-spacing: .03em; line-height: 1; }
+.welcome p { margin: 0; font-size: 17px; color: #FFE7E0; max-width: 24ch; }
+.welcome .fine { font-size: 12.5px; color: #FFD9CF; text-align: center; }
+.welcome .err { color: #fff; background: rgba(0,0,0,.18); border-radius: 9px; padding: 7px 10px; }
+
+/* Score */
+.score { display: flex; flex-direction: column; gap: 10px; }
+.sechead { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: var(--red-deep); margin-top: 2px; }
+.system { display: grid; border-radius: 11px; background: var(--sand); padding: 7px 6px 5px 4px; row-gap: 1px; }
+.lbl { font-size: 10px; font-weight: 800; display: grid; place-items: center; }
+.cell { font-family: var(--mono); font-size: 12.5px; font-weight: 500; text-align: center; padding: 2px 0; position: relative; line-height: 1.4; white-space: nowrap; }
+.cell sub, .cell sup { font-size: 8px; line-height: 0; }
+.cell.hold { color: #B9A79D; }
+.cell.bar0 { border-left: 1.5px solid #CDBEB5; }
+.cell:not(.bar0)::before { content: ":"; position: absolute; left: -2px; color: #B9A79D; font-weight: 400; }
+.cell.now { background: var(--red-tint); color: var(--red-deep); font-weight: 700; }
+.cell.dim { opacity: .3; }
+.lyr { font-size: 9.5px; color: var(--muted); white-space: nowrap; text-align: left; padding: 1px 0 3px 2px; overflow: visible; }
+.lyr.now { color: var(--red-deep); font-weight: 800; }
+.score.big .cell { font-size: 17px; padding: 4px 0; }
+.score.big .lyr { font-size: 12px; }
+.score.big .lbl { font-size: 13px; }
+.score.big .system { padding: 10px 8px 8px 6px; }
+
+/* Player */
+.mixer { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; }
+.part { border-radius: 12px; border: 1.5px solid var(--line); background: var(--white); padding: 8px 4px 6px; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 700; }
+.part .pl { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; color: var(--white); font-weight: 800; font-size: 13px; border: 0; padding: 0; }
+.part.muted .pl { background: #CDBEB5 !important; }
+.part.muted { color: var(--muted); }
+.part .sbtns { display: grid; gap: 3px; width: 100%; padding: 0 4px; }
+.part .solo { border: 0; border-radius: 6px; padding: 3px 0; font-size: 10.5px; font-weight: 800; background: var(--sand); color: var(--muted); width: 100%; }
+.part .solo.on { background: var(--ink); color: var(--white); }
+.part.mine { border-color: var(--ink); }
+.toggles { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; }
+.transport { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; }
+.transport.sticky { position: sticky; bottom: 0; z-index: 3; background: var(--white); margin: 0 -16px; padding: 8px 16px 10px; border-top: 1px solid var(--line); }
+.stepper { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.stepper .v { font-family: var(--mono); font-weight: 700; font-size: 15px; min-width: 30px; text-align: center; }
+.stepper .l { font-size: 10.5px; color: var(--muted); font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+.stepper .ctr { display: flex; align-items: center; gap: 6px; }
+.stepper button { width: 32px; height: 32px; border-radius: 9px; border: 1.5px solid var(--line); background: var(--white); font-weight: 800; padding: 0; }
+.play { width: 68px; height: 68px; border-radius: 50%; border: 0; background: var(--red); display: grid; place-items: center; box-shadow: 0 8px 18px -8px rgba(163,38,26,.8); }
+.play:hover { background: var(--red-deep); }
+.play svg { width: 28px; height: 28px; fill: var(--white); }
+.hint { font-size: 12px; color: var(--muted); text-align: center; }
+
+/* Perform */
+.perform { flex: 1; background: #140D0A; color: #F7EDE7; display: flex; flex-direction: column; min-height: 0; }
+.perform .app { padding: 10px 16px 16px; gap: 12px; }
+.perform .k { color: #E8A592; }
+.perform h2 { font-family: var(--display); font-weight: 400; font-size: 28px; line-height: 1.15; }
+.perform .system { background: #24191449; background: #241914; }
+.perform .cell { color: #F7EDE7; }
+.perform .cell.hold, .perform .cell:not(.bar0)::before { color: #7D6A60; }
+.perform .cell.bar0 { border-left-color: #5A4A42; }
+.perform .cell.now { background: #5A1D10; color: #FFD2C4; }
+.perform .lyr { color: #BFAEA5; }
+.perform .lyr.now { color: #FF9B83; }
+.perform .sheetonly { border: 1.5px dashed #5A4A42; border-radius: 12px; padding: 20px; text-align: center; color: #BFAEA5; }
+.pnav { flex: none; display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; padding: 10px 16px 16px; border-top: 1px solid #33241D; }
+.pnav .btn { background: #2B1E18; color: #F7EDE7; }
+.pnav .play { width: 58px; height: 58px; }
+
+/* Sheet + toast */
+.scrim { position: absolute; inset: 0; background: rgba(34,22,15,.45); display: flex; align-items: flex-end; z-index: 20; }
+.sheet { background: var(--white); width: 100%; border-radius: 22px 22px 0 0; padding: 8px 18px 22px; max-height: 88%; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+.grab { width: 40px; height: 5px; border-radius: 9px; background: var(--line); margin: 0 auto 4px; }
+.sheet h3 { font-size: 19px; font-weight: 800; }
+.bigcode { font-family: var(--mono); font-size: 54px; font-weight: 700; letter-spacing: .18em; text-align: center; color: var(--red); padding: 10px 0; }
+.toast { position: absolute; left: 16px; right: 16px; bottom: 84px; background: var(--ink); color: #fff; border-radius: 12px; padding: 11px 14px; font-size: 14px; font-weight: 600; z-index: 30; box-shadow: 0 10px 24px -10px rgba(0,0,0,.5); }
+.fakesheet { border-radius: 10px; border: 1px solid var(--line); background: repeating-linear-gradient(180deg, #fff 0 22px, #F1E8E3 22px 23px); height: 260px; display: grid; place-items: center; color: var(--muted); font-size: 13px; text-align: center; padding: 20px; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-mark" viewBox="0 0 24 24"><g fill="currentColor"><rect x="2" y="15" width="3" height="7" rx="1"/><rect x="7" y="12" width="3" height="10" rx="1"/><rect x="12" y="8" width="3" height="14" rx="1"/><rect x="17" y="3" width="3" height="19" rx="1"/></g></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="i-songs" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 18V5l11-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></g></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></g></symbol>
+  <symbol id="i-people" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5"/><circle cx="17" cy="9" r="2.6"/><path d="M17.5 14.6c2.3.3 3.6 2 4 4.6"/></g></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M15 5l-7 7 7 7"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></g></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5z"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="5.5" y="5.5" width="13" height="13" rx="2"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M6 15l6-6 6 6"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></g></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M4 20h4L19 9l-4-4L4 16z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+</svg>
+
+<div class="stage">
+  <aside class="guide" id="guide"></aside>
+  <div class="device">
+    <div class="phone">
+      <div class="status" id="statusbar"><span>9:41</span><span>●●●</span></div>
+      <div class="protobar" id="protobar"></div>
+      <div id="screen"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+"use strict";
+
+/* ---------- Constants ---------- */
+var TODAY = "2026-10-31";
+var KEYS = ["C", "D♭", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"];
+var TIMES = ["2/4", "3/4", "4/4", "6/8"];
+var PARTS = ["Soprano", "Alto", "Tenor", "Bass"];
+var PART_LETTER = { Soprano: "S", Alto: "A", Tenor: "T", Bass: "B" };
+var GROUP_TYPES = {
+  catholic: { name: "Catholic choir", leader: "Choirmaster", event: "Mass", sections: ["Entrance", "Kyrie", "Gloria", "Psalm", "Gospel Acclamation", "Offertory", "Sanctus", "Agnus Dei", "Communion", "Thanksgiving", "Recessional"] },
+  anglican: { name: "Anglican choir", leader: "Choirmaster", event: "Service", sections: ["Introit", "Hymn", "Psalm", "Canticle", "Anthem", "Offertory", "Communion", "Recessional"] },
+  pentecostal: { name: "Pentecostal or gospel choir", leader: "Choir director", event: "Service", sections: ["Praise", "Worship", "Special number", "Offering", "Thanksgiving", "Closing"] },
+  band: { name: "Band, orchestra or music group", leader: "Music director", event: "Performance", sections: ["Opening", "Set 1", "Set 2", "Interlude", "Encore"] }
+};
+var TAGS = ["Entrance", "Offertory", "Communion", "Thanksgiving", "Advent", "Christmas", "Easter", "Hymn", "Igbo", "Yoruba", "English", "Latin"];
+
+/* ---------- Seed data ---------- */
+var OLD100 = [
+  "[Verse 1]",
+  "S  d :- /d :t1 | l1:s1 /d :r  | m :- /- :-  |",
+  "W  All peo-ple that on earth do dwell,",
+  "A  s1:- /l1:s1 | m1:m1 /s1:t1 | d :- /- :-  |",
+  "T  m :- /f :r  | d :d  /m :r  | s :- /- :-  |",
+  "B  d1:- /f1:s1 | l1:m1 /d1:s1 | d1:- /- :-  |",
+  "S  m :- /m :m  | r :d  /f :m  | r :- /- :-  |",
+  "W  Sing to the Lord with cheer-ful voice;",
+  "A  d :- /d :d  | t1:l1 /d :d  | t1:- /- :-  |",
+  "T  s :- /l :s  | s :m  /l :s  | s :- /- :-  |",
+  "B  d :- /l1:m1 | s1:l1 /f1:s1 | s1:- /- :-  |",
+  "S  d :- /r :m  | r :d  /l1:t1 | d :- /- :-  |",
+  "W  Him serve with fear, his praise forth tell;",
+  "A  s1:- /t1:d  | l1:s1 /m1:s1 | s1:- /- :-  |",
+  "T  m :- /s :s  | f :m  /d :r  | m :- /- :-  |",
+  "B  d1:- /s1:m1 | r1:d1 /l1:s1 | d1:- /- :-  |",
+  "S  s :- /m :d  | r :f  /m :r  | d :- /- :-  |",
+  "W  Come ye be-fore him and re-joice.",
+  "A  d :- /d :l1 | t1:d  /d :t1 | d :- /- :-  |",
+  "T  m :- /l :f  | s :l  /s :f  | m :- /- :-  |",
+  "B  d :- /l1:f1 | s1:f1 /s1:s1 | d1:- /- :-  |"
+].join("\n");
+var EKELE = [
+  "[Verse]",
+  "S  d :r  /m :d  | f :m  /r :-  | m :f  /s :l  | s :- /- :- |",
+  "W  E-ke-le di-ri Chu-kwu, praise Him for ev-er,",
+  "A  s1:s1 /s1:s1 | l1:s1 /s1:-  | d :d  /d :d  | t1:- /- :- |",
+  "T  m :r  /d :m  | d :d  /t1:-  | s :l  /s :f  | r :- /- :- |",
+  "B  d :s1 /d :d  | f1:m1 /s1:-  | d :f1 /m1:f1 | s1:- /- :- |",
+  "",
+  "[Chorus]",
+  "S  m :r  /d :t1 | d :- /- :- |",
+  "W  Al-le-lu-i-a!",
+  "A  s1:s1 /l1:s1 | s1:- /- :- |",
+  "T  d :t1 /m :r  | m :- /- :- |",
+  "B  d :s1 /l1:s1 | d1:- /- :- |"
+].join("\n");
+var GRACE = [
+  "[Verse 1]",
+  "S  s1 | d :- :m.d | m :- :r | d :- :l1 | s1 :- :s1 | d :- :m.d | m :- :r.m | s :- :- |",
+  "W  A-maz-ing - grace how sweet the sound that saved a - wretch like - me!"
+].join("\n");
+
+function seed() {
+  var users = {}, members = [];
+  function u(id, name, part, role) { users[id] = { id: id, name: name }; members.push({ userId: id, part: part, role: role, joined: "2025-01-12" }); }
+  u("emeka", "Emeka Nwosu", "Bass", "leader");
+  u("chiamaka", "Chiamaka Ibe", "Soprano", "partleader");
+  u("ifeoma", "Ifeoma Eze", "Soprano", "member");
+  u("blessing", "Blessing Okon", "Soprano", "member");
+  u("grace", "Grace Adebayo", "Soprano", "member");
+  u("adaeze", "Adaeze Obi", "Alto", "member");
+  u("ngozi", "Ngozi Uche", "Alto", "partleader");
+  u("funke", "Funke Alade", "Alto", "member");
+  u("amaka", "Amaka Nnaji", "Alto", "member");
+  u("tunde", "Tunde Akin", "Tenor", "partleader");
+  u("kelechi", "Kelechi Okoro", "Tenor", "member");
+  u("chinedu", "Chinedu Agu", "Tenor", "member");
+  u("segun", "Segun Bello", "Bass", "member");
+  u("ikenna", "Ikenna Obi", "Bass", "member");
+  u("femi", "Femi Johnson", "Bass", "member");
+  u("uche", "Uche Mba", "Bass", "member");
+
+  var songs = [
+    { id: "old100", title: "All People That on Earth Do Dwell", composer: "Old Hundredth · Genevan Psalter, 1551", key: 7, time: "4/4", tags: ["Entrance", "Hymn", "English"], solfa: OLD100, sheet: null, by: "Holy Trinity Choir, Enugu" },
+    { id: "ekele", title: "Ekele Diri Chukwu", composer: "Demo arrangement", key: 5, time: "4/4", tags: ["Thanksgiving", "Igbo"], solfa: EKELE, sheet: "ekele-diri-chukwu.pdf", by: "St. Mary’s Choir" },
+    { id: "grace", title: "Amazing Grace (opening)", composer: "New Britain · words John Newton, 1779", key: 7, time: "3/4", tags: ["Hymn", "English"], solfa: GRACE, sheet: null, by: "Gospel Voices, Lagos" },
+    { id: "gloria", title: "Gloria in D", composer: "T. Adeyemi", key: 2, time: "3/4", tags: ["Latin"], solfa: "", sheet: "gloria-in-d.pdf", by: "St. Mary’s Choir" },
+    { id: "kyrie", title: "Kyrie Eleison (Missa Igbo)", composer: "Example composer", key: 5, time: "4/4", tags: ["Igbo"], solfa: "", sheet: "kyrie-missa-igbo.jpg", by: "St. Mary’s Choir" },
+    { id: "sanctus", title: "Sanctus (Missa Igbo)", composer: "Example composer", key: 5, time: "4/4", tags: ["Igbo"], solfa: "", sheet: "sanctus-missa-igbo.jpg", by: "St. Mary’s Choir" },
+    { id: "psalm24", title: "Psalm 24 response", composer: "Choir arrangement", key: 0, time: "4/4", tags: ["English"], solfa: "", sheet: "psalm-24.pdf", by: "St. Mary’s Choir" },
+    { id: "gifts", title: "Take My Gifts", composer: "Choir arrangement", key: 5, time: "4/4", tags: ["Offertory", "English"], solfa: "", sheet: "take-my-gifts.pdf", by: "St. Mary’s Choir" },
+    { id: "obugi", title: "Ọ Bụ Gị", composer: "N. Eze", key: 8, time: "4/4", tags: ["Communion", "Igbo"], solfa: "", sheet: "o-bu-gi.pdf", by: "Holy Trinity Choir, Enugu" },
+    { id: "eyin", title: "Ẹ Yìn Olúwa", composer: "B. Ojo", key: 0, time: "2/4", tags: ["Thanksgiving", "Yoruba"], solfa: "", sheet: "e-yin-oluwa.pdf", by: "Gospel Voices, Lagos" }
+  ];
+
+  function att(map) { var a = {}; members.forEach(function (m) { a[m.userId] = map[m.userId] || "present"; }); return a; }
+  var events = [
+    { id: "e-r1015", kind: "rehearsal", title: "Rehearsal", date: "2026-10-15", time: "17:00", venue: "Church hall", items: [], rsvp: {}, attendance: att({ adaeze: "present", segun: "absent", kelechi: "absent" }), code: "3150" },
+    { id: "e-r1022", kind: "rehearsal", title: "Rehearsal", date: "2026-10-22", time: "17:00", venue: "Church hall", items: [], rsvp: {}, attendance: att({ adaeze: "absent", femi: "excused", grace: "absent" }), code: "7741" },
+    { id: "e-r1029", kind: "rehearsal", title: "Rehearsal", date: "2026-10-29", time: "17:00", venue: "Church hall", items: [], rsvp: {}, attendance: att({ uche: "absent", chinedu: "excused" }), code: "2286" },
+    { id: "e-mass1101", kind: "service", title: "All Saints’ Day Mass", date: "2026-11-01", time: "08:00", venue: "St. Mary’s Church", note: "Red robes. Arrive by 7:30 AM for warm-up.",
+      items: [ { section: "Entrance", songId: "old100" }, { section: "Kyrie", songId: "kyrie" }, { section: "Gloria", songId: "gloria" }, { section: "Psalm", songId: "psalm24" }, { section: "Offertory", songId: "gifts" }, { section: "Sanctus", songId: "sanctus" }, { section: "Communion", songId: "obugi" }, { section: "Recessional", songId: "ekele" } ], rsvp: {}, attendance: {} },
+    { id: "e-r1105", kind: "rehearsal", title: "Rehearsal", date: "2026-11-05", time: "17:00", venue: "Church hall", note: "Advent songs. Altos, bring pencils.",
+      items: [ { section: "To prepare", songId: "grace" }, { section: "To prepare", songId: "gloria" }, { section: "To prepare", songId: "ekele" } ], rsvp: { kelechi: "cant", ngozi: "going", tunde: "going" }, attendance: {}, code: "4827" },
+    { id: "e-mass1129", kind: "service", title: "First Sunday of Advent", date: "2026-11-29", time: "08:00", venue: "St. Mary’s Church", items: [ { section: "Entrance", songId: "old100" }, { section: "Communion", songId: "grace" } ], rsvp: {}, attendance: {} }
+  ];
+
+  return {
+    users: users,
+    groups: {
+      stmarys: { id: "stmarys", name: "St. Mary’s Choir", type: "catholic", code: "STM482", selfCheckIn: true, members: members,
+        repertoire: ["old100", "ekele", "grace", "gloria", "kyrie", "sanctus", "psalm24", "gifts", "obugi"],
+        notices: [
+          { id: "n1", by: "emeka", date: "2026-10-30", text: "Please arrive by 7:30 AM on Sunday for warm-up. Red robes for All Saints’ Day." },
+          { id: "n2", by: "ngozi", date: "2026-10-29", text: "Altos: practise the Ekele Diri Chukwu chorus with the app before Thursday." }
+        ],
+        events: events }
+    },
+    songs: songs,
+    me: null,
+    groupId: "stmarys",
+    practice: { adaeze: { old100: 3, ekele: 1 } }
+  };
+}
+
+/* ---------- State ---------- */
+var STORE = "abu-prototype-v1";
+var S = load() || seed();
+var UI = { route: { name: S.me ? "home" : "welcome", params: {} }, stack: [], sheet: null, toast: null,
+  songFilter: "All", songQuery: "", attFilter: "all", editingOrder: false, joinErr: "", draft: null, player: null };
+
+function load() { try { var t = localStorage.getItem(STORE); return t ? JSON.parse(t) : null; } catch (e) { return null; } }
+function save() { try { localStorage.setItem(STORE, JSON.stringify(S)); } catch (e) {} }
+
+/* ---------- Helpers ---------- */
+function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+function icon(id, cls) { return '<svg' + (cls ? ' class="' + cls + '"' : "") + ' aria-hidden="true"><use href="#' + id + '"/></svg>'; }
+function uid(p) { return p + Math.random().toString(36).slice(2, 8); }
+function group() { return S.groups[S.groupId]; }
+function me() { return S.me ? S.users[S.me] : null; }
+function myMember() { var g = group(); return g && S.me ? g.members.filter(function (m) { return m.userId === S.me; })[0] : null; }
+function memberOf(id) { return group().members.filter(function (m) { return m.userId === id; })[0]; }
+function song(id) { return S.songs.filter(function (s) { return s.id === id; })[0]; }
+function ev(id) { return group().events.filter(function (e) { return e.id === id; })[0]; }
+function isLeader() { var m = myMember(); return !!m && m.role === "leader"; }
+function isPartLeader() { var m = myMember(); return !!m && m.role === "partleader"; }
+function canMark(target) { var m = myMember(); if (!m) return false; if (m.role === "leader") return true; return m.role === "partleader" && target.part === m.part; }
+function initials(n) { return n.split(/\s+/).map(function (w) { return w[0]; }).slice(0, 2).join("").toUpperCase(); }
+function partColor(p) { var l = (p || "").charAt(0).toUpperCase(); if (/^solo/i.test(p)) return "var(--part-solo)"; return { S: "var(--part-s)", A: "var(--part-a)", T: "var(--part-t)", B: "var(--part-b)" }[l] || "var(--muted)"; }
+function roleLabel(r) { if (r === "leader") return GROUP_TYPES[group().type].leader; if (r === "partleader") return "Part leader"; return "Member"; }
+var DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function dObj(d) { var p = d.split("-"); return new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])); }
+function fmtDate(d) { var x = dObj(d); return DOW[x.getUTCDay()] + " " + x.getUTCDate() + " " + MON[x.getUTCMonth()]; }
+function fmtTime(t) { var p = t.split(":"), h = +p[0], ap = h >= 12 ? "PM" : "AM"; h = h % 12 || 12; return h + ":" + p[1] + " " + ap; }
+function relDay(d) { var diff = Math.round((dObj(d) - dObj(TODAY)) / 86400000); if (diff === 0) return "today"; if (diff === 1) return "tomorrow"; if (diff > 1 && diff < 7) return "in " + diff + " days"; if (diff < 0) return "past"; return ""; }
+function upcoming() { return group().events.filter(function (e) { return e.date >= TODAY; }).sort(function (a, b) { return (a.date + a.time).localeCompare(b.date + b.time); }); }
+function pastRehearsals() { return group().events.filter(function (e) { return e.kind === "rehearsal" && e.date < TODAY; }).sort(function (a, b) { return b.date.localeCompare(a.date); }); }
+function attendanceRate(userId) {
+  var past = pastRehearsals(), n = 0, p = 0;
+  past.forEach(function (e) { var s = e.attendance[userId]; if (s && s !== "excused") { n++; if (s === "present") p++; } });
+  return n ? { pct: Math.round(p * 100 / n), p: p, n: n } : null;
+}
+function kindLabel(e) { if (e.kind === "rehearsal") return "Rehearsal"; if (e.kind === "service") return GROUP_TYPES[group().type].event; return "Concert"; }
+
+/* ---------- Sol-fa parser ---------- */
+var SYL = { d: 0, de: 1, di: 1, ra: 1, r: 2, re: 3, ri: 3, ma: 3, me: 3, m: 4, f: 5, fe: 6, fi: 6, s: 7, se: 8, si: 8, le: 8, lo: 8, l: 9, la: 9, ta: 10, ba: 10, t: 11, te: 11 };
+var NOTE_RE = /^(de|di|ra|re|ri|ma|me|fe|fi|se|si|le|lo|la|ta|ba|te|d|r|m|f|s|l|t)(['’¹²]+|[12₁₂])?$/;
+function octOf(o) { if (!o) return 0; var v = 0; for (var i = 0; i < o.length; i++) { var c = o[i]; if (c === "'" || c === "’" || c === "¹") v += 1; else if (c === "²") v += 2; else if (c === "1" || c === "₁") v -= 1; else if (c === "2" || c === "₂") v -= 2; } return v; }
+
+function parseSolfa(text, time) {
+  var bpb = parseInt(String(time).split("/")[0], 10) || 4;
+  var res = { sections: [], parts: [], events: {}, total: 0, errors: [], warnings: [], bars: 0 };
+  var cur = null, lastPart = null;
+  function newSec(name) { cur = { name: name, order: [], bars: {}, words: {} }; res.sections.push(cur); lastPart = null; }
+  String(text || "").split(/\r?\n/).forEach(function (raw, li) {
+    var line = raw.replace(/\t/g, " ").trim();
+    if (!line || line.charAt(0) === "#") return;
+    if (/^[A-Za-z][A-Za-z0-9]{0,7}:?$/.test(line)) return;
+    var sm = line.match(/^\[(.+)\]$/);
+    if (sm) { newSec(sm[1].trim()); return; }
+    var m = line.match(/^([A-Za-z][A-Za-z0-9]{0,7}):?\s+(.*)$/);
+    if (!m) { res.errors.push("Line " + (li + 1) + ": start each line with a part name (S, A, T, B, Solo) or W for words."); return; }
+    if (!cur) newSec("");
+    var label = m[1], body = m[2];
+    if (/^(w|words)$/i.test(label)) {
+      if (!lastPart) { res.errors.push("Line " + (li + 1) + ": put the words line (W) under the part it belongs to."); return; }
+      cur.words[lastPart] = (cur.words[lastPart] || []).concat(splitWords(body));
+      return;
+    }
+    label = label.length <= 2 ? label.toUpperCase() : label.charAt(0).toUpperCase() + label.slice(1).toLowerCase();
+    if (/^[drmfslt]/.test(m[1]) && m[1].length <= 2 && !/^[SATB]/.test(m[1])) { res.errors.push("Line " + (li + 1) + ": start the line with a part name, e.g. “S  " + esc(line) + "”."); return; }
+    if (cur.order.indexOf(label) < 0) { cur.order.push(label); cur.bars[label] = []; }
+    if (res.parts.indexOf(label) < 0) res.parts.push(label);
+    lastPart = label;
+    body.replace(/‖/g, "|").split("|").forEach(function (b) { if (b.trim() !== "") cur.bars[label].push(b.split(/[:\/¦]/).map(function (x) { return x.trim(); })); });
+  });
+  if (!res.sections.length || !res.parts.length) { res.errors.push("Type at least one part line, e.g. “S  d :r /m :f |”."); return res; }
+
+  var start = 0, barNo = 0;
+  res.parts.forEach(function (p) { res.events[p] = []; });
+  res.sections.forEach(function (sec, si) {
+    sec.start = start; sec.lyrics = {};
+    var lens = {}, first = sec.order[0];
+    sec.order.forEach(function (p) {
+      var bars = sec.bars[p], beat = start, last = null, onsets = [];
+      bars.forEach(function (beats, bi) {
+        var isFirst = si === 0 && bi === 0, isLast = si === res.sections.length - 1 && bi === bars.length - 1;
+        var n = barNo + bi + 1;
+        if (beats.length !== bpb && !((isFirst || isLast) && beats.length < bpb)) {
+          res.errors.push(partName(p) + ", bar " + n + " has " + beats.length + " beat" + (beats.length === 1 ? "" : "s") + "; " + time + " needs " + bpb + ".");
+        }
+        beats.forEach(function (bs) {
+          if (bs === "" || bs === "x") { last = null; beat += 1; return; }
+          var halves = bs.split(".");
+          halves.forEach(function (h, hi) {
+            var qs = h.split(","), hd = 1 / halves.length;
+            qs.forEach(function (q, qi) {
+              var tok = q.trim(), d = hd / qs.length, at = beat + hi * hd + qi * d;
+              if (tok === "" || tok === "-") { if (last && Math.abs(last.start + last.dur - at) < 1e-6) last.dur += d; return; }
+              if (tok === "x") { last = null; return; }
+              var nm = tok.match(NOTE_RE);
+              if (!nm) { res.errors.push(partName(p) + ", bar " + n + ": “" + tok + "” is not a sol-fa note."); last = null; return; }
+              last = { start: at, dur: d, deg: SYL[nm[1]], oct: octOf(nm[2]) };
+              res.events[p].push(last); onsets.push(last);
+            });
+          });
+          beat += 1;
+        });
+      });
+      lens[p] = beat - start;
+      var words = sec.words[p];
+      if (words) {
+        var ly = sec.lyrics[p] = {}, wi = 0;
+        onsets.forEach(function (o) {
+          if (wi >= words.length) return;
+          var w = words[wi++]; if (w === "-" || w === "_") return;
+          var b = Math.floor(o.start + 1e-6); ly[b] = ly[b] ? ly[b] + " " + w : w;
+        });
+        if (words.length > onsets.length) res.warnings.push(partName(p) + (sec.name ? " in " + sec.name : "") + ": " + words.length + " syllables for " + onsets.length + " notes. Some words won’t show.");
+      }
+    });
+    sec.order.forEach(function (p) {
+      if (lens[p] !== lens[first]) res.errors.push((sec.name ? sec.name + ": " : "") + partName(p) + " has " + lens[p] + " beats but " + partName(first) + " has " + lens[first] + ".");
+    });
+    sec.beats = lens[first]; start += sec.beats; barNo += sec.bars[first].length;
+  });
+  res.total = start; res.bars = barNo;
+  return res;
+}
+function splitWords(body) {
+  var out = [];
+  body.trim().split(/\s+/).forEach(function (w) {
+    if (w === "-" || w === "_") { out.push(w); return; }
+    var parts = w.split("-");
+    parts.forEach(function (p, i) { if (p === "") return; out.push(i < parts.length - 1 ? p + "-" : p); });
+  });
+  return out;
+}
+function partName(p) { return { S: "Soprano", A: "Alto", T: "Tenor", B: "Bass" }[p] || p; }
+function fmtBeat(s) {
+  if (s === "") return "&nbsp;";
+  return esc(s).replace(/(de|di|ra|re|ri|ma|me|fe|fi|se|si|le|lo|la|ta|ba|te|d|r|m|f|s|l|t)(['’¹²]+|[12₁₂])/g, function (a, n, o) {
+    var v = octOf(o); return n + (v > 0 ? "<sup>" + v + "</sup>" : "<sub>" + (-v) + "</sub>");
+  });
+}
+
+function scoreHTML(parsed, opts) {
+  opts = opts || {};
+  var maxBeats = opts.big ? 8 : 12, html = "";
+  parsed.sections.forEach(function (sec) {
+    if (sec.name) html += '<div class="sechead">' + esc(sec.name) + "</div>";
+    var first = sec.order[0], bars = sec.bars[first], i = 0, beatAt = sec.start;
+    var barLen = Math.max.apply(null, bars.map(function (b) { return b.length; }).concat([1]));
+    var fit = Math.max(1, Math.floor(maxBeats / barLen)), per = Math.ceil(bars.length / Math.ceil(bars.length / fit));
+    while (i < bars.length) {
+      var take = [], n = 0;
+      while (i + take.length < bars.length && take.length < per) { n += bars[i + take.length].length; take.push(i + take.length); }
+      html += '<div class="system" style="grid-template-columns: 20px repeat(' + n + ', minmax(0,1fr))">';
+      sec.order.forEach(function (p) {
+        html += '<div class="lbl" style="color:' + partColor(p) + '">' + esc(p.length > 2 ? p.slice(0, 2) : p) + "</div>";
+        var b = beatAt;
+        take.forEach(function (bi) {
+          (sec.bars[p][bi] || []).forEach(function (bs, k) {
+            var hold = bs === "-" || bs === "";
+            html += '<div class="cell' + (k === 0 ? " bar0" : "") + (hold ? " hold" : "") + '" data-beat="' + b + '" data-part="' + esc(p) + '">' + (bs === "-" ? "–" : fmtBeat(bs)) + "</div>";
+            b++;
+          });
+        });
+        if (sec.lyrics[p]) {
+          html += "<div></div>";
+          for (var x = beatAt; x < beatAt + n; x++) html += '<div class="lyr" data-beat="' + x + '">' + esc(sec.lyrics[p][x] || "") + "</div>";
+        }
+      });
+      html += "</div>";
+      beatAt += n; i += take.length;
+    }
+  });
+  return '<div class="score' + (opts.big ? " big" : "") + '" id="score">' + html + "</div>";
+}
+
+/* ---------- Audio engine ---------- */
+var A = { ctx: null, master: null, gains: {}, live: [], timer: null, raf: null, playing: false };
+function audioOK() {
+  if (A.ctx) return true;
+  var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return false;
+  A.ctx = new AC(); A.master = A.ctx.createGain(); A.master.gain.value = 0.9;
+  var comp = A.ctx.createDynamicsCompressor(); A.master.connect(comp); comp.connect(A.ctx.destination);
+  return true;
+}
+function gainFor(p) { if (!A.gains[p]) { var g = A.ctx.createGain(); g.gain.value = 0; g.connect(A.master); A.gains[p] = g; } return A.gains[p]; }
+function doh(key) { var r = 60 + key; if (key >= 8) r -= 12; return r; }
+function partRef(p, key) { var l = p.charAt(0).toUpperCase(); return doh(key) - ((l === "T" || l === "B") && !/^solo/i.test(p) ? 12 : 0); }
+function voice(p, midi, t, len) {
+  var c = A.ctx, f = 440 * Math.pow(2, (midi - 69) / 12);
+  var env = c.createGain(); env.gain.setValueAtTime(0, t);
+  env.gain.linearRampToValueAtTime(1, t + 0.05);
+  env.gain.setValueAtTime(1, t + Math.max(0.06, len - 0.1));
+  env.gain.linearRampToValueAtTime(0, t + len);
+  var lp = c.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = midi < 52 ? 900 : 1500; lp.Q.value = 0.5;
+  env.connect(lp); lp.connect(gainFor(p));
+  [["sawtooth", -6, 0.33], ["sawtooth", 6, 0.33], ["triangle", 0, 0.6]].forEach(function (o) {
+    var osc = c.createOscillator(); osc.type = o[0]; osc.frequency.value = f; osc.detune.value = o[1];
+    var og = c.createGain(); og.gain.value = o[2]; osc.connect(og); og.connect(env);
+    osc.start(t); osc.stop(t + len + 0.05); A.live.push(osc);
+    osc.onended = function () { var i = A.live.indexOf(osc); if (i >= 0) A.live.splice(i, 1); };
+  });
+}
+function P() { return UI.player; }
+function newPlayer(s, parsed) {
+  var m = myMember(), mine = m ? PART_LETTER[m.part] : null;
+  if (parsed.parts.indexOf(mine) < 0) mine = parsed.parts[0];
+  return { songId: s.id, song: s, parsed: parsed, muted: {}, solo: null, mine: mine, focus: parsed.parts.length > 1, loop: false, tempo: s.time === "3/4" ? 96 : 84, transpose: 0, beat: -1, anchorTime: 0, anchorBeat: 0, ptr: {} };
+}
+function level(p) { var pl = P(); if (!pl) return 0; if (pl.solo) return pl.solo === p ? 1 : 0; if (pl.muted[p]) return 0; if (pl.focus && p !== pl.mine) return 0.28; return 1; }
+var BASE = { S: 0.16, A: 0.15, T: 0.15, B: 0.2 };
+function applyLevels() { var pl = P(); if (!pl || !A.ctx) return; pl.parsed.parts.forEach(function (p) { gainFor(p).gain.setTargetAtTime(level(p) * (BASE[p] || 0.15), A.ctx.currentTime, 0.03); }); }
+function beatNow() { var pl = P(); return pl.anchorBeat + (A.ctx.currentTime - pl.anchorTime) * pl.tempo / 60; }
+function startPlay() {
+  var pl = P(); if (!pl) return;
+  if (!pl.parsed.total) { toast("This song has no sol-fa to play yet."); return; }
+  if (!audioOK()) { toast("This browser can’t play sound. Try Chrome on Android."); return; }
+  var go = function () {
+    A.playing = true; pl.anchorTime = A.ctx.currentTime + 0.08; pl.anchorBeat = 0; pl.ptr = {};
+    applyLevels(); A.timer = setInterval(tick, 25); tick(); A.raf = requestAnimationFrame(draw); syncPlayBtn();
+  };
+  var r = A.ctx.resume && A.ctx.resume();
+  if (r && r.then) r.then(go, function () { toast("Your browser blocked sound. Tap play again."); }); else go();
+}
+function tick() {
+  var pl = P(); if (!pl || !A.playing) return;
+  var spb = 60 / pl.tempo, now = beatNow(), horizon = now + 0.2 / spb;
+  pl.parsed.parts.forEach(function (p) {
+    var evs = pl.parsed.events[p], i = pl.ptr[p] || 0;
+    while (i < evs.length && evs[i].start < horizon) {
+      var e = evs[i], t = pl.anchorTime + (e.start - pl.anchorBeat) * spb;
+      if (t >= A.ctx.currentTime - 0.02) voice(p, partRef(p, pl.song.key) + e.deg + 12 * e.oct + pl.transpose, t, Math.max(0.08, e.dur * spb * 0.95));
+      i++;
+    }
+    pl.ptr[p] = i;
+  });
+  if (now >= pl.parsed.total + 0.05) {
+    countPractice(pl.songId);
+    if (pl.loop) { pl.anchorBeat = 0; pl.anchorTime = A.ctx.currentTime + 0.05; pl.ptr = {}; }
+    else stopPlay();
+  }
+}
+function draw() {
+  var pl = P(); if (!pl || !A.playing) return;
+  var b = Math.floor(beatNow()); if (b !== pl.beat) { pl.beat = b; highlight(b); }
+  A.raf = requestAnimationFrame(draw);
+}
+function highlight(b) {
+  var sc = document.getElementById("score"); if (!sc) return;
+  sc.querySelectorAll(".now").forEach(function (c) { c.classList.remove("now"); });
+  if (b < 0) return;
+  var cells = sc.querySelectorAll('[data-beat="' + b + '"]'); cells.forEach(function (c) { c.classList.add("now"); });
+  var scroller = document.querySelector(".app"), c0 = cells[0];
+  if (scroller && c0) {
+    var r = c0.getBoundingClientRect(), sr = scroller.getBoundingClientRect();
+    if (r.top < sr.top + 10 || r.bottom > sr.bottom - 160) scroller.scrollTop += r.top - sr.top - 60;
+  }
+}
+function stopPlay() {
+  A.playing = false;
+  if (A.timer) clearInterval(A.timer); A.timer = null;
+  if (A.raf) cancelAnimationFrame(A.raf); A.raf = null;
+  A.live.slice().forEach(function (o) { try { o.stop(); } catch (e) {} }); A.live = [];
+  if (P()) { P().beat = -1; highlight(-1); }
+  syncPlayBtn();
+}
+function syncPlayBtn() {
+  document.querySelectorAll("[data-act=play]").forEach(function (b) {
+    b.innerHTML = icon(A.playing ? "i-stop" : "i-play"); b.setAttribute("aria-label", A.playing ? "Stop" : "Play");
+  });
+}
+function countPractice(id) { if (!S.me) return; S.practice[S.me] = S.practice[S.me] || {}; S.practice[S.me][id] = (S.practice[S.me][id] || 0) + 1; save(); }
+
+/* ---------- Navigation ---------- */
+var TABS = ["home", "songs", "events", "group"];
+function go(name, params, tab) {
+  if (A.playing) stopPlay();
+  if (tab || TABS.indexOf(name) >= 0 && tab !== false) UI.stack = []; else UI.stack.push(UI.route);
+  UI.route = { name: name, params: params || {} }; UI.sheet = null; UI.editingOrder = false;
+  render(true);
+}
+function back() { if (A.playing) stopPlay(); UI.route = UI.stack.pop() || { name: S.me ? "home" : "welcome", params: {} }; UI.sheet = null; UI.editingOrder = false; render(true); }
+function toast(msg) { UI.toast = msg; renderToast(); clearTimeout(toast.t); toast.t = setTimeout(function () { UI.toast = null; renderToast(); }, 2600); }
+function renderToast() { var t = document.getElementById("toast"); if (t) t.remove(); if (UI.toast) { var d = document.createElement("div"); d.className = "toast"; d.id = "toast"; d.setAttribute("role", "status"); d.textContent = UI.toast; document.getElementById("screen").appendChild(d); } }
+
+/* ---------- Screens ---------- */
+function topbar(title, sub, opts) {
+  opts = opts || {};
+  return '<div class="topbar">' + (opts.back !== false ? '<button class="iconbtn" data-act="back" aria-label="Back">' + icon("i-back") + "</button>" : "") +
+    "<h3>" + title + (sub ? '<span class="sub">' + sub + "</span>" : "") + "</h3>" + (opts.right || "") + "</div>";
+}
+function tabbar(on) {
+  var t = [["home", "i-home", "Home"], ["songs", "i-songs", "Songs"], ["events", "i-cal", "Events"], ["group", "i-people", "Group"]];
+  return '<nav class="tabbar">' + t.map(function (x) { return '<button class="tab' + (x[0] === on ? " on" : "") + '" data-act="tab" data-to="' + x[0] + '">' + icon(x[1]) + x[2] + "</button>"; }).join("") + "</nav>";
+}
+function songRow(s, right) {
+  var playable = !!s.solfa;
+  return '<button class="li" data-act="open-song" data-id="' + s.id + '"><div class="thumb' + (playable ? "" : " sheet") + '">' + (playable ? KEYS[s.key] : icon("i-file")) + '</div><div class="grow"><div class="title" style="font-size:14.5px">' + esc(s.title) + '</div><div class="small">' + esc(s.composer) + " · " + s.time + (playable ? "" : " · sheet only") + "</div></div>" + (right || "") + "</button>";
+}
+
+var SCREENS = {};
+
+SCREENS.welcome = function () {
+  return '<div class="welcome">' +
+    '<div><div class="bigmark">' + icon("i-mark") + '</div><h1>Abụ</h1><p>Learn your part on your phone. Keep your whole group in one place.</p></div>' +
+    '<form id="joinForm" style="display:flex;flex-direction:column;gap:12px" novalidate>' +
+      '<label for="joinCode" style="font-size:14px;font-weight:800">Join your group with its code</label>' +
+      '<input class="codeinput" id="joinCode" maxlength="6" autocomplete="off" placeholder="STM482" aria-describedby="joinHint">' +
+      (UI.joinErr ? '<div class="err" role="alert">' + esc(UI.joinErr) + "</div>" : "") +
+      '<span id="joinHint" class="fine" style="text-align:left">Try the demo code <b>STM482</b> for St. Mary’s Choir.</span>' +
+      '<button class="btn light block" type="submit">Join group</button>' +
+      '<button class="btn outline-w block" type="button" data-act="goto" data-to="create">I lead a group: create one</button>' +
+      '<button class="btn block" type="button" data-act="persona" data-id="adaeze" style="background:transparent;color:#FFE7E0;text-decoration:underline;padding:4px">Skip and look around as a member</button>' +
+    "</form></div>";
+};
+
+SCREENS.joinProfile = function () {
+  var g = S.groups[UI.route.params.gid];
+  return '<div class="app">' + topbar("Join " + esc(g.name), g.members.length + " members · " + GROUP_TYPES[g.type].name) +
+    '<form class="body" id="profileForm" novalidate>' +
+      '<div class="field"><label for="pfName">Your name</label><input class="input" id="pfName" autocomplete="name" placeholder="e.g. Ada Okafor"></div>' +
+      '<div class="field"><span class="lbltxt" id="pfPartLbl">Your voice part</span><div class="two" role="radiogroup" aria-labelledby="pfPartLbl">' +
+        PARTS.map(function (p, i) { return '<button type="button" class="opt' + (i === 1 ? " on" : "") + '" data-act="pick-part" data-part="' + p + '" role="radio" aria-checked="' + (i === 1) + '"><span class="pp" style="background:' + partColor(p) + '">' + PART_LETTER[p] + "</span><b>" + p + "</b></button>"; }).join("") +
+      "</div></div>" +
+      '<p class="small" style="margin:0">Not sure of your part? Pick the closest one. Your leader can change it later.</p>' +
+      '<div class="err" id="pfErr" role="alert"></div>' +
+      '<button class="btn primary block" type="submit">Join group</button>' +
+    "</form></div>";
+};
+
+SCREENS.create = function () {
+  var d = UI.createDraft || (UI.createDraft = { type: "catholic" });
+  return '<div class="app">' + topbar("Create your group") +
+    '<form class="body" id="createForm" novalidate>' +
+      '<div class="field"><label for="cgName">Group name</label><input class="input" id="cgName" placeholder="e.g. Holy Family Choir, Owerri" value="' + esc(d.name || "") + '"></div>' +
+      '<div class="field"><span class="lbltxt">What kind of group?</span><div class="list" style="gap:6px">' +
+        Object.keys(GROUP_TYPES).map(function (k) { var t = GROUP_TYPES[k]; return '<button type="button" class="opt' + (d.type === k ? " on" : "") + '" data-act="pick-type" data-type="' + k + '" aria-pressed="' + (d.type === k) + '"><div class="grow"><div class="title" style="font-size:14.5px">' + t.name + '</div><div class="small">' + t.sections.slice(0, 4).join(", ") + "…</div></div>" + (d.type === k ? '<span class="badge red">' + icon("i-check").replace("<svg", '<svg width="12" height="12"') + "</span>" : "") + "</button>"; }).join("") +
+      "</div></div>" +
+      '<div class="field"><label for="cgMe">Your name</label><input class="input" id="cgMe" autocomplete="name" placeholder="e.g. Emeka Nwosu" value="' + esc(d.me || "") + '"></div>' +
+      '<div class="field"><label for="cgPart">Your own part</label><select class="input" id="cgPart">' + PARTS.map(function (p) { return "<option>" + p + "</option>"; }).join("") + "<option>I don’t sing</option></select></div>" +
+      '<p class="small" style="margin:0">Parts start as Soprano, Alto, Tenor and Bass. Section names come from the group type, and you can rename them later.</p>' +
+      '<div class="err" id="cgErr" role="alert"></div>' +
+      '<button class="btn primary block" type="submit">Create group</button>' +
+    "</form></div>";
+};
+
+SCREENS.home = function () {
+  var g = group(), m = myMember(), u = me(), up = upcoming();
+  var nextSvc = up.filter(function (e) { return e.kind !== "rehearsal"; })[0];
+  var nextReh = up.filter(function (e) { return e.kind === "rehearsal"; })[0];
+  var rate = attendanceRate(S.me);
+  var learn = []; [nextSvc, nextReh].forEach(function (e) { if (e) e.items.forEach(function (it) { var s = song(it.songId); if (s && s.solfa && learn.indexOf(s) < 0) learn.push(s); }); });
+  var pr = (S.practice[S.me] || {});
+  var html = '<div class="app">' +
+    '<div class="topbar"><h3>' + esc(g.name) + '<span class="sub">Good evening, ' + esc(u.name.split(" ")[0]) + ' · <b style="color:' + partColor(m.part) + '">' + esc(m.part) + "</b>" + (m.role !== "member" ? " · " + roleLabel(m.role) : "") + '</span></h3><button class="avatar" style="background:' + partColor(m.part) + ';border:0" data-act="sheet" data-sheet="profile" aria-label="Your profile">' + initials(u.name) + "</button></div>" +
+    '<div class="body">';
+  if (nextSvc) html += '<div class="card hero"><span class="k">Next ' + esc(kindLabel(nextSvc).toLowerCase()) + (relDay(nextSvc.date) ? " · " + relDay(nextSvc.date) : "") + '</span><span class="title" style="font-size:18px">' + esc(nextSvc.title) + '</span><span class="small">' + fmtDate(nextSvc.date) + " · " + fmtTime(nextSvc.time) + " · " + nextSvc.items.length + " songs</span>" + '<button class="btn light sm" style="align-self:flex-start;margin-top:4px" data-act="open-event" data-id="' + nextSvc.id + '">Open song order</button></div>';
+  if (nextReh) {
+    var rs = nextReh.rsvp[S.me];
+    html += '<button class="card" data-act="open-event" data-id="' + nextReh.id + '"><div class="row"><div class="grow"><span class="k">Rehearsal</span><div class="title">' + fmtDate(nextReh.date) + " · " + fmtTime(nextReh.time) + '</div><span class="small">' + esc(nextReh.venue) + (rate ? " · your attendance " + rate.pct + "%" : "") + "</span></div>" + (rs === "going" ? '<span class="badge ok">Going</span>' : rs === "cant" ? '<span class="badge warn">Can’t come</span>' : '<span class="badge red">Reply</span>') + "</div></button>";
+  }
+  if (learn.length) {
+    html += '<div><div class="secthead"><span class="k">Learn your part</span><span class="small">' + esc(m.part) + '</span></div><div class="list">' +
+      learn.map(function (s) { var n = pr[s.id] || 0; return songRow(s, n ? '<span class="badge ok">Practised ' + n + "×</span>" : '<span class="badge red">New</span>'); }).join("") + "</div></div>";
+  }
+  html += '<div><div class="secthead"><span class="k">Notices</span>' + ((isLeader() || isPartLeader()) ? '<button class="linkbtn" data-act="sheet" data-sheet="notice">Post a notice</button>' : "") + "</div>";
+  if (!g.notices.length) html += '<p class="small">No notices yet.</p>';
+  g.notices.slice(0, 3).forEach(function (n) { var by = S.users[n.by], bm = memberOf(n.by); html += '<div class="card sand" style="margin-top:6px"><span class="k">' + esc(by ? by.name : "") + (bm ? " · " + roleLabel(bm.role) : "") + " · " + fmtDate(n.date) + '</span><span style="font-size:14px">' + esc(n.text) + "</span></div>"; });
+  html += "</div>";
+  if (!nextSvc && !nextReh && !learn.length) html += '<div class="empty"><b>Your group is ready.</b><span>Add songs to the library, then plan your first service or rehearsal.</span><button class="btn primary" data-act="goto" data-to="eventNew">Plan an event</button></div>';
+  html += "</div></div>" + tabbar("home");
+  return html;
+};
+
+SCREENS.songs = function () {
+  var g = group(), q = UI.songQuery.toLowerCase(), f = UI.songFilter;
+  var list = S.songs.filter(function (s) {
+    if (f === "Ours" && g.repertoire.indexOf(s.id) < 0) return false;
+    if (f === "Playable" && !s.solfa) return false;
+    if (f !== "All" && f !== "Ours" && f !== "Playable" && s.tags.indexOf(f) < 0) return false;
+    if (q && (s.title + " " + s.composer + " " + s.by).toLowerCase().indexOf(q) < 0) return false;
+    return true;
+  });
+  var chips = ["All", "Ours", "Playable"].concat(TAGS.filter(function (t) { return S.songs.some(function (s) { return s.tags.indexOf(t) >= 0; }); }));
+  return '<div class="app">' + topbar("Songs", S.songs.length + " songs shared on Abụ · " + g.repertoire.length + " in our repertoire", { back: false }) +
+    '<div class="body"><div class="search">' + icon("i-search") + '<input id="songSearch" type="search" placeholder="Search title, composer or group" value="' + esc(UI.songQuery) + '" aria-label="Search songs"></div>' +
+    '<div class="chips">' + chips.map(function (c) { return '<button class="chip' + (c === f ? " on" : "") + '" data-act="song-filter" data-f="' + c + '">' + (c === "Ours" ? "Our repertoire" : c === "Playable" ? "Has sol-fa" : c) + "</button>"; }).join("") + "</div>" +
+    '<div class="list" id="songList">' + (list.length ? list.map(function (s) { return songRow(s, g.repertoire.indexOf(s.id) >= 0 ? '<span class="badge ok">Ours</span>' : ""); }).join("") : '<div class="empty">No songs match. Try another word or filter.</div>') + "</div>" +
+    '<div style="height:56px"></div></div></div>' +
+    '<button class="btn primary fab" data-act="new-song">' + icon("i-plus") + "Add song</button>" + tabbar("songs");
+};
+
+SCREENS.song = function () {
+  var s = song(UI.route.params.id) || UI.draftSong, g = group(), ours = g.repertoire.indexOf(s.id) >= 0, preview = UI.route.params.preview;
+  var right = preview ? "" : '<button class="iconbtn" data-act="sheet" data-sheet="songinfo" aria-label="Song details">' + icon("i-file") + "</button>";
+  var html = '<div class="app">' + topbar(esc(s.title), esc(s.composer) + (s.solfa ? ' · <span id="keyLbl">Doh is ' + KEYS[s.key] + "</span> · " + s.time : ""), { right: right }) + '<div class="body" style="gap:11px">';
+  if (preview) html += '<div class="card sand"><span class="small"><b>Preview.</b> This is how members will see and hear the song. Go back to keep editing, or save it.</span><button class="btn primary sm" style="align-self:flex-start" data-act="save-song">Save song</button></div>';
+  if (!s.solfa) {
+    html += '<div class="card sand"><span class="k">Original sheet</span><div class="fakesheet">' + icon("i-file").replace("<svg", '<svg width="34" height="34"') + "<br>" + esc(s.sheet || "No sheet attached") + '<br><span>In the real app the PDF or photo shows here.</span></div><span class="small">Nobody has typed this song in sol-fa yet, so it can’t play. Anyone in the group can add the sol-fa.</span></div>';
+  } else {
+    var pl = UI.player;
+    html += scoreHTML(pl.parsed);
+    html += '<div class="mixer" id="mixer">' + pl.parsed.parts.map(function (p) {
+      return '<div class="part" data-part="' + esc(p) + '"><button class="pl" style="background:' + partColor(p) + '" data-act="mute" data-part="' + esc(p) + '" aria-label="Mute or unmute ' + esc(partName(p)) + '">' + esc(p.length > 2 ? p.slice(0, 2) : p) + "</button><span>" + esc(partName(p)) + '</span><div class="sbtns"><button class="solo" data-act="solo" data-part="' + esc(p) + '">Solo</button>' + (pl.parsed.parts.length > 1 ? '<button class="solo mineBtn" data-act="mine" data-part="' + esc(p) + '">Mine</button>' : "") + "</div></div>";
+    }).join("") + "</div>";
+    if (pl.parsed.parts.length > 1) html += '<div class="toggles"><span>Focus my part <span class="small">(others softer)</span></span><button class="switch" data-act="focus" role="switch" aria-checked="' + pl.focus + '" aria-label="Focus my part"></button></div>';
+    html += '<div class="toggles"><span>Loop the song</span><button class="switch" data-act="loop" role="switch" aria-checked="' + pl.loop + '" aria-label="Loop the song"></button></div>';
+    html += '<div class="transport sticky"><div class="stepper"><span class="l">Tempo</span><div class="ctr"><button data-act="tempo" data-d="-4" aria-label="Slower">−</button><span class="v" id="tempoV">' + pl.tempo + '</span><button data-act="tempo" data-d="4" aria-label="Faster">+</button></div></div>' +
+      '<button class="play" data-act="play" aria-label="Play">' + icon("i-play") + "</button>" +
+      '<div class="stepper"><span class="l">Key (doh)</span><div class="ctr"><button data-act="key" data-d="-1" aria-label="Lower key">−</button><span class="v" id="keyV">' + KEYS[(s.key + pl.transpose + 12) % 12] + '</span><button data-act="key" data-d="1" aria-label="Higher key">+</button></div></div></div>';
+    html += '<span class="hint">Tap a letter to mute that part. “Mine” sets your part.</span>';
+  }
+  if (!preview) {
+    html += '<div class="row wrap">' + (ours ? '<span class="badge ok">In our repertoire</span>' : (isLeader() ? '<button class="btn ghost sm" data-act="add-rep" data-id="' + s.id + '">' + icon("i-plus") + "Add to our repertoire</button>" : '<span class="badge">Shared by ' + esc(s.by) + "</span>")) +
+      (!s.solfa ? '<button class="btn ghost sm" data-act="edit-song" data-id="' + s.id + '">' + icon("i-edit") + "Type the sol-fa</button>" : "") + "</div>";
+  }
+  html += "</div></div>";
+  return html;
+};
+
+SCREENS.editor = function () {
+  var d = UI.draft;
+  return '<div class="app">' + topbar(d.id ? "Add sol-fa" : "Add a song", "Type or paste it the way it’s written on paper", { right: '<button class="btn primary sm" data-act="save-song">Save</button>' }) +
+    '<div class="body">' +
+      '<div class="field"><label for="edTitle">Title</label><input class="input" id="edTitle" data-draft="title" value="' + esc(d.title) + '" placeholder="e.g. Ekele Diri Chukwu"></div>' +
+      '<div class="field"><label for="edComposer">Composer or arranger</label><input class="input" id="edComposer" data-draft="composer" value="' + esc(d.composer) + '" placeholder="e.g. C. Okafor"></div>' +
+      '<div class="two"><div class="field"><label for="edKey">Key (doh is)</label><select class="input" id="edKey" data-draft="key">' + KEYS.map(function (k, i) { return '<option value="' + i + '"' + (i === d.key ? " selected" : "") + ">" + k + "</option>"; }).join("") + '</select></div>' +
+      '<div class="field"><label for="edTime">Time</label><select class="input" id="edTime" data-draft="time">' + TIMES.map(function (t) { return "<option" + (t === d.time ? " selected" : "") + ">" + t + "</option>"; }).join("") + "</select></div></div>" +
+      '<div class="field"><span class="lbltxt">Tags</span><div class="chips" style="flex-wrap:wrap">' + TAGS.map(function (t) { return '<button class="chip' + (d.tags.indexOf(t) >= 0 ? " on" : "") + '" data-act="tag" data-t="' + t + '" aria-pressed="' + (d.tags.indexOf(t) >= 0) + '">' + t + "</button>"; }).join("") + "</div></div>" +
+      '<div class="field"><div class="row between"><label for="edSolfa">Sol-fa</label><button class="linkbtn" data-act="sheet" data-sheet="format" style="font-size:12.5px">How to type it</button></div>' +
+        '<textarea class="input code" id="edSolfa" data-draft="solfa" spellcheck="false" autocapitalize="off" autocomplete="off">' + esc(d.solfa) + "</textarea></div>" +
+      '<div class="checks" id="checks">' + checksHTML() + "</div>" +
+      '<div class="field"><span class="lbltxt">Original sheet (PDF or photo)</span><label class="btn ghost block" for="edFile" style="cursor:pointer">' + icon("i-file") + '<span id="fileName">' + (d.sheet ? esc(d.sheet) : "Attach the original sheet") + '</span></label><input type="file" id="edFile" accept="application/pdf,image/*" style="display:none"></div>' +
+      '<button class="btn ghost block" data-act="preview-song">' + icon("i-play").replace("<svg", '<svg style="color:var(--red)"') + "Preview and play</button>" +
+    "</div></div>";
+};
+function checksHTML() {
+  var d = UI.draft; if (!d.solfa.trim()) return '<span class="small">Type the parts above. The app checks each bar as you type.</span>';
+  var p = parseSolfa(d.solfa, d.time), h = "";
+  if (!p.errors.length) h += '<div class="row wrap"><span class="badge ok">✓ ' + p.bars + " bars</span><span class=\"badge ok\">✓ " + p.parts.map(partName).join(", ") + '</span><span class="badge ok">✓ every bar fits ' + d.time + "</span></div>";
+  p.errors.slice(0, 4).forEach(function (e) { h += '<div class="bad">' + esc(e) + "</div>"; });
+  if (p.errors.length > 4) h += '<div class="bad">…and ' + (p.errors.length - 4) + " more.</div>";
+  p.warnings.slice(0, 2).forEach(function (w) { h += '<div class="warnline">' + esc(w) + "</div>"; });
+  return h;
+}
+
+SCREENS.events = function () {
+  var up = upcoming(), past = pastRehearsals();
+  function row(e) {
+    var badge = e.kind === "rehearsal" ? '<span class="badge">Rehearsal</span>' : '<span class="badge red">' + esc(kindLabel(e)) + "</span>";
+    return '<button class="li" data-act="open-event" data-id="' + e.id + '"><div class="ord" style="width:46px;height:46px;flex-direction:column;display:flex;justify-content:center;align-items:center;line-height:1.05"><span style="font-size:10px;color:var(--muted)">' + MON[dObj(e.date).getUTCMonth()].toUpperCase() + '</span><span style="font-size:17px">' + dObj(e.date).getUTCDate() + '</span></div><div class="grow"><div class="title" style="font-size:14.5px">' + esc(e.title) + '</div><div class="small">' + DOW[dObj(e.date).getUTCDay()] + " · " + fmtTime(e.time) + " · " + esc(e.venue) + "</div></div>" + badge + "</button>";
+  }
+  return '<div class="app">' + topbar("Events", "Services, concerts and rehearsals", { back: false, right: isLeader() ? '<button class="iconbtn" data-act="goto" data-to="eventNew" aria-label="Plan an event">' + icon("i-plus") + "</button>" : "" }) +
+    '<div class="body"><span class="k">Coming up</span><div class="list">' + (up.length ? up.map(row).join("") : '<div class="empty">Nothing planned yet.</div>') + "</div>" +
+    (past.length ? '<span class="k">Past rehearsals</span><div class="list">' + past.map(row).join("") + "</div>" : "") +
+    (isLeader() ? '<button class="btn primary block" data-act="goto" data-to="eventNew">' + icon("i-plus") + "Plan an event</button>" : "") +
+    "</div></div>" + tabbar("events");
+};
+
+SCREENS.eventNew = function () {
+  var t = GROUP_TYPES[group().type];
+  return '<div class="app">' + topbar("Plan an event") + '<form class="body" id="eventForm" novalidate>' +
+    '<div class="field"><span class="lbltxt">What is it?</span><div class="seg" role="radiogroup">' +
+      [["service", t.event], ["rehearsal", "Rehearsal"], ["concert", "Concert"]].map(function (k, i) { return '<button type="button" data-act="ev-kind" data-k="' + k[0] + '" class="' + (i === 0 ? "on" : "") + '" role="radio" aria-checked="' + (i === 0) + '">' + k[1] + "</button>"; }).join("") +
+    "</div></div>" +
+    '<div class="field"><label for="evTitle">Title</label><input class="input" id="evTitle" placeholder="e.g. Second Sunday of Advent"></div>' +
+    '<div class="two"><div class="field"><label for="evDate">Date</label><input class="input" type="date" id="evDate" value="2026-11-08"></div><div class="field"><label for="evTime">Time</label><input class="input" type="time" id="evTime" value="08:00"></div></div>' +
+    '<div class="field"><label for="evVenue">Where</label><input class="input" id="evVenue" value="' + (group().id === "stmarys" ? "St. Mary’s Church" : "") + '" placeholder="e.g. Church hall"></div>' +
+    '<div class="field"><label for="evNote">Note for members (optional)</label><input class="input" id="evNote" placeholder="e.g. Wear the red robes"></div>' +
+    '<div class="err" id="evErr" role="alert"></div>' +
+    '<button class="btn primary block" type="submit">Create and add songs</button></form></div>';
+};
+
+SCREENS.event = function () {
+  var e = ev(UI.route.params.id), g = group(), lead = isLeader(), editing = UI.editingOrder && lead;
+  var html = '<div class="app">' + topbar(esc(e.title), fmtDate(e.date) + " 2026 · " + fmtTime(e.time) + " · " + esc(e.venue)) + '<div class="body">';
+  html += '<div class="row wrap"><span class="badge ' + (e.kind === "rehearsal" ? "" : "red") + '">' + esc(kindLabel(e)) + '</span><span class="badge">' + e.items.length + " song" + (e.items.length === 1 ? "" : "s") + "</span>" + (relDay(e.date) && relDay(e.date) !== "past" ? '<span class="badge dark">' + relDay(e.date) + "</span>" : "") + "</div>";
+  if (e.note) html += '<div class="card sand"><span style="font-size:14px">' + esc(e.note) + "</span></div>";
+
+  if (e.kind === "rehearsal") {
+    var past = e.date < TODAY, mine = e.attendance[S.me], rs = e.rsvp[S.me];
+    if (!past) {
+      html += '<div class="card"><span class="k">Are you coming?</span><div class="seg"><button data-act="rsvp" data-v="going" class="' + (rs === "going" ? "on" : "") + '">Going</button><button data-act="rsvp" data-v="cant" class="' + (rs === "cant" ? "on" : "") + '">Can’t come</button></div>' + (rs === "cant" ? '<span class="small">Your leader will see you as excused.</span>' : "") + "</div>";
+    }
+    if (g.selfCheckIn && !past) {
+      html += mine === "present" ? '<div class="card" style="border-color:#BFE3DA;background:#EEF8F5"><div class="row"><span class="badge ok">' + icon("i-check").replace("<svg", '<svg width="12" height="12"') + '</span><b>You’re checked in.</b></div></div>' :
+        '<button class="btn primary block" data-act="sheet" data-sheet="checkin">Check in with the rehearsal code</button>';
+    }
+    if (lead || isPartLeader()) {
+      var cnt = countAtt(e);
+      html += '<div class="card"><div class="row"><div class="grow"><span class="k">Attendance</span><div class="title">' + cnt.present + " present of " + g.members.length + (cnt.excused ? " · " + cnt.excused + " excused" : "") + '</div></div><button class="btn ghost sm" data-act="open-att" data-id="' + e.id + '">Mark</button></div>' +
+        (g.selfCheckIn && !past ? '<button class="btn ghost sm" style="align-self:flex-start" data-act="sheet" data-sheet="showcode">Show check-in code</button>' : "") + "</div>";
+    } else if (past) {
+      html += '<div class="card"><span class="k">Your attendance</span><b>' + ({ present: "Present", absent: "Absent", excused: "Excused" }[mine] || "Not marked") + "</b></div>";
+    }
+  }
+
+  html += '<div class="secthead"><span class="k">' + (e.kind === "rehearsal" ? "Songs to prepare" : "Song order") + "</span>" + (lead ? '<button class="linkbtn" data-act="toggle-edit">' + (editing ? "Done" : "Edit order") + "</button>" : "") + "</div>";
+  if (!e.items.length) html += '<div class="empty">No songs yet.' + (lead ? "<span>Tap “Edit order”, then add songs from the library.</span>" : "") + "</div>";
+  html += '<div class="list">' + e.items.map(function (it, i) {
+    var s = song(it.songId);
+    if (editing) {
+      var secs = GROUP_TYPES[g.type].sections.concat(["To prepare"]);
+      if (secs.indexOf(it.section) < 0) secs.unshift(it.section);
+      return '<div class="li"><span class="ord">' + (i + 1) + '</span><div class="grow"><select class="input" style="padding:4px 8px;font-size:12px;width:auto;margin-bottom:4px" data-act-change="section" data-i="' + i + '" aria-label="Section for ' + esc(s.title) + '">' + secs.map(function (x) { return "<option" + (x === it.section ? " selected" : "") + ">" + esc(x) + "</option>"; }).join("") + '</select><div class="title" style="font-size:14px">' + esc(s.title) + '</div></div><button class="iconbtn" data-act="move" data-i="' + i + '" data-d="-1" aria-label="Move up"' + (i === 0 ? " disabled" : "") + ">" + icon("i-up") + '</button><button class="iconbtn" data-act="move" data-i="' + i + '" data-d="1" aria-label="Move down"' + (i === e.items.length - 1 ? " disabled" : "") + ">" + icon("i-down") + '</button><button class="iconbtn" data-act="remove-item" data-i="' + i + '" aria-label="Remove">' + icon("i-close") + "</button></div>";
+    }
+    return '<button class="li" data-act="open-song" data-id="' + s.id + '"><span class="ord">' + (i + 1) + '</span><div class="grow"><div class="k" style="font-size:10px">' + esc(it.section) + '</div><div class="title" style="font-size:14.5px">' + esc(s.title) + '</div></div><span class="small">' + (s.solfa ? KEYS[s.key] : "sheet") + "</span></button>";
+  }).join("") + "</div>";
+  if (editing) html += '<button class="btn ghost block" data-act="sheet" data-sheet="addsong">' + icon("i-plus") + "Add a song</button>";
+  if (e.kind !== "rehearsal" && e.items.length && !editing) html += '<button class="btn primary block" data-act="perform" data-id="' + e.id + '">Start performance mode</button>';
+  html += "</div></div>";
+  return html;
+};
+function countAtt(e) { var c = { present: 0, absent: 0, excused: 0 }; group().members.forEach(function (m) { var s = e.attendance[m.userId] || (e.rsvp[m.userId] === "cant" ? "excused" : null); if (s) c[s]++; }); return c; }
+
+SCREENS.attendance = function () {
+  var e = ev(UI.route.params.id), g = group(), f = UI.attFilter, mm = myMember();
+  var c = countAtt(e);
+  var html = '<div class="app">' + topbar("Attendance", "Rehearsal · " + fmtDate(e.date) + " · " + fmtTime(e.time)) + '<div class="body">';
+  html += '<div class="card sand"><div class="row"><div class="grow"><span class="k">Present</span><div style="font-family:var(--mono);font-weight:700;font-size:26px">' + c.present + ' <span class="small" style="font-family:var(--body);font-size:13.5px">of ' + g.members.length + " · " + c.excused + " excused · " + c.absent + " absent</span></div></div></div>" +
+    '<div class="mixer">' + PARTS.map(function (p) { var ms = g.members.filter(function (m) { return m.part === p; }); var pr = ms.filter(function (m) { return e.attendance[m.userId] === "present"; }).length; return '<div class="part"><span class="pl" style="background:' + partColor(p) + '">' + PART_LETTER[p] + "</span>" + pr + "/" + ms.length + "</div>"; }).join("") + "</div></div>";
+  if (mm.role === "partleader") html += '<p class="small" style="margin:0">As ' + esc(mm.part) + " part leader you can mark " + esc(mm.part.toLowerCase()) + "s. Other parts are view-only.</p>";
+  html += '<div class="seg">' + [["all", "All"], ["unmarked", "Not marked"], ["present", "Present"], ["absent", "Absent"]].map(function (x) { return '<button data-act="att-filter" data-f="' + x[0] + '" class="' + (f === x[0] ? "on" : "") + '">' + x[1] + "</button>"; }).join("") + "</div>";
+  html += '<button class="btn ghost sm" style="align-self:flex-start" data-act="mark-rest">Mark everyone not marked as present</button>';
+  var order = PARTS.slice(); if (mm.role === "partleader") order.sort(function (a, b) { return (b === mm.part) - (a === mm.part); });
+  order.forEach(function (p) {
+    var ms = g.members.filter(function (m) {
+      if (m.part !== p) return false;
+      var s = e.attendance[m.userId] || (e.rsvp[m.userId] === "cant" ? "excused" : "");
+      if (f === "unmarked") return !s; if (f === "present") return s === "present"; if (f === "absent") return s === "absent"; return true;
+    });
+    if (!ms.length) return;
+    html += '<div><span class="k" style="color:' + partColor(p) + '">' + p + "s</span>" + '<div class="list">' + ms.map(function (m) {
+      var u = S.users[m.userId], s = e.attendance[m.userId] || (e.rsvp[m.userId] === "cant" ? "excused" : ""), can = canMark(m);
+      var lab = { present: "Present", absent: "Absent", excused: "Excused" }[s] || "Mark", cls = { present: "ok", absent: "red", excused: "warn" }[s] || "";
+      var note = e.rsvp[m.userId] === "cant" ? " · said can’t come" : (e.rsvp[m.userId] === "going" ? " · said going" : "");
+      return '<div class="li"><div class="avatar" style="background:' + partColor(p) + '">' + initials(u.name) + '</div><div class="grow"><div class="title" style="font-size:14.5px">' + esc(u.name) + '</div><div class="small">' + roleLabel(m.role) + note + "</div></div>" +
+        (can ? '<button class="badge ' + cls + '" data-act="cycle-att" data-u="' + m.userId + '" aria-label="' + esc(u.name) + ": " + lab + '. Tap to change.">' + lab + "</button>" : '<span class="badge ' + cls + '">' + (s ? lab : "—") + "</span>") + "</div>";
+    }).join("") + "</div></div>";
+  });
+  html += '<p class="small" style="margin:0">Tap a status to change it: Present → Absent → Excused.</p></div></div>';
+  return html;
+};
+
+SCREENS.perform = function () {
+  var e = ev(UI.route.params.id), i = UI.route.params.i || 0, it = e.items[i], s = song(it.songId);
+  var html = '<div class="perform"><div class="app">' +
+    '<div class="row between"><span class="k">' + esc(e.title) + " · " + (i + 1) + " of " + e.items.length + '</span><button class="btn sm" style="background:#2B1E18;color:#F7EDE7" data-act="back">Exit</button></div>' +
+    '<div><span class="k" style="color:var(--gold)">' + esc(it.section) + "</span><h2>" + esc(s.title) + '</h2><span class="small" style="color:#BFAEA5">' + esc(s.composer) + (s.solfa ? " · Doh is " + KEYS[s.key] + " · " + s.time : "") + "</span></div>";
+  if (s.solfa) html += scoreHTML(UI.player.parsed, { big: true });
+  else html += '<div class="sheetonly">' + icon("i-file").replace("<svg", '<svg width="30" height="30"') + "<br>Original sheet: " + esc(s.sheet || "") + "<br><span style='font-size:12px'>Shown full screen in the real app.</span></div>";
+  html += '</div><div class="pnav"><button class="btn" data-act="perf-nav" data-d="-1"' + (i === 0 ? " disabled" : "") + '>Previous</button>' + (s.solfa ? '<button class="play" data-act="play" aria-label="Play">' + icon("i-play") + "</button>" : "<span></span>") + '<button class="btn" data-act="perf-nav" data-d="1"' + (i === e.items.length - 1 ? " disabled" : "") + ">Next</button></div></div>";
+  return html;
+};
+
+SCREENS.group = function () {
+  var g = group(), lead = isLeader();
+  var html = '<div class="app">' + topbar("Group", esc(g.name) + " · " + g.members.length + " members", { back: false }) + '<div class="body">';
+  html += '<div class="card sand"><div class="row"><div class="grow"><span class="k">Invite code</span><div style="font-family:var(--mono);font-weight:700;font-size:22px;letter-spacing:.12em">' + g.code + '</div><span class="small">New members enter this on the welcome screen.</span></div><button class="btn primary sm" data-act="copy-code">Copy</button></div></div>';
+  html += '<div class="mixer">' + PARTS.map(function (p) { return '<div class="part"><span class="pl" style="background:' + partColor(p) + '">' + PART_LETTER[p] + "</span>" + g.members.filter(function (m) { return m.part === p; }).length + "</div>"; }).join("") + "</div>";
+  html += '<div class="card"><span class="k">Settings</span>' +
+    '<div class="toggles"><span>Members check in with a code<br><span class="small" style="font-weight:500">Show a code at rehearsal; members enter it on their phones.</span></span>' + (lead ? '<button class="switch" data-act="self-checkin" role="switch" aria-checked="' + g.selfCheckIn + '" aria-label="Members check in with a code"></button>' : '<span class="badge">' + (g.selfCheckIn ? "On" : "Off") + "</span>") + "</div>" +
+    '<div class="row between"><span style="font-weight:700;font-size:14px">Group type</span><span class="small">' + GROUP_TYPES[g.type].name + "</span></div></div>";
+  var lm = g.members.filter(function (m) { return m.role !== "member"; });
+  html += '<div><span class="k">Leaders</span><div class="list">' + lm.map(memberRow).join("") + "</div></div>";
+  PARTS.forEach(function (p) {
+    var ms = g.members.filter(function (m) { return m.part === p && m.role === "member"; }); if (!ms.length) return;
+    html += '<div><span class="k" style="color:' + partColor(p) + '">' + p + "s · " + ms.length + '</span><div class="list">' + ms.map(memberRow).join("") + "</div></div>";
+  });
+  if (lead) html += '<p class="small" style="margin:0">Tap a member to change their part or role.</p>';
+  html += "</div></div>" + tabbar("group");
+  return html;
+};
+function memberRow(m) {
+  var u = S.users[m.userId], r = attendanceRate(m.userId);
+  var inner = '<div class="avatar" style="background:' + partColor(m.part) + '">' + initials(u.name) + '</div><div class="grow"><div class="title" style="font-size:14.5px">' + esc(u.name) + (m.userId === S.me ? " (you)" : "") + '</div><div class="small">' + esc(m.part) + (r ? " · attendance " + r.pct + "%" : "") + "</div></div>" + '<span class="badge ' + (m.role === "leader" ? "red" : "") + '">' + roleLabel(m.role) + "</span>";
+  return isLeader() ? '<button class="li" data-act="sheet" data-sheet="member" data-u="' + m.userId + '">' + inner + "</button>" : '<div class="li">' + inner + "</div>";
+}
+
+/* ---------- Sheets ---------- */
+var SHEETS = {};
+SHEETS.notice = function () { return "<h3>Post a notice</h3>" + '<div class="field"><label for="ntText">Message to the whole group</label><textarea class="input" id="ntText" rows="4" placeholder="e.g. Rehearsal moves to 4:30 PM this Thursday."></textarea></div><div class="err" id="ntErr" role="alert"></div><button class="btn primary block" data-act="post-notice">Post notice</button>'; };
+SHEETS.profile = function () { var u = me(), m = myMember(); return "<h3>" + esc(u.name) + '</h3><span class="small">' + esc(group().name) + " · " + roleLabel(m.role) + '</span><div class="field"><label for="prPart">My part</label><select class="input" id="prPart">' + PARTS.map(function (p) { return "<option" + (p === m.part ? " selected" : "") + ">" + p + "</option>"; }).join("") + '</select></div><button class="btn primary block" data-act="save-profile">Save</button><button class="btn ghost block" data-act="sign-out">Sign out</button>'; };
+SHEETS.checkin = function () { return "<h3>Check in</h3><p class='small' style='margin:0'>Enter the 4-digit code your leader is showing at the rehearsal.</p>" + '<input class="codeinput dark" id="ciCode" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="0000" aria-label="Check-in code"><div class="err" id="ciErr" role="alert"></div><button class="btn primary block" data-act="do-checkin">Check in</button><p class="small" style="margin:0">Prototype hint: the code for 5 Nov is ' + ev(UI.route.params.id).code + ".</p>"; };
+SHEETS.showcode = function () { var e = ev(UI.route.params.id); return '<h3>Check-in code</h3><p class="small" style="margin:0">Show this screen at the rehearsal. Members tap “Check in” and enter the code.</p><div class="bigcode">' + e.code + '</div><div class="row wrap"><span class="badge ok">' + countAtt(e).present + ' checked in</span><span class="badge">Rehearsal · ' + fmtDate(e.date) + '</span></div><button class="btn ghost block" data-act="new-code">Make a new code</button><button class="btn primary block" data-act="close-sheet">Done</button>'; };
+SHEETS.addsong = function () {
+  var e = ev(UI.route.params.id), g = group(), secs = GROUP_TYPES[g.type].sections;
+  var def = e.kind === "rehearsal" ? "To prepare" : secs[Math.min(e.items.length, secs.length - 1)];
+  var list = S.songs.slice().sort(function (a, b) { return (g.repertoire.indexOf(b.id) >= 0) - (g.repertoire.indexOf(a.id) >= 0); });
+  return '<h3>Add a song</h3><div class="field"><label for="asSec">Section</label><select class="input" id="asSec">' + (e.kind === "rehearsal" ? ["To prepare"] : secs).map(function (x) { return "<option" + (x === def ? " selected" : "") + ">" + esc(x) + "</option>"; }).join("") + '</select></div><div class="list">' + list.map(function (s) { return '<button class="li" data-act="pick-song" data-id="' + s.id + '"><div class="thumb' + (s.solfa ? "" : " sheet") + '">' + (s.solfa ? KEYS[s.key] : icon("i-file")) + '</div><div class="grow"><div class="title" style="font-size:14px">' + esc(s.title) + '</div><div class="small">' + (g.repertoire.indexOf(s.id) >= 0 ? "Our repertoire" : "Shared by " + esc(s.by)) + "</div></div></button>"; }).join("") + "</div>";
+};
+SHEETS.member = function () {
+  var m = memberOf(UI.sheet.u), u = S.users[m.userId];
+  return "<h3>" + esc(u.name) + '</h3><div class="field"><label for="mbPart">Part</label><select class="input" id="mbPart">' + PARTS.map(function (p) { return "<option" + (p === m.part ? " selected" : "") + ">" + p + "</option>"; }).join("") + '</select></div><div class="field"><label for="mbRole">Role</label><select class="input" id="mbRole">' + [["member", "Member"], ["partleader", "Part leader"], ["leader", roleLabel("leader")]].map(function (r) { return '<option value="' + r[0] + '"' + (r[0] === m.role ? " selected" : "") + ">" + r[1] + "</option>"; }).join("") + '</select></div><p class="small" style="margin:0">Part leaders can mark attendance for their own part and post notices.</p><button class="btn primary block" data-act="save-member">Save</button>';
+};
+SHEETS.songinfo = function () {
+  var s = song(UI.route.params.id), g = group();
+  return "<h3>" + esc(s.title) + '</h3><div class="list"><div class="li"><span class="grow small">Composer</span><b>' + esc(s.composer) + '</b></div><div class="li"><span class="grow small">Key · time</span><b>Doh is ' + KEYS[s.key] + " · " + s.time + '</b></div><div class="li"><span class="grow small">Shared by</span><b>' + esc(s.by) + '</b></div><div class="li"><span class="grow small">Tags</span><b>' + esc(s.tags.join(", ")) + '</b></div></div><div class="fakesheet" style="height:150px">' + (s.sheet ? "Original sheet: " + esc(s.sheet) + "<br>In the real app the PDF or photo opens here." : "No original sheet attached.") + "</div>" + (isLeader() && g.repertoire.indexOf(s.id) < 0 ? '<button class="btn primary block" data-act="add-rep" data-id="' + s.id + '">Add to our repertoire</button>' : "") + '<button class="btn ghost block" data-act="edit-song" data-id="' + s.id + '">' + icon("i-edit") + "Edit the sol-fa</button>";
+};
+SHEETS.format = function () {
+  return '<h3>How to type sol-fa</h3><div class="list" style="font-size:13.5px">' +
+    [["S  A  T  B  Solo", "Start each line with the part"], ["W  All peo-ple that…", "Words for the line above"], ["d :r /m :f |", "“:” between beats, “/” mid-bar, “|” barline"], ["s.l", "Two half beats"], ["d.,r", "Three-quarter and quarter beat"], ["-", "Hold the note"], ["d' or d¹", "High octave"], ["t1 or t₁", "Low octave"], ["de fe se ta", "Sharps and flats"], ["[Chorus]", "Start a new section"]].map(function (r) { return '<div class="li"><code style="font-family:var(--mono);font-weight:700;min-width:130px">' + esc(r[0]) + '</code><span class="small">' + r[1] + "</span></div>"; }).join("") +
+    '</div><p class="small" style="margin:0">Write the tenor as on paper, an octave above how it sounds. Abụ plays it at the right pitch.</p><button class="btn primary block" data-act="close-sheet">Got it</button>';
+};
+
+/* ---------- Render ---------- */
+function render(resetScroll) {
+  var r = UI.route, scr = document.getElementById("screen");
+  if (!S.me && ["welcome", "joinProfile", "create"].indexOf(r.name) < 0) { UI.route = r = { name: "welcome", params: {} }; }
+  if ((r.name === "song" || r.name === "perform")) preparePlayer();
+  var prevScroll = 0, a0 = scr.querySelector(".app"); if (a0 && !resetScroll) prevScroll = a0.scrollTop;
+  scr.innerHTML = SCREENS[r.name]() + (UI.sheet ? '<div class="scrim" data-act="scrim"><div class="sheet" role="dialog" aria-modal="true"><div class="grab"></div>' + SHEETS[UI.sheet.type]() + "</div></div>" : "");
+  var a1 = scr.querySelector(".app"); if (a1) a1.scrollTop = resetScroll ? 0 : prevScroll;
+  var sb = document.getElementById("statusbar"); sb.className = "status" + (r.name === "welcome" ? " red" : r.name === "perform" ? " dark" : "");
+  if (UI.player && (r.name === "song" || r.name === "perform")) refreshPlayer();
+  renderGuide(); renderToast(); syncPlayBtn();
+  var f = scr.querySelector(".sheet input, .sheet textarea"); if (f) f.focus();
+}
+function preparePlayer() {
+  var r = UI.route, s;
+  if (r.name === "song") s = song(r.params.id) || UI.draftSong;
+  else { var e = ev(r.params.id); s = song(e.items[r.params.i || 0].songId); }
+  if (!s || !s.solfa) { UI.player = null; return; }
+  if (UI.player && UI.player.songId === s.id && UI.player.song === s) return;
+  UI.player = newPlayer(s, parseSolfa(s.solfa, s.time));
+}
+function refreshPlayer() {
+  var pl = UI.player; if (!pl) return;
+  document.querySelectorAll(".part[data-part]").forEach(function (box) {
+    var p = box.dataset.part, l = level(p);
+    box.classList.toggle("muted", l === 0); box.classList.toggle("mine", pl.mine === p);
+    var so = box.querySelector("[data-act=solo]"); if (so) so.classList.toggle("on", pl.solo === p);
+    var mi = box.querySelector("[data-act=mine]"); if (mi) mi.classList.toggle("on", pl.mine === p);
+  });
+  document.querySelectorAll(".cell[data-part]").forEach(function (c) { c.classList.toggle("dim", level(c.dataset.part) === 0); });
+  var t = document.getElementById("tempoV"); if (t) t.textContent = pl.tempo;
+  var k = KEYS[(pl.song.key + pl.transpose + 12) % 12];
+  var kv = document.getElementById("keyV"); if (kv) kv.textContent = k;
+  var kl = document.getElementById("keyLbl"); if (kl) kl.textContent = "Doh is " + k;
+  document.querySelectorAll("[data-act=focus]").forEach(function (b) { b.setAttribute("aria-checked", pl.focus); });
+  document.querySelectorAll("[data-act=loop]").forEach(function (b) { b.setAttribute("aria-checked", pl.loop); });
+  applyLevels();
+}
+
+var PERSONAS = [["adaeze", "Alto · member"], ["chiamaka", "Soprano · part leader"], ["emeka", "Bass · choirmaster"]];
+function renderGuide() {
+  var g = document.getElementById("guide"), meId = S.me;
+  var people = PERSONAS.filter(function (p) { return S.users[p[0]] && S.groups.stmarys.members.some(function (m) { return m.userId === p[0]; }); });
+  var extra = meId && !PERSONAS.some(function (p) { return p[0] === meId; }) ? '<button class="persona on"><span class="avatar" style="background:var(--ink)">' + initials(S.users[meId].name) + "</span><span><b>" + esc(S.users[meId].name) + "</b><span>You, in " + esc(group().name) + "</span></span></button>" : "";
+  g.innerHTML = '<div class="brandline"><div class="mark">' + icon("i-mark") + '</div><span class="wordmark">Abụ</span></div>' +
+    "<h1>Clickable prototype</h1><p>Everything on the phone works: join, play songs, plan services, take attendance. Changes stay in this browser only. The choir, people and most songs are examples.</p>" +
+    '<div class="gpanel"><h2>Try it as</h2>' + people.map(function (p) { var u = S.users[p[0]]; return '<button class="persona' + (meId === p[0] && S.groupId === "stmarys" ? " on" : "") + '" data-act="persona" data-id="' + p[0] + '"><span class="avatar" style="background:' + partColor(memberOfIn("stmarys", p[0]).part) + '">' + initials(u.name) + "</span><span><b>" + esc(u.name) + "</b><span>" + p[1] + "</span></span></button>"; }).join("") + extra +
+    '<button class="linkbtn" data-act="restart" style="align-self:flex-start">Start over from the welcome screen</button></div>' +
+    '<div class="gpanel"><h2>Things to try</h2><ol class="trylist">' +
+      "<li>As Adaeze: open <b>Learn your part</b>, press play, then tap S, T and B to mute them.</li>" +
+      "<li>Change the tempo and key, or tap <b>Solo</b> on Tenor.</li>" +
+      "<li>Open the <b>5 Nov rehearsal</b> and check in with code <b>4827</b>.</li>" +
+      "<li>As Chiamaka: mark attendance for the sopranos.</li>" +
+      "<li>As Emeka: edit the Mass song order, then start <b>performance mode</b>.</li>" +
+      "<li>Songs → <b>Add song</b>: type sol-fa and watch the bar checks.</li>" +
+      "<li>Start over, join with <b>STM482</b>, or create a new group.</li>" +
+    "</ol></div>";
+  var pb = document.getElementById("protobar");
+  pb.innerHTML = "<span>Abụ prototype" + (meId ? " · " + esc(S.users[meId].name.split(" ")[0]) : "") + '</span><span style="display:flex;gap:6px">' + people.map(function (p) { return '<button data-act="persona" data-id="' + p[0] + '">' + esc(S.users[p[0]].name.split(" ")[0]) + "</button>"; }).join("") + '<button data-act="restart" aria-label="Start over">↺</button></span>';
+}
+function memberOfIn(gid, id) { return S.groups[gid].members.filter(function (m) { return m.userId === id; })[0]; }
+
+/* ---------- Actions ---------- */
+var ACT = {};
+ACT.back = function () { back(); };
+ACT.tab = function (t) { go(t.dataset.to, {}, true); };
+ACT.goto = function (t) { go(t.dataset.to, {}); };
+ACT.persona = function (t) { S.me = t.dataset.id; S.groupId = "stmarys"; save(); UI.stack = []; go("home", {}, true); };
+ACT.restart = function () { stopPlay(); S = seed(); save(); UI.stack = []; UI.player = null; UI.joinErr = ""; UI.createDraft = null; UI.songFilter = "All"; UI.songQuery = ""; go("welcome", {}, true); };
+ACT["open-song"] = function (t) { go("song", { id: t.dataset.id }); };
+ACT["open-event"] = function (t) { go("event", { id: t.dataset.id }); };
+ACT["open-att"] = function (t) { UI.attFilter = "all"; go("attendance", { id: t.dataset.id }); };
+ACT.sheet = function (t) { UI.sheet = { type: t.dataset.sheet, u: t.dataset.u }; render(); };
+ACT["close-sheet"] = function () { UI.sheet = null; render(); };
+ACT.scrim = function (t, e) { if (e.target === t) { UI.sheet = null; render(); } };
+ACT["pick-part"] = function (t) { t.parentNode.querySelectorAll(".opt").forEach(function (b) { b.classList.remove("on"); b.setAttribute("aria-checked", "false"); }); t.classList.add("on"); t.setAttribute("aria-checked", "true"); };
+ACT["pick-type"] = function (t) { var d = UI.createDraft; d.name = val("cgName"); d.me = val("cgMe"); d.type = t.dataset.type; render(); };
+ACT["song-filter"] = function (t) { UI.songFilter = t.dataset.f; render(true); };
+ACT.play = function () { A.playing ? stopPlay() : startPlay(); };
+ACT.mute = function (t) { var p = t.dataset.part, pl = P(); if (pl.solo) { pl.solo = null; } else pl.muted[p] = !pl.muted[p]; refreshPlayer(); };
+ACT.solo = function (t) { var pl = P(), p = t.dataset.part; pl.solo = pl.solo === p ? null : p; refreshPlayer(); };
+ACT.mine = function (t) { P().mine = t.dataset.part; refreshPlayer(); };
+ACT.focus = function () { P().focus = !P().focus; refreshPlayer(); };
+ACT.loop = function () { P().loop = !P().loop; refreshPlayer(); };
+ACT.tempo = function (t) { var pl = P(); if (A.playing) { pl.anchorBeat = beatNow(); pl.anchorTime = A.ctx.currentTime; } pl.tempo = Math.max(40, Math.min(180, pl.tempo + +t.dataset.d)); refreshPlayer(); };
+ACT.key = function (t) { var pl = P(); pl.transpose = Math.max(-6, Math.min(6, pl.transpose + +t.dataset.d)); refreshPlayer(); };
+ACT["add-rep"] = function (t) { var g = group(); if (g.repertoire.indexOf(t.dataset.id) < 0) g.repertoire.push(t.dataset.id); save(); UI.sheet = null; render(); toast("Added to " + g.name + "’s repertoire."); };
+ACT["new-song"] = function () { UI.draft = { id: null, title: "", composer: "", key: 7, time: "4/4", tags: [], solfa: "[Verse]\nS  d :r /m :f | s :- /- :- |\nW  Sing a new song\nA  s1:t1 /d :r | m :- /- :- |\nT  m :s /s :l | d':- /- :- |\nB  d :s1 /d :f1 | d :- /- :- |", sheet: null }; go("editor", {}); };
+ACT["edit-song"] = function (t) { var s = song(t.dataset.id); UI.draft = { id: s.id, title: s.title, composer: s.composer, key: s.key, time: s.time, tags: s.tags.slice(), solfa: s.solfa || "[Verse]\nS  \nW  \nA  \nT  \nB  ", sheet: s.sheet }; UI.sheet = null; go("editor", {}); };
+ACT.tag = function (t) { var d = UI.draft, i = d.tags.indexOf(t.dataset.t); if (i >= 0) d.tags.splice(i, 1); else d.tags.push(t.dataset.t); t.classList.toggle("on"); t.setAttribute("aria-pressed", i < 0); };
+ACT["preview-song"] = function () {
+  var d = UI.draft, p = parseSolfa(d.solfa, d.time);
+  if (p.errors.length) { toast("Fix the highlighted bars first."); return; }
+  UI.draftSong = { id: "__preview", title: d.title || "Untitled song", composer: d.composer || "Unknown composer", key: +d.key, time: d.time, tags: d.tags, solfa: d.solfa, sheet: d.sheet, by: group().name };
+  UI.player = null; go("song", { id: "__preview", preview: true });
+};
+ACT["save-song"] = function () {
+  var d = UI.draft;
+  if (!d.title.trim()) { if (UI.route.name !== "editor") back(); toast("Give the song a title."); setTimeout(function () { var el = document.getElementById("edTitle"); if (el) el.focus(); }, 0); return; }
+  var p = parseSolfa(d.solfa, d.time);
+  var hasSolfa = /[drmfslt]/.test(d.solfa.replace(/^\s*(\[.*\]|W\s.*)$/gm, "").replace(/^\s*\S+/gm, ""));
+  if (hasSolfa && p.errors.length) { if (UI.route.name !== "editor") back(); toast("Fix the highlighted bars first."); return; }
+  var g = group(), s;
+  if (d.id) { s = song(d.id); s.title = d.title; s.composer = d.composer || s.composer; s.key = +d.key; s.time = d.time; s.tags = d.tags; s.solfa = hasSolfa ? d.solfa : ""; s.sheet = d.sheet; }
+  else { s = { id: uid("s"), title: d.title.trim(), composer: d.composer.trim() || "Unknown composer", key: +d.key, time: d.time, tags: d.tags, solfa: hasSolfa ? d.solfa : "", sheet: d.sheet, by: g.name }; S.songs.unshift(s); g.repertoire.push(s.id); }
+  save(); UI.player = null; UI.stack = [{ name: "songs", params: {} }]; UI.route = { name: "song", params: { id: s.id } }; render(true);
+  toast("Saved. Everyone on Abụ can now find this song.");
+};
+ACT["toggle-edit"] = function () { UI.editingOrder = !UI.editingOrder; render(); };
+ACT.move = function (t) { var e = ev(UI.route.params.id), i = +t.dataset.i, j = i + +t.dataset.d; if (j < 0 || j >= e.items.length) return; var x = e.items[i]; e.items[i] = e.items[j]; e.items[j] = x; save(); render(); };
+ACT["remove-item"] = function (t) { var e = ev(UI.route.params.id); e.items.splice(+t.dataset.i, 1); save(); render(); };
+ACT["pick-song"] = function (t) { var e = ev(UI.route.params.id); e.items.push({ section: val("asSec"), songId: t.dataset.id }); var g = group(); if (g.repertoire.indexOf(t.dataset.id) < 0) g.repertoire.push(t.dataset.id); save(); UI.sheet = null; render(); toast("Song added to the order."); };
+ACT.perform = function (t) { UI.player = null; go("perform", { id: t.dataset.id, i: 0 }); };
+ACT["perf-nav"] = function (t) { if (A.playing) stopPlay(); var r = UI.route; r.params.i = Math.max(0, Math.min(ev(r.params.id).items.length - 1, (r.params.i || 0) + +t.dataset.d)); UI.player = null; render(true); };
+ACT.rsvp = function (t) { var e = ev(UI.route.params.id); e.rsvp[S.me] = t.dataset.v; save(); render(); toast(t.dataset.v === "going" ? "Thanks. See you there." : "Got it. Your leader will see you as excused."); };
+ACT["do-checkin"] = function () {
+  var e = ev(UI.route.params.id), v = val("ciCode").trim();
+  if (v !== e.code) { document.getElementById("ciErr").textContent = v ? "That code doesn’t match. Check the code your leader is showing." : "Enter the 4-digit code."; return; }
+  e.attendance[S.me] = "present"; e.rsvp[S.me] = "going"; save(); UI.sheet = null; render(); toast("You’re checked in. Enjoy rehearsal!");
+};
+ACT["new-code"] = function () { var e = ev(UI.route.params.id); e.code = String(1000 + Math.floor(Math.random() * 9000)); save(); render(); };
+ACT["att-filter"] = function (t) { UI.attFilter = t.dataset.f; render(); };
+ACT["cycle-att"] = function (t) {
+  var e = ev(UI.route.params.id), id = t.dataset.u, cur = e.attendance[id] || (e.rsvp[id] === "cant" ? "excused" : "");
+  var next = { "": "present", present: "absent", absent: "excused", excused: "present" }[cur];
+  e.attendance[id] = next; save(); render();
+};
+ACT["mark-rest"] = function () {
+  var e = ev(UI.route.params.id), n = 0;
+  group().members.forEach(function (m) { if (!canMark(m)) return; if (!e.attendance[m.userId]) { e.attendance[m.userId] = e.rsvp[m.userId] === "cant" ? "excused" : "present"; n++; } });
+  save(); render(); toast(n ? n + " marked. Change anyone who isn’t here." : "Everyone you can mark is already marked.");
+};
+ACT["self-checkin"] = function () { var g = group(); g.selfCheckIn = !g.selfCheckIn; save(); render(); toast(g.selfCheckIn ? "Members can now check in with a code." : "Only leaders and part leaders mark attendance now."); };
+ACT["copy-code"] = function () { var c = group().code; var done = function () { toast("Invite code " + c + " copied."); }; try { navigator.clipboard.writeText("Join " + group().name + " on Abụ with code " + c).then(done, function () { toast("Share this code: " + c); }); } catch (e) { toast("Share this code: " + c); } };
+ACT["post-notice"] = function () { var t = val("ntText").trim(); if (!t) { document.getElementById("ntErr").textContent = "Write a message first."; return; } group().notices.unshift({ id: uid("n"), by: S.me, date: TODAY, text: t }); save(); UI.sheet = null; render(); toast("Notice posted to everyone."); };
+ACT["save-profile"] = function () { myMember().part = val("prPart"); save(); UI.sheet = null; UI.player = null; render(); toast("Your part is now " + myMember().part + "."); };
+ACT["sign-out"] = function () { S.me = null; save(); UI.sheet = null; UI.stack = []; go("welcome", {}, true); };
+ACT["save-member"] = function () { var m = memberOf(UI.sheet.u); m.part = val("mbPart"); m.role = val("mbRole"); save(); UI.sheet = null; render(); toast(S.users[m.userId].name + " updated."); };
+ACT["ev-kind"] = function (t) { t.parentNode.querySelectorAll("button").forEach(function (b) { b.classList.toggle("on", b === t); b.setAttribute("aria-checked", b === t); }); var ti = document.getElementById("evTitle"); if (t.dataset.k === "rehearsal" && !ti.value) ti.value = "Rehearsal"; var tm = document.getElementById("evTime"); tm.value = t.dataset.k === "rehearsal" ? "17:00" : "08:00"; };
+
+function val(id) { var el = document.getElementById(id); return el ? el.value : ""; }
+
+document.addEventListener("click", function (e) {
+  var t = e.target.closest("[data-act]"); if (!t) return;
+  var a = t.dataset.act; if (!ACT[a]) return;
+  if (a !== "scrim") e.preventDefault();
+  ACT[a](t, e);
+});
+document.addEventListener("input", function (e) {
+  var t = e.target;
+  if (t.id === "songSearch") { UI.songQuery = t.value; var pos = t.selectionStart; render(); var s = document.getElementById("songSearch"); if (s) { s.focus(); try { s.setSelectionRange(pos, pos); } catch (x) {} } return; }
+  if (t.dataset && t.dataset.draft && UI.draft) {
+    UI.draft[t.dataset.draft] = t.dataset.draft === "key" ? +t.value : t.value;
+    if (t.dataset.draft === "solfa" || t.dataset.draft === "time") { clearTimeout(window.__ck); window.__ck = setTimeout(function () { var c = document.getElementById("checks"); if (c) c.innerHTML = checksHTML(); }, 200); }
+  }
+  if (t.id === "joinCode") { t.value = t.value.toUpperCase(); }
+});
+document.addEventListener("change", function (e) {
+  var t = e.target;
+  if (t.dataset && t.dataset.draft && UI.draft) { UI.draft[t.dataset.draft] = t.dataset.draft === "key" ? +t.value : t.value; var c = document.getElementById("checks"); if (c) c.innerHTML = checksHTML(); }
+  if (t.dataset && t.dataset.actChange === "section") { ev(UI.route.params.id).items[+t.dataset.i].section = t.value; save(); }
+  if (t.id === "edFile" && t.files && t.files[0]) { UI.draft.sheet = t.files[0].name; document.getElementById("fileName").textContent = t.files[0].name; }
+});
+document.addEventListener("submit", function (e) {
+  e.preventDefault();
+  var id = e.target.id;
+  if (id === "joinForm") {
+    var code = val("joinCode").trim().toUpperCase();
+    var g = Object.keys(S.groups).map(function (k) { return S.groups[k]; }).filter(function (x) { return x.code === code; })[0];
+    if (!code) { UI.joinErr = "Enter the 6-letter code from your leader."; render(); return; }
+    if (!g) { UI.joinErr = "No group has the code " + code + ". Check it with your leader."; render(); return; }
+    UI.joinErr = ""; go("joinProfile", { gid: g.id });
+  }
+  if (id === "profileForm") {
+    var name = val("pfName").trim(); if (!name) { document.getElementById("pfErr").textContent = "Enter your name so your leader knows who joined."; return; }
+    var part = document.querySelector("[data-act=pick-part].on").dataset.part, gid = UI.route.params.gid, nid = uid("u");
+    S.users[nid] = { id: nid, name: name }; S.groups[gid].members.push({ userId: nid, part: part, role: "member", joined: TODAY });
+    S.me = nid; S.groupId = gid; save(); go("home", {}, true); toast("Welcome to " + S.groups[gid].name + "!");
+  }
+  if (id === "createForm") {
+    var gname = val("cgName").trim(), mine = val("cgMe").trim();
+    if (!gname || !mine) { document.getElementById("cgErr").textContent = !gname ? "Give your group a name." : "Enter your name."; return; }
+    var gidN = uid("g"), uidN = uid("u"), p = val("cgPart"), letters = gname.replace(/[^A-Za-z]/g, "").toUpperCase();
+    S.users[uidN] = { id: uidN, name: mine };
+    S.groups[gidN] = { id: gidN, name: gname, type: UI.createDraft.type, code: (letters + "XYZ").slice(0, 3) + String(100 + Math.floor(Math.random() * 900)), selfCheckIn: false,
+      members: [{ userId: uidN, part: PARTS.indexOf(p) >= 0 ? p : "Soprano", role: "leader", joined: TODAY }], repertoire: [], notices: [], events: [] };
+    S.me = uidN; S.groupId = gidN; UI.createDraft = null; save(); go("home", {}, true); toast(gname + " is ready. Share the invite code from the Group tab.");
+  }
+  if (id === "eventForm") {
+    var kind = document.querySelector("[data-act=ev-kind].on").dataset.k, title = val("evTitle").trim();
+    if (!title) { document.getElementById("evErr").textContent = "Give the event a title."; return; }
+    var ne = { id: uid("e"), kind: kind, title: title, date: val("evDate") || TODAY, time: val("evTime") || "08:00", venue: val("evVenue").trim() || "To be confirmed", note: val("evNote").trim(), items: [], rsvp: {}, attendance: {}, code: String(1000 + Math.floor(Math.random() * 9000)) };
+    group().events.push(ne); save(); UI.stack = [{ name: "events", params: {} }]; UI.route = { name: "event", params: { id: ne.id } }; UI.editingOrder = true; render(true);
+  }
+});
+document.addEventListener("keydown", function (e) { if (e.key === "Escape" && UI.sheet) { UI.sheet = null; render(); } });
+
+render(true);
+})();
+</script>
+</body>
+</html>
