@@ -240,6 +240,26 @@ textarea.code { font-family: var(--mono); font-size: 12.5px; line-height: 1.7; m
 .perform .lockline { font-size: 11.5px; color: #8E7A70; }
 .rnav { display: flex; align-items: center; gap: 8px; background: var(--sand); border-radius: 12px; padding: 7px 8px 7px 12px; }
 .pnav .play { width: 58px; height: 58px; }
+.pctl .sep { width: 1px; height: 22px; background: #3A2B24; margin: 0 2px; }
+/* Light performance theme: white page, black notes, for bright churches and halls */
+.perform .psec { color: var(--gold); }
+.perform.light { background: #FFFFFF; color: #140D0A; }
+.perform.light .psec { color: var(--red); }
+.perform.light .k { color: var(--red-deep); }
+.perform.light .small { color: #5E4E46 !important; }
+.perform.light .system { background: #F7F1ED; }
+.perform.light .cell { color: #140D0A; }
+.perform.light .cell.hold, .perform.light .cell:not(.bar0)::before { color: #A8968C; }
+.perform.light .cell.bar0 { border-left-color: #BFAEA5; }
+.perform.light .lyr { color: #3A2B24; }
+.perform.light .sheetonly { border-color: #CDBEB5; color: #5E4E46; }
+.perform.light .lockline { color: #8E7A70; }
+.perform.light .pnav { border-top-color: var(--line); }
+.perform.light .pnav .btn, .perform.light .pctl button { background: #F1E8E3; color: #140D0A; }
+.perform.light .pctl button.on { background: #140D0A; color: #FFFFFF; }
+.perform.light .pctl .sep { background: var(--line); }
+.perform.light .pnav .pos { color: #5E4E46; }
+.status.paper { background: #FFFFFF; color: var(--ink); }
 
 /* Sheet + toast */
 .scrim { position: absolute; inset: 0; background: rgba(34,22,15,.45); display: flex; align-items: flex-end; z-index: 20; }
@@ -1006,16 +1026,20 @@ SCREENS.attendance = function () {
   return html;
 };
 
+function perfLight() { return !!(S.prefs && S.prefs.perfLight); }
 SCREENS.perform = function () {
   var e = ev(UI.route.params.id), i = UI.route.params.i || 0, it = e.items[i], s = song(it.songId), m = myMember();
   var sizes = [16, 19, 23, 28], sz = sizes[UI.perfSize == null ? 1 : UI.perfSize];
   var parsed = s.solfa ? parseSolfa(s.solfa, s.time) : null;
   var mine = m ? PART_LETTER[m.part] : null, canMine = parsed && parsed.parts.length > 1 && parsed.parts.indexOf(mine) >= 0;
-  var html = '<div class="perform"><div class="app">' +
-    '<div class="row between"><span class="k">Perform · ' + esc(e.title) + '</span><button class="btn sm" style="background:#2B1E18;color:#F7EDE7" data-act="back">Exit</button></div>' +
-    '<div><span class="k" style="color:var(--gold)">' + esc(it.section) + "</span><h2>" + esc(s.title) + '</h2><span class="small" style="color:#BFAEA5">' + esc(s.composer) + (s.solfa ? " · Doh is " + KEYS[s.key] + " · " + s.time : "") + "</span></div>";
+  var light = perfLight();
+  var html = '<div class="perform' + (light ? " light" : "") + '"><div class="app">' +
+    '<div class="row between"><span class="k">Perform · ' + esc(e.title) + '</span><div class="pctl"><button data-act="back">Exit</button></div></div>' +
+    '<div><span class="k psec">' + esc(it.section) + "</span><h2>" + esc(s.title) + '</h2><span class="small" style="color:#BFAEA5">' + esc(s.composer) + (s.solfa ? " · Doh is " + KEYS[s.key] + " · " + s.time : "") + "</span></div>";
+  var themeBtns = '<button data-act="perf-theme" data-v="dark" class="' + (light ? "" : "on") + '" aria-pressed="' + !light + '">Dark</button><button data-act="perf-theme" data-v="light" class="' + (light ? "on" : "") + '" aria-pressed="' + light + '">Light</button>';
+  if (!parsed) html += '<div class="pctl">' + themeBtns + "</div>";
   if (parsed) {
-    html += '<div class="pctl"><button data-act="perf-size" data-d="-1" aria-label="Smaller text"' + (UI.perfSize === 0 ? " disabled" : "") + '>A−</button><button data-act="perf-size" data-d="1" aria-label="Bigger text"' + (UI.perfSize === 3 ? " disabled" : "") + ">A+</button>" +
+    html += '<div class="pctl">' + themeBtns + '<span class="sep"></span><button data-act="perf-size" data-d="-1" aria-label="Smaller text"' + (UI.perfSize === 0 ? " disabled" : "") + '>A−</button><button data-act="perf-size" data-d="1" aria-label="Bigger text"' + (UI.perfSize === 3 ? " disabled" : "") + ">A+</button>" +
       (canMine ? '<button data-act="perf-parts" data-v="all" class="' + (UI.perfMine ? "" : "on") + '">All parts</button><button data-act="perf-parts" data-v="mine" class="' + (UI.perfMine ? "on" : "") + '">' + esc(m.part) + " only</button>" : "") + "</div>";
     html += scoreHTML(parsed, { big: true, size: sz, only: canMine && UI.perfMine ? mine : null });
   } else html += '<div class="sheetonly">' + icon("i-file").replace("<svg", '<svg width="30" height="30"') + "<br>Original sheet: " + esc(s.sheet || "") + "<br><span style='font-size:12px'>Shown full screen in the real app.</span></div>";
@@ -1103,7 +1127,7 @@ function render(resetScroll) {
   var prevScroll = 0, a0 = scr.querySelector(".app"); if (a0 && !resetScroll) prevScroll = a0.scrollTop;
   scr.innerHTML = SCREENS[r.name]() + (UI.sheet ? '<div class="scrim" data-act="scrim"><div class="sheet" role="dialog" aria-modal="true"><div class="grab"></div>' + SHEETS[UI.sheet.type]() + "</div></div>" : "");
   var a1 = scr.querySelector(".app"); if (a1) a1.scrollTop = resetScroll ? 0 : prevScroll;
-  var sb = document.getElementById("statusbar"); sb.className = "status" + (r.name === "welcome" ? " red" : r.name === "perform" ? " dark" : "");
+  var sb = document.getElementById("statusbar"); sb.className = "status" + (r.name === "welcome" ? " red" : r.name === "perform" ? (perfLight() ? " paper" : " dark") : "");
   if (UI.player && (r.name === "song" || r.name === "rehearse")) refreshPlayer();
   renderGuide(); renderToast(); syncPlayBtn();
   var f = scr.querySelector(".sheet input, .sheet textarea"); if (f) f.focus();
@@ -1151,7 +1175,7 @@ function renderGuide() {
       "<li>Change the tempo and key, or tap <b>Solo</b> on Tenor.</li>" +
       "<li>Open the <b>5 Nov rehearsal</b> and check in with code <b>4827</b>.</li>" +
       "<li>As Chiamaka: mark attendance for the sopranos.</li>" +
-      "<li>As Emeka: edit the Mass song order. Then try <b>Rehearse</b> (plays each song) and <b>Perform</b> (read only, no sound, bigger text).</li>" +
+      "<li>As Emeka: edit the Mass song order. Then try <b>Rehearse</b> (plays each song) and <b>Perform</b> (read only, no sound, bigger text, dark or light page).</li>" +
       "<li>Songs → <b>Add song</b>: type sol-fa and watch the bar checks.</li>" +
       "<li>As Tobi (no group): save a song, open his wedding setlist, then join St. Mary’s with <b>STM482</b> and switch back to My space.</li>" +
       "<li>Start over and pick “use Abụ on my own”, join with <b>STM482</b>, or create a new group.</li>" +
@@ -1214,6 +1238,7 @@ ACT["pick-song"] = function (t) { var e = ev(UI.route.params.id); e.items.push({
 ACT.perform = function (t) { if (A.playing) stopPlay(); UI.player = null; go("perform", { id: t.dataset.id, i: 0 }); };
 ACT.rehearse = function (t) { UI.player = null; go("rehearse", { id: t.dataset.id, i: 0 }); };
 ACT["perf-size"] = function (t) { UI.perfSize = Math.max(0, Math.min(3, (UI.perfSize == null ? 1 : UI.perfSize) + +t.dataset.d)); render(); };
+ACT["perf-theme"] = function (t) { S.prefs = S.prefs || {}; S.prefs.perfLight = t.dataset.v === "light"; save(); render(); };
 ACT["perf-parts"] = function (t) { UI.perfMine = t.dataset.v === "mine"; render(); };
 ACT["perf-nav"] = function (t) { if (A.playing) stopPlay(); var r = UI.route; r.params.i = Math.max(0, Math.min(ev(r.params.id).items.length - 1, (r.params.i || 0) + +t.dataset.d)); UI.player = null; render(true); };
 ACT.rsvp = function (t) { var e = ev(UI.route.params.id); e.rsvp[S.me] = t.dataset.v; save(); render(); toast(t.dataset.v === "going" ? "Thanks. See you there." : "Got it. Your leader will see you as excused."); };
