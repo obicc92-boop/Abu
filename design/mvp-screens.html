@@ -235,7 +235,7 @@ section > p.lead { margin: 0 0 20px; color: var(--muted); max-width: 65ch; }
       <span class="wordmark">Abụ</span>
     </div>
     <span class="meta">MVP screen design · draft 1 · 31 October 2026</span>
-    <h1>Eight screens to take a choir or music group off paper</h1>
+    <h1>Nine screens to take a choir or music group off paper</h1>
     <p>A phone-friendly web app for choirs and music groups: Catholic, Anglican and Pentecostal choirs, and orchestras, bands and other groups outside the church. It starts with tonic sol-fa. The player (screen 4) works: press play to hear the hymn in four parts, then mute, solo or focus on one part, change the tempo, or move doh to another key.</p>
     <p class="note">Example content only. The choir, members and songs other than the hymn are made up for this mockup. The hymn is <em>Old Hundredth</em> (Genevan Psalter, 1551; words by William Kethe, 1561), which is in the public domain. The four-part harmony is a simple demo arrangement.</p>
   </header>
@@ -351,7 +351,7 @@ section > p.lead { margin: 0 0 20px; color: var(--muted); max-width: 65ch; }
                 <button class="btn light" type="button" style="margin-top:4px;align-self:flex-start;padding:8px 12px">Open song order</button>
               </div>
               <div class="card">
-                <div class="row"><div class="grow"><span class="k">Rehearsal</span><div class="title">Thu 5 Nov · 5:00 PM</div><span class="small">Church hall · Advent songs</span></div><span class="badge ok">Going</span></div>
+                <div class="row"><div class="grow"><span class="k">Rehearsal</span><div class="title">Thu 5 Nov · 5:00 PM</div><span class="small">Church hall · Advent songs · your attendance 92%</span></div><span class="badge ok">Going</span></div>
               </div>
               <div>
                 <div class="row" style="justify-content:space-between;margin-bottom:4px"><span class="k">Learn your part</span><span class="small">Alto</span></div>
@@ -472,6 +472,7 @@ section > p.lead { margin: 0 0 20px; color: var(--muted); max-width: 65ch; }
               <button class="btn primary" type="button" style="padding:7px 12px;font-size:13px">Save</button>
             </div>
             <div class="body">
+              <div class="row"><span class="badge">Original sheet attached · PDF</span></div>
               <div class="field"><label>Title</label><div class="input" id="ed-title">All People That on Earth Do Dwell</div></div>
               <div class="two">
                 <div class="field"><label>Key</label><div class="input" id="ed-key">Doh is G</div></div>
@@ -479,14 +480,14 @@ section > p.lead { margin: 0 0 20px; color: var(--muted); max-width: 65ch; }
               </div>
               <div class="seg"><span class="on">All parts</span><span>S</span><span>A</span><span>T · B</span></div>
 <div class="code"><span class="c"># line 1</span>
-<span class="sl">S</span>  d :- :d :t₁ | l₁:s₁:d :r | m :- :- :-
-<span class="al">A</span>  s₁:- :l₁:s₁ | m₁:m₁:s₁:t₁| d :- :- :-
-<span class="tl">T</span>  m :- :f :r  | d :d :m :r  | s :- :- :-
-<span class="bl">B</span>  d₁:- :f₁:s₁ | l₁:m₁:d₁:s₁| d₁:- :- :-
+<span class="sl">S</span>  d :- /d :t1 | l1:s1 /d :r  | m :- /- :-
+<span class="al">A</span>  s1:- /l1:s1 | m1:m1 /s1:t1 | d :- /- :-
+<span class="tl">T</span>  m :- /f :r  | d :d  /m :r  | s :- /- :-
+<span class="bl">B</span>  d1:- /f1:s1 | l1:m1 /d1:s1 | d1:- /- :-
 <span class="c">W</span>  All - peo-ple that on earth do dwell</div>
               <div class="card sand" style="gap:4px">
                 <div class="row"><span class="badge ok">✓ 3 bars</span><span class="badge ok">✓ 4 parts line up</span><span class="badge ok">✓ words fit</span></div>
-                <span class="small">If a bar has the wrong number of beats, the app underlines it and says which part and bar, e.g. “Tenor, bar 2 has 5 beats; 4/4 needs 4.”</span>
+                <span class="small">“:” separates beats, “/” marks the middle of a 4/4 bar, “|” is the barline. Subscript and superscript octave marks are accepted too. If a bar has the wrong number of beats, the app underlines it and says which part and bar, e.g. “Tenor, bar 2 has 5 beats; 4/4 needs 4.”</span>
               </div>
               <button class="btn ghost block" type="button"><svg width="16" height="16" style="color:var(--red)"><use href="#i-play"/></svg>Play to check</button>
             </div>
@@ -532,6 +533,41 @@ section > p.lead { margin: 0 0 20px; color: var(--muted); max-width: 65ch; }
         </div>
       </div>
 
+      <!-- 9 Attendance -->
+      <div class="shot">
+        <div class="cap"><span class="num">09</span><h3>Rehearsal attendance</h3><p>Leaders and part leaders mark who came. Members who said “can't come” beforehand show up as excused. Each member sees their own attendance rate on Home.</p></div>
+        <div class="phone">
+          <div class="status"><span>9:41</span><span class="dots">•••</span></div>
+          <div class="app">
+            <div class="topbar">
+              <span class="iconbtn"><svg><use href="#i-back"/></svg></span>
+              <h4>Rehearsal attendance<span class="sub">Thu 5 Nov · 5:00 PM · Church hall</span></h4>
+            </div>
+            <div class="body">
+              <div class="card sand">
+                <div class="row"><div class="grow"><span class="k">Present</span><div style="font-family:var(--mono);font-weight:700;font-size:24px">31 <span class="small" style="font-family:var(--body);font-size:13px">of 39 · 3 excused</span></div></div></div>
+                <div class="mixer" style="gap:6px">
+                  <div class="part" style="cursor:default"><span class="pl" style="background:var(--part-s)">S</span>12/14</div>
+                  <div class="part" style="cursor:default"><span class="pl" style="background:var(--part-a)">A</span>9/11</div>
+                  <div class="part" style="cursor:default"><span class="pl" style="background:var(--part-t)">T</span>4/6</div>
+                  <div class="part" style="cursor:default"><span class="pl" style="background:var(--part-b)">B</span>6/8</div>
+                </div>
+              </div>
+              <div class="seg"><span class="on">All</span><span>Present</span><span>Absent</span><span>Excused</span></div>
+              <div class="list">
+                <div class="li"><div class="avatar" style="background:var(--part-a)">AO</div><div class="grow"><div class="title" style="font-size:14px">Adaeze Obi</div><div class="small">Alto</div></div><span class="badge ok">Present</span></div>
+                <div class="li"><div class="avatar" style="background:var(--part-a)">NU</div><div class="grow"><div class="title" style="font-size:14px">Ngozi Uche</div><div class="small">Alto · running late</div></div><span class="badge ok">Present</span></div>
+                <div class="li"><div class="avatar" style="background:var(--part-t)">KO</div><div class="grow"><div class="title" style="font-size:14px">Kelechi Okoro</div><div class="small">Tenor · travelling</div></div><span class="badge warn">Excused</span></div>
+                <div class="li"><div class="avatar" style="background:var(--part-b)">SB</div><div class="grow"><div class="title" style="font-size:14px">Segun Bello</div><div class="small">Bass</div></div><span class="badge red">Absent</span></div>
+                <div class="li"><div class="avatar" style="background:var(--part-s)">CI</div><div class="grow"><div class="title" style="font-size:14px">Chiamaka Ibe</div><div class="small">Soprano</div></div><span class="badge ok">Present</span></div>
+              </div>
+              <button class="btn primary block" type="button">Save attendance</button>
+            </div>
+          </div>
+          <nav class="tabbar"><span class="tab"><svg><use href="#i-home"/></svg>Home</span><span class="tab"><svg><use href="#i-songs"/></svg>Songs</span><span class="tab on"><svg><use href="#i-cal"/></svg>Events</span><span class="tab"><svg><use href="#i-people"/></svg>Group</span></nav>
+        </div>
+      </div>
+
     </div>
   </section>
 
@@ -541,7 +577,7 @@ section > p.lead { margin: 0 0 20px; color: var(--muted); max-width: 65ch; }
     <div class="flow">
       <div class="panel"><h3>Home</h3><ol><li>Next service → its song order</li><li>Next rehearsal → I'm going / can't come</li><li>Learn your part → player, your part in focus</li><li>Notices from the choirmaster</li></ol></div>
       <div class="panel"><h3>Songs</h3><ol><li>Search and filter the library</li><li>Song → player</li><li>New song → sol-fa editor</li><li>Save for offline use</li></ol></div>
-      <div class="panel"><h3>Events</h3><ol><li>Upcoming services, concerts and rehearsals</li><li>Event → song order → performance mode</li><li>Leader: create an event and order its songs</li></ol></div>
+      <div class="panel"><h3>Events</h3><ol><li>Upcoming services, concerts and rehearsals</li><li>Event → song order → performance mode</li><li>Leader: create an event and order its songs</li><li>Rehearsal → mark attendance</li></ol></div>
       <div class="panel"><h3>Group</h3><ol><li>Invite code and share link</li><li>Members by voice part</li><li>Roles: Leader (shown as Choirmaster, Music director or Bandleader), Part leader, Member</li><li>Profile and my part</li></ol></div>
     </div>
   </section>
@@ -560,9 +596,9 @@ section > p.lead { margin: 0 0 20px; color: var(--muted); max-width: 65ch; }
   <section class="qs">
     <h2 style="font-family:var(--display);font-weight:400;font-size:24px;margin-bottom:10px">Questions for you</h2>
     <ol>
-      <li>Should the first version include attendance at rehearsals, or leave that for later?</li>
-      <li>Orchestras and bands often read staff notation rather than sol-fa. Is sol-fa enough for the first non-church groups you have in mind, or do they need staff notation early?</li>
-      <li>Can you share one or two real sol-fa sheets from your choir, even photos? They'll be the test for the notation format.</li>
+      <li>Can someone in the choir type one full song in the format on the format page (docs/solfa-format.md)? It will be the first real test for the player.</li>
+      <li>Who marks attendance: only the leader, or part leaders too? Should members be able to check themselves in with a code shown at rehearsal?</li>
+      <li>Is it fine to keep uploaded sheets private to each group for now? Public sharing between groups raises copyright questions, which matter for the paid version later.</li>
     </ol>
   </section>
 
