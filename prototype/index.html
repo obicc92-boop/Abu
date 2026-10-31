@@ -129,7 +129,8 @@ button.card:hover { border-color: #D7C7BE; }
 .badge.dark { background: var(--ink); color: #fff; }
 button.badge { cursor: pointer; padding: 6px 11px; font-size: 12.5px; min-width: 76px; }
 .thumb { width: 42px; height: 42px; border-radius: 11px; background: var(--red-tint); color: var(--red-deep); display: grid; place-items: center; font-family: var(--mono); font-weight: 700; font-size: 13px; flex: none; }
-.thumb.sheet { background: var(--sand); color: var(--muted); }
+.thumb.nosolfa { background: var(--sand); color: var(--muted); }
+.thumb svg { width: 20px; height: 20px; }
 .avatar { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 13px; color: var(--white); flex: none; }
 .ord { width: 28px; height: 28px; border-radius: 8px; background: var(--sand); display: grid; place-items: center; font-family: var(--mono); font-size: 12px; font-weight: 700; flex: none; }
 .fab { position: absolute; right: 16px; bottom: 78px; box-shadow: 0 8px 20px -8px rgba(163,38,26,.7); z-index: 5; }
@@ -288,8 +289,10 @@ var GROUP_TYPES = {
   catholic: { name: "Catholic choir", leader: "Choirmaster", event: "Mass", sections: ["Entrance", "Kyrie", "Gloria", "Psalm", "Gospel Acclamation", "Offertory", "Sanctus", "Agnus Dei", "Communion", "Thanksgiving", "Recessional"] },
   anglican: { name: "Anglican choir", leader: "Choirmaster", event: "Service", sections: ["Introit", "Hymn", "Psalm", "Canticle", "Anthem", "Offertory", "Communion", "Recessional"] },
   pentecostal: { name: "Pentecostal or gospel choir", leader: "Choir director", event: "Service", sections: ["Praise", "Worship", "Special number", "Offering", "Thanksgiving", "Closing"] },
-  band: { name: "Band, orchestra or music group", leader: "Music director", event: "Performance", sections: ["Opening", "Set 1", "Set 2", "Interlude", "Encore"] }
+  band: { name: "Band, orchestra or music group", leader: "Music director", event: "Performance", sections: ["Opening", "Set 1", "Set 2", "Interlude", "Encore"] },
+  personal: { name: "Just me", leader: "Owner", event: "Setlist", sections: ["Opening", "Song", "Closing", "Encore", "Practice"], hidden: true }
 };
+function personalSpace(id, userId, part) { return { id: id, name: "My space", type: "personal", personal: true, code: null, selfCheckIn: false, members: [{ userId: userId, part: part, role: "leader", joined: TODAY }], repertoire: [], notices: [], events: [] }; }
 var TAGS = ["Entrance", "Offertory", "Communion", "Thanksgiving", "Advent", "Christmas", "Easter", "Hymn", "Igbo", "Yoruba", "English", "Latin"];
 
 /* ---------- Seed data ---------- */
@@ -382,7 +385,7 @@ function seed() {
     { id: "e-mass1129", kind: "service", title: "First Sunday of Advent", date: "2026-11-29", time: "08:00", venue: "St. Mary’s Church", items: [ { section: "Entrance", songId: "old100" }, { section: "Communion", songId: "grace" } ], rsvp: {}, attendance: {} }
   ];
 
-  return {
+  var st = {
     users: users,
     groups: {
       stmarys: { id: "stmarys", name: "St. Mary’s Choir", type: "catholic", code: "STM482", selfCheckIn: true, members: members,
@@ -396,12 +399,17 @@ function seed() {
     songs: songs,
     me: null,
     groupId: "stmarys",
-    practice: { adaeze: { old100: 3, ekele: 1 } }
+    practice: { adaeze: { old100: 3, ekele: 1 }, tobi: { grace: 4, old100: 2 } }
   };
+  st.users.tobi = { id: "tobi", name: "Tobi Adeyemi" };
+  var pg = st.groups["p-tobi"] = personalSpace("p-tobi", "tobi", "Tenor");
+  pg.repertoire = ["grace", "old100", "eyin"];
+  pg.events.push({ id: "e-tobi1", kind: "service", title: "Wedding reception", date: "2026-11-07", time: "14:00", venue: "Event centre, Lekki", note: "Two songs before the couple’s entrance.", items: [{ section: "Opening", songId: "grace" }, { section: "Song", songId: "eyin" }], rsvp: {}, attendance: {} });
+  return st;
 }
 
 /* ---------- State ---------- */
-var STORE = "abu-prototype-v1";
+var STORE = "abu-prototype-v2";
 var S = load() || seed();
 var UI = { route: { name: S.me ? "home" : "welcome", params: {} }, stack: [], sheet: null, toast: null,
   songFilter: "All", songQuery: "", attFilter: "all", editingOrder: false, joinErr: "", draft: null, player: null };
@@ -419,6 +427,9 @@ function myMember() { var g = group(); return g && S.me ? g.members.filter(funct
 function memberOf(id) { return group().members.filter(function (m) { return m.userId === id; })[0]; }
 function song(id) { return S.songs.filter(function (s) { return s.id === id; })[0]; }
 function ev(id) { return group().events.filter(function (e) { return e.id === id; })[0]; }
+function isPersonal() { var g = group(); return !!g && g.type === "personal"; }
+function myGroups() { return Object.keys(S.groups).map(function (k) { return S.groups[k]; }).filter(function (g) { return g.members.some(function (m) { return m.userId === S.me; }); }); }
+function anyMember(id) { var out = null; Object.keys(S.groups).forEach(function (k) { S.groups[k].members.forEach(function (m) { if (m.userId === id && !out) out = m; }); }); return out; }
 function isLeader() { var m = myMember(); return !!m && m.role === "leader"; }
 function isPartLeader() { var m = myMember(); return !!m && m.role === "partleader"; }
 function canMark(target) { var m = myMember(); if (!m) return false; if (m.role === "leader") return true; return m.role === "partleader" && target.part === m.part; }
@@ -691,12 +702,13 @@ function topbar(title, sub, opts) {
     "<h3>" + title + (sub ? '<span class="sub">' + sub + "</span>" : "") + "</h3>" + (opts.right || "") + "</div>";
 }
 function tabbar(on) {
-  var t = [["home", "i-home", "Home"], ["songs", "i-songs", "Songs"], ["events", "i-cal", "Events"], ["group", "i-people", "Group"]];
+  var pers = S.me && isPersonal();
+  var t = [["home", "i-home", "Home"], ["songs", "i-songs", "Songs"], ["events", "i-cal", pers ? "Setlists" : "Events"], ["group", "i-people", pers ? "Me" : "Group"]];
   return '<nav class="tabbar">' + t.map(function (x) { return '<button class="tab' + (x[0] === on ? " on" : "") + '" data-act="tab" data-to="' + x[0] + '">' + icon(x[1]) + x[2] + "</button>"; }).join("") + "</nav>";
 }
 function songRow(s, right) {
   var playable = !!s.solfa;
-  return '<button class="li" data-act="open-song" data-id="' + s.id + '"><div class="thumb' + (playable ? "" : " sheet") + '">' + (playable ? KEYS[s.key] : icon("i-file")) + '</div><div class="grow"><div class="title" style="font-size:14.5px">' + esc(s.title) + '</div><div class="small">' + esc(s.composer) + " · " + s.time + (playable ? "" : " · sheet only") + "</div></div>" + (right || "") + "</button>";
+  return '<button class="li" data-act="open-song" data-id="' + s.id + '"><div class="thumb' + (playable ? "" : " nosolfa") + '">' + (playable ? KEYS[s.key] : icon("i-file")) + '</div><div class="grow"><div class="title" style="font-size:14.5px">' + esc(s.title) + '</div><div class="small">' + esc(s.composer) + " · " + s.time + (playable ? "" : " · sheet only") + "</div></div>" + (right || "") + "</button>";
 }
 
 var SCREENS = {};
@@ -711,6 +723,7 @@ SCREENS.welcome = function () {
       '<span id="joinHint" class="fine" style="text-align:left">Try the demo code <b>STM482</b> for St. Mary’s Choir.</span>' +
       '<button class="btn light block" type="submit">Join group</button>' +
       '<button class="btn outline-w block" type="button" data-act="goto" data-to="create">I lead a group: create one</button>' +
+      '<button class="btn outline-w block" type="button" data-act="goto" data-to="solo">I’m not in a group: use Abụ on my own</button>' +
       '<button class="btn block" type="button" data-act="persona" data-id="adaeze" style="background:transparent;color:#FFE7E0;text-decoration:underline;padding:4px">Skip and look around as a member</button>' +
     "</form></div>";
 };
@@ -729,15 +742,28 @@ SCREENS.joinProfile = function () {
     "</form></div>";
 };
 
+SCREENS.solo = function () {
+  return '<div class="app">' + topbar("Use Abụ on your own", "Learn songs, practise and make setlists. Join a group any time.") +
+    '<form class="body" id="soloForm" novalidate>' +
+      '<div class="field"><label for="soName">Your name</label><input class="input" id="soName" autocomplete="name" placeholder="e.g. Tobi Adeyemi"></div>' +
+      '<div class="field"><span class="lbltxt" id="soPartLbl">The part you usually sing</span><div class="two" role="radiogroup" aria-labelledby="soPartLbl">' +
+        PARTS.map(function (p, i) { return '<button type="button" class="opt' + (i === 0 ? " on" : "") + '" data-act="pick-part" data-part="' + p + '" role="radio" aria-checked="' + (i === 0) + '"><span class="pp" style="background:' + partColor(p) + '">' + PART_LETTER[p] + "</span><b>" + p + "</b></button>"; }).join("") +
+      "</div></div>" +
+      '<div class="card sand"><span class="small">Good for solo singers, instrumentalists, music students and anyone visiting a choir. Every song shared on Abụ is open to you.</span></div>' +
+      '<div class="err" id="soErr" role="alert"></div>' +
+      '<button class="btn primary block" type="submit">Start</button>' +
+    "</form></div>";
+};
+
 SCREENS.create = function () {
   var d = UI.createDraft || (UI.createDraft = { type: "catholic" });
   return '<div class="app">' + topbar("Create your group") +
     '<form class="body" id="createForm" novalidate>' +
       '<div class="field"><label for="cgName">Group name</label><input class="input" id="cgName" placeholder="e.g. Holy Family Choir, Owerri" value="' + esc(d.name || "") + '"></div>' +
       '<div class="field"><span class="lbltxt">What kind of group?</span><div class="list" style="gap:6px">' +
-        Object.keys(GROUP_TYPES).map(function (k) { var t = GROUP_TYPES[k]; return '<button type="button" class="opt' + (d.type === k ? " on" : "") + '" data-act="pick-type" data-type="' + k + '" aria-pressed="' + (d.type === k) + '"><div class="grow"><div class="title" style="font-size:14.5px">' + t.name + '</div><div class="small">' + t.sections.slice(0, 4).join(", ") + "…</div></div>" + (d.type === k ? '<span class="badge red">' + icon("i-check").replace("<svg", '<svg width="12" height="12"') + "</span>" : "") + "</button>"; }).join("") +
+        Object.keys(GROUP_TYPES).filter(function (k) { return !GROUP_TYPES[k].hidden; }).map(function (k) { var t = GROUP_TYPES[k]; return '<button type="button" class="opt' + (d.type === k ? " on" : "") + '" data-act="pick-type" data-type="' + k + '" aria-pressed="' + (d.type === k) + '"><div class="grow"><div class="title" style="font-size:14.5px">' + t.name + '</div><div class="small">' + t.sections.slice(0, 4).join(", ") + "…</div></div>" + (d.type === k ? '<span class="badge red">' + icon("i-check").replace("<svg", '<svg width="12" height="12"') + "</span>" : "") + "</button>"; }).join("") +
       "</div></div>" +
-      '<div class="field"><label for="cgMe">Your name</label><input class="input" id="cgMe" autocomplete="name" placeholder="e.g. Emeka Nwosu" value="' + esc(d.me || "") + '"></div>' +
+      (S.me ? "" : '<div class="field"><label for="cgMe">Your name</label><input class="input" id="cgMe" autocomplete="name" placeholder="e.g. Emeka Nwosu" value="' + esc(d.me || "") + '"></div>') +
       '<div class="field"><label for="cgPart">Your own part</label><select class="input" id="cgPart">' + PARTS.map(function (p) { return "<option>" + p + "</option>"; }).join("") + "<option>I don’t sing</option></select></div>" +
       '<p class="small" style="margin:0">Parts start as Soprano, Alto, Tenor and Bass. Section names come from the group type, and you can rename them later.</p>' +
       '<div class="err" id="cgErr" role="alert"></div>' +
@@ -746,6 +772,7 @@ SCREENS.create = function () {
 };
 
 SCREENS.home = function () {
+  if (isPersonal()) return SCREENS.homePersonal();
   var g = group(), m = myMember(), u = me(), up = upcoming();
   var nextSvc = up.filter(function (e) { return e.kind !== "rehearsal"; })[0];
   var nextReh = up.filter(function (e) { return e.kind === "rehearsal"; })[0];
@@ -773,6 +800,21 @@ SCREENS.home = function () {
   return html;
 };
 
+SCREENS.homePersonal = function () {
+  var u = me(), m = myMember(), g = group(), up = upcoming(), pr = S.practice[S.me] || {}, next = up[0];
+  var mine = g.repertoire.map(song).filter(Boolean);
+  var discover = S.songs.filter(function (s) { return s.solfa && g.repertoire.indexOf(s.id) < 0; }).slice(0, 3);
+  var groups = myGroups().filter(function (x) { return !x.personal; });
+  var html = '<div class="app"><div class="topbar"><h3>My space<span class="sub">Good evening, ' + esc(u.name.split(" ")[0]) + ' · <b style="color:' + partColor(m.part) + '">' + esc(m.part) + "</b>" + (groups.length ? "" : " · no group yet") + '</span></h3><button class="avatar" style="background:' + partColor(m.part) + ';border:0" data-act="sheet" data-sheet="profile" aria-label="Your profile">' + initials(u.name) + '</button></div><div class="body">';
+  if (next) html += '<div class="card hero"><span class="k">Next setlist' + (relDay(next.date) ? " · " + relDay(next.date) : "") + '</span><span class="title" style="font-size:18px">' + esc(next.title) + '</span><span class="small">' + fmtDate(next.date) + " · " + fmtTime(next.time) + " · " + next.items.length + " songs</span>" + '<button class="btn light sm" style="align-self:flex-start;margin-top:4px" data-act="open-event" data-id="' + next.id + '">Open setlist</button></div>';
+  else html += '<div class="card hero"><span class="k">Setlists</span><span class="title" style="font-size:17px">Singing at a wedding, concert or service?</span><span class="small">Put your songs in order and use performance mode on the day.</span><button class="btn light sm" style="align-self:flex-start;margin-top:4px" data-act="goto" data-to="eventNew">Make a setlist</button></div>';
+  if (!groups.length) html += '<div class="card"><span class="k">Sing with a group?</span><span style="font-size:14px">Got a code from a choir or band? Join it here. You keep your own songs and setlists.</span><div class="row"><button class="btn primary sm" data-act="sheet" data-sheet="joingroup">Join a group</button><button class="btn ghost sm" data-act="goto" data-to="create">Start a group</button></div></div>';
+  html += '<div><div class="secthead"><span class="k">My songs</span><span class="small">' + mine.length + ' saved</span></div><div class="list">' +
+    (mine.length ? mine.map(function (s) { var n = pr[s.id] || 0; return songRow(s, n ? '<span class="badge ok">Practised ' + n + "×</span>" : '<span class="badge red">New</span>'); }).join("") : '<p class="small">Save songs from the library to find them quickly.</p>') + "</div></div>";
+  if (discover.length) html += '<div><div class="secthead"><span class="k">Discover</span><button class="linkbtn" data-act="tab" data-to="songs">All songs</button></div><div class="list">' + discover.map(function (s) { return songRow(s, '<span class="badge">' + esc(s.by.split(",")[0]) + "</span>"); }).join("") + "</div></div>";
+  return html + "</div></div>" + tabbar("home");
+};
+
 SCREENS.songs = function () {
   var g = group(), q = UI.songQuery.toLowerCase(), f = UI.songFilter;
   var list = S.songs.filter(function (s) {
@@ -783,10 +825,10 @@ SCREENS.songs = function () {
     return true;
   });
   var chips = ["All", "Ours", "Playable"].concat(TAGS.filter(function (t) { return S.songs.some(function (s) { return s.tags.indexOf(t) >= 0; }); }));
-  return '<div class="app">' + topbar("Songs", S.songs.length + " songs shared on Abụ · " + g.repertoire.length + " in our repertoire", { back: false }) +
+  return '<div class="app">' + topbar("Songs", S.songs.length + " songs shared on Abụ · " + g.repertoire.length + (isPersonal() ? " saved by you" : " in our repertoire"), { back: false }) +
     '<div class="body"><div class="search">' + icon("i-search") + '<input id="songSearch" type="search" placeholder="Search title, composer or group" value="' + esc(UI.songQuery) + '" aria-label="Search songs"></div>' +
-    '<div class="chips">' + chips.map(function (c) { return '<button class="chip' + (c === f ? " on" : "") + '" data-act="song-filter" data-f="' + c + '">' + (c === "Ours" ? "Our repertoire" : c === "Playable" ? "Has sol-fa" : c) + "</button>"; }).join("") + "</div>" +
-    '<div class="list" id="songList">' + (list.length ? list.map(function (s) { return songRow(s, g.repertoire.indexOf(s.id) >= 0 ? '<span class="badge ok">Ours</span>' : ""); }).join("") : '<div class="empty">No songs match. Try another word or filter.</div>') + "</div>" +
+    '<div class="chips">' + chips.map(function (c) { return '<button class="chip' + (c === f ? " on" : "") + '" data-act="song-filter" data-f="' + c + '">' + (c === "Ours" ? (isPersonal() ? "My songs" : "Our repertoire") : c === "Playable" ? "Has sol-fa" : c) + "</button>"; }).join("") + "</div>" +
+    '<div class="list" id="songList">' + (list.length ? list.map(function (s) { return songRow(s, g.repertoire.indexOf(s.id) >= 0 ? '<span class="badge ok">' + (isPersonal() ? "Saved" : "Ours") + "</span>" : ""); }).join("") : '<div class="empty">No songs match. Try another word or filter.</div>') + "</div>" +
     '<div style="height:56px"></div></div></div>' +
     '<button class="btn primary fab" data-act="new-song">' + icon("i-plus") + "Add song</button>" + tabbar("songs");
 };
@@ -812,7 +854,7 @@ SCREENS.song = function () {
     html += '<span class="hint">Tap a letter to mute that part. “Mine” sets your part.</span>';
   }
   if (!preview) {
-    html += '<div class="row wrap">' + (ours ? '<span class="badge ok">In our repertoire</span>' : (isLeader() ? '<button class="btn ghost sm" data-act="add-rep" data-id="' + s.id + '">' + icon("i-plus") + "Add to our repertoire</button>" : '<span class="badge">Shared by ' + esc(s.by) + "</span>")) +
+    html += '<div class="row wrap">' + (ours ? '<span class="badge ok">' + (isPersonal() ? "In my songs" : "In our repertoire") + "</span>" : (isLeader() ? '<button class="btn ghost sm" data-act="add-rep" data-id="' + s.id + '">' + icon("i-plus") + (isPersonal() ? "Save to my songs" : "Add to our repertoire") + "</button>" : '<span class="badge">Shared by ' + esc(s.by) + "</span>")) +
       (!s.solfa ? '<button class="btn ghost sm" data-act="edit-song" data-id="' + s.id + '">' + icon("i-edit") + "Type the sol-fa</button>" : "") + "</div>";
   }
   html += "</div></div>";
@@ -851,20 +893,21 @@ SCREENS.events = function () {
     var badge = e.kind === "rehearsal" ? '<span class="badge">Rehearsal</span>' : '<span class="badge red">' + esc(kindLabel(e)) + "</span>";
     return '<button class="li" data-act="open-event" data-id="' + e.id + '"><div class="ord" style="width:46px;height:46px;flex-direction:column;display:flex;justify-content:center;align-items:center;line-height:1.05"><span style="font-size:10px;color:var(--muted)">' + MON[dObj(e.date).getUTCMonth()].toUpperCase() + '</span><span style="font-size:17px">' + dObj(e.date).getUTCDate() + '</span></div><div class="grow"><div class="title" style="font-size:14.5px">' + esc(e.title) + '</div><div class="small">' + DOW[dObj(e.date).getUTCDay()] + " · " + fmtTime(e.time) + " · " + esc(e.venue) + "</div></div>" + badge + "</button>";
   }
-  return '<div class="app">' + topbar("Events", "Services, concerts and rehearsals", { back: false, right: isLeader() ? '<button class="iconbtn" data-act="goto" data-to="eventNew" aria-label="Plan an event">' + icon("i-plus") + "</button>" : "" }) +
+  return '<div class="app">' + topbar(isPersonal() ? "Setlists" : "Events", isPersonal() ? "Your own song lists for gigs, weddings or practice" : "Services, concerts and rehearsals", { back: false, right: isLeader() ? '<button class="iconbtn" data-act="goto" data-to="eventNew" aria-label="New">' + icon("i-plus") + "</button>" : "" }) +
     '<div class="body"><span class="k">Coming up</span><div class="list">' + (up.length ? up.map(row).join("") : '<div class="empty">Nothing planned yet.</div>') + "</div>" +
     (past.length ? '<span class="k">Past rehearsals</span><div class="list">' + past.map(row).join("") + "</div>" : "") +
-    (isLeader() ? '<button class="btn primary block" data-act="goto" data-to="eventNew">' + icon("i-plus") + "Plan an event</button>" : "") +
+    (isLeader() ? '<button class="btn primary block" data-act="goto" data-to="eventNew">' + icon("i-plus") + (isPersonal() ? "New setlist" : "Plan an event") + "</button>" : "") +
     "</div></div>" + tabbar("events");
 };
 
 SCREENS.eventNew = function () {
   var t = GROUP_TYPES[group().type];
-  return '<div class="app">' + topbar("Plan an event") + '<form class="body" id="eventForm" novalidate>' +
-    '<div class="field"><span class="lbltxt">What is it?</span><div class="seg" role="radiogroup">' +
-      [["service", t.event], ["rehearsal", "Rehearsal"], ["concert", "Concert"]].map(function (k, i) { return '<button type="button" data-act="ev-kind" data-k="' + k[0] + '" class="' + (i === 0 ? "on" : "") + '" role="radio" aria-checked="' + (i === 0) + '">' + k[1] + "</button>"; }).join("") +
+  var pers = isPersonal();
+  return '<div class="app">' + topbar(pers ? "New setlist" : "Plan an event") + '<form class="body" id="eventForm" novalidate>' +
+    '<div class="field"' + (pers ? ' style="display:none"' : "") + '><span class="lbltxt">What is it?</span><div class="seg" role="radiogroup">' +
+      (pers ? [["service", "Setlist"]] : [["service", t.event], ["rehearsal", "Rehearsal"], ["concert", "Concert"]]).map(function (k, i) { return '<button type="button" data-act="ev-kind" data-k="' + k[0] + '" class="' + (i === 0 ? "on" : "") + '" role="radio" aria-checked="' + (i === 0) + '">' + k[1] + "</button>"; }).join("") +
     "</div></div>" +
-    '<div class="field"><label for="evTitle">Title</label><input class="input" id="evTitle" placeholder="e.g. Second Sunday of Advent"></div>' +
+    '<div class="field"><label for="evTitle">Title</label><input class="input" id="evTitle" placeholder="' + (pers ? "e.g. Wedding reception" : "e.g. Second Sunday of Advent") + '"></div>' +
     '<div class="two"><div class="field"><label for="evDate">Date</label><input class="input" type="date" id="evDate" value="2026-11-08"></div><div class="field"><label for="evTime">Time</label><input class="input" type="time" id="evTime" value="08:00"></div></div>' +
     '<div class="field"><label for="evVenue">Where</label><input class="input" id="evVenue" value="' + (group().id === "stmarys" ? "St. Mary’s Church" : "") + '" placeholder="e.g. Church hall"></div>' +
     '<div class="field"><label for="evNote">Note for members (optional)</label><input class="input" id="evNote" placeholder="e.g. Wear the red robes"></div>' +
@@ -955,6 +998,7 @@ SCREENS.perform = function () {
 };
 
 SCREENS.group = function () {
+  if (isPersonal()) return SCREENS.me();
   var g = group(), lead = isLeader();
   var html = '<div class="app">' + topbar("Group", esc(g.name) + " · " + g.members.length + " members", { back: false }) + '<div class="body">';
   html += '<div class="card sand"><div class="row"><div class="grow"><span class="k">Invite code</span><div style="font-family:var(--mono);font-weight:700;font-size:22px;letter-spacing:.12em">' + g.code + '</div><span class="small">New members enter this on the welcome screen.</span></div><button class="btn primary sm" data-act="copy-code">Copy</button></div></div>';
@@ -962,6 +1006,7 @@ SCREENS.group = function () {
   html += '<div class="card"><span class="k">Settings</span>' +
     '<div class="toggles"><span>Members check in with a code<br><span class="small" style="font-weight:500">Show a code at rehearsal; members enter it on their phones.</span></span>' + (lead ? '<button class="switch" data-act="self-checkin" role="switch" aria-checked="' + g.selfCheckIn + '" aria-label="Members check in with a code"></button>' : '<span class="badge">' + (g.selfCheckIn ? "On" : "Off") + "</span>") + "</div>" +
     '<div class="row between"><span style="font-weight:700;font-size:14px">Group type</span><span class="small">' + GROUP_TYPES[g.type].name + "</span></div></div>";
+  html += spacesHTML();
   var lm = g.members.filter(function (m) { return m.role !== "member"; });
   html += '<div><span class="k">Leaders</span><div class="list">' + lm.map(memberRow).join("") + "</div></div>";
   PARTS.forEach(function (p) {
@@ -972,6 +1017,23 @@ SCREENS.group = function () {
   html += "</div></div>" + tabbar("group");
   return html;
 };
+SCREENS.me = function () {
+  var u = me(), m = myMember();
+  return '<div class="app">' + topbar("Me", "Your profile and groups", { back: false }) + '<div class="body">' +
+    '<div class="card"><div class="row"><div class="avatar" style="background:' + partColor(m.part) + '">' + initials(u.name) + '</div><div class="grow"><div class="title">' + esc(u.name) + '</div><div class="small">' + esc(m.part) + " · " + group().repertoire.length + " songs saved · " + group().events.length + (group().events.length === 1 ? " setlist" : " setlists") + "</div></div></div>" +
+    '<div class="field"><label for="prPart">The part you usually sing</label><select class="input" id="prPart">' + PARTS.map(function (p) { return "<option" + (p === m.part ? " selected" : "") + ">" + p + "</option>"; }).join("") + '</select></div><button class="btn ghost sm" style="align-self:flex-start" data-act="save-profile">Save</button></div>' +
+    spacesHTML() +
+    '<button class="btn ghost block" data-act="sign-out">Sign out</button>' +
+    "</div></div>" + tabbar("group");
+};
+function spacesHTML() {
+  var gs = myGroups();
+  return '<div class="card"><span class="k">Your spaces</span><div class="list">' + gs.map(function (g) {
+    var mm = g.members.filter(function (x) { return x.userId === S.me; })[0];
+    return '<button class="li" data-act="switch-space" data-id="' + g.id + '"><div class="thumb' + (g.personal ? " nosolfa" : "") + '">' + (g.personal ? icon("i-people").replace("<svg", '<svg width="18" height="18"') : initials(g.name)) + '</div><div class="grow"><div class="title" style="font-size:14.5px">' + esc(g.name) + '</div><div class="small">' + (g.personal ? "Just you · your songs and setlists" : GROUP_TYPES[g.type].name + " · " + roleLabelIn(g, mm.role)) + "</div></div>" + (g.id === S.groupId ? '<span class="badge dark">Open</span>' : '<span class="badge">Switch</span>') + "</button>";
+  }).join("") + '</div><div class="row"><button class="btn primary sm" data-act="sheet" data-sheet="joingroup">Join a group</button><button class="btn ghost sm" data-act="goto" data-to="create">Start a group</button></div></div>';
+}
+function roleLabelIn(g, r) { if (r === "leader") return GROUP_TYPES[g.type].leader; if (r === "partleader") return "Part leader"; return "Member"; }
 function memberRow(m) {
   var u = S.users[m.userId], r = attendanceRate(m.userId);
   var inner = '<div class="avatar" style="background:' + partColor(m.part) + '">' + initials(u.name) + '</div><div class="grow"><div class="title" style="font-size:14.5px">' + esc(u.name) + (m.userId === S.me ? " (you)" : "") + '</div><div class="small">' + esc(m.part) + (r ? " · attendance " + r.pct + "%" : "") + "</div></div>" + '<span class="badge ' + (m.role === "leader" ? "red" : "") + '">' + roleLabel(m.role) + "</span>";
@@ -981,14 +1043,15 @@ function memberRow(m) {
 /* ---------- Sheets ---------- */
 var SHEETS = {};
 SHEETS.notice = function () { return "<h3>Post a notice</h3>" + '<div class="field"><label for="ntText">Message to the whole group</label><textarea class="input" id="ntText" rows="4" placeholder="e.g. Rehearsal moves to 4:30 PM this Thursday."></textarea></div><div class="err" id="ntErr" role="alert"></div><button class="btn primary block" data-act="post-notice">Post notice</button>'; };
-SHEETS.profile = function () { var u = me(), m = myMember(); return "<h3>" + esc(u.name) + '</h3><span class="small">' + esc(group().name) + " · " + roleLabel(m.role) + '</span><div class="field"><label for="prPart">My part</label><select class="input" id="prPart">' + PARTS.map(function (p) { return "<option" + (p === m.part ? " selected" : "") + ">" + p + "</option>"; }).join("") + '</select></div><button class="btn primary block" data-act="save-profile">Save</button><button class="btn ghost block" data-act="sign-out">Sign out</button>'; };
+SHEETS.profile = function () { var u = me(), m = myMember(); return "<h3>" + esc(u.name) + '</h3><span class="small">' + esc(group().name) + (isPersonal() ? "" : " · " + roleLabel(m.role)) + '</span><div class="field"><label for="prPart">My part</label><select class="input" id="prPart">' + PARTS.map(function (p) { return "<option" + (p === m.part ? " selected" : "") + ">" + p + "</option>"; }).join("") + '</select></div><button class="btn primary block" data-act="save-profile">Save</button>' + spacesHTML() + '<button class="btn ghost block" data-act="sign-out">Sign out</button>'; };
+SHEETS.joingroup = function () { return "<h3>Join a group</h3><p class='small' style='margin:0'>Enter the 6-letter code from the choir or group leader. Your own songs and setlists stay in My space.</p>" + '<input class="codeinput dark" id="jgCode" maxlength="6" autocomplete="off" placeholder="STM482" aria-label="Group code"><div class="err" id="jgErr" role="alert"></div><button class="btn primary block" data-act="do-join">Join</button><p class="small" style="margin:0">Prototype hint: St. Mary’s Choir uses STM482.</p>'; };
 SHEETS.checkin = function () { return "<h3>Check in</h3><p class='small' style='margin:0'>Enter the 4-digit code your leader is showing at the rehearsal.</p>" + '<input class="codeinput dark" id="ciCode" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="0000" aria-label="Check-in code"><div class="err" id="ciErr" role="alert"></div><button class="btn primary block" data-act="do-checkin">Check in</button><p class="small" style="margin:0">Prototype hint: the code for 5 Nov is ' + ev(UI.route.params.id).code + ".</p>"; };
 SHEETS.showcode = function () { var e = ev(UI.route.params.id); return '<h3>Check-in code</h3><p class="small" style="margin:0">Show this screen at the rehearsal. Members tap “Check in” and enter the code.</p><div class="bigcode">' + e.code + '</div><div class="row wrap"><span class="badge ok">' + countAtt(e).present + ' checked in</span><span class="badge">Rehearsal · ' + fmtDate(e.date) + '</span></div><button class="btn ghost block" data-act="new-code">Make a new code</button><button class="btn primary block" data-act="close-sheet">Done</button>'; };
 SHEETS.addsong = function () {
   var e = ev(UI.route.params.id), g = group(), secs = GROUP_TYPES[g.type].sections;
   var def = e.kind === "rehearsal" ? "To prepare" : secs[Math.min(e.items.length, secs.length - 1)];
   var list = S.songs.slice().sort(function (a, b) { return (g.repertoire.indexOf(b.id) >= 0) - (g.repertoire.indexOf(a.id) >= 0); });
-  return '<h3>Add a song</h3><div class="field"><label for="asSec">Section</label><select class="input" id="asSec">' + (e.kind === "rehearsal" ? ["To prepare"] : secs).map(function (x) { return "<option" + (x === def ? " selected" : "") + ">" + esc(x) + "</option>"; }).join("") + '</select></div><div class="list">' + list.map(function (s) { return '<button class="li" data-act="pick-song" data-id="' + s.id + '"><div class="thumb' + (s.solfa ? "" : " sheet") + '">' + (s.solfa ? KEYS[s.key] : icon("i-file")) + '</div><div class="grow"><div class="title" style="font-size:14px">' + esc(s.title) + '</div><div class="small">' + (g.repertoire.indexOf(s.id) >= 0 ? "Our repertoire" : "Shared by " + esc(s.by)) + "</div></div></button>"; }).join("") + "</div>";
+  return '<h3>Add a song</h3><div class="field"><label for="asSec">Section</label><select class="input" id="asSec">' + (e.kind === "rehearsal" ? ["To prepare"] : secs).map(function (x) { return "<option" + (x === def ? " selected" : "") + ">" + esc(x) + "</option>"; }).join("") + '</select></div><div class="list">' + list.map(function (s) { return '<button class="li" data-act="pick-song" data-id="' + s.id + '"><div class="thumb' + (s.solfa ? "" : " nosolfa") + '">' + (s.solfa ? KEYS[s.key] : icon("i-file")) + '</div><div class="grow"><div class="title" style="font-size:14px">' + esc(s.title) + '</div><div class="small">' + (g.repertoire.indexOf(s.id) >= 0 ? "Our repertoire" : "Shared by " + esc(s.by)) + "</div></div></button>"; }).join("") + "</div>";
 };
 SHEETS.member = function () {
   var m = memberOf(UI.sheet.u), u = S.users[m.userId];
@@ -996,7 +1059,7 @@ SHEETS.member = function () {
 };
 SHEETS.songinfo = function () {
   var s = song(UI.route.params.id), g = group();
-  return "<h3>" + esc(s.title) + '</h3><div class="list"><div class="li"><span class="grow small">Composer</span><b>' + esc(s.composer) + '</b></div><div class="li"><span class="grow small">Key · time</span><b>Doh is ' + KEYS[s.key] + " · " + s.time + '</b></div><div class="li"><span class="grow small">Shared by</span><b>' + esc(s.by) + '</b></div><div class="li"><span class="grow small">Tags</span><b>' + esc(s.tags.join(", ")) + '</b></div></div><div class="fakesheet" style="height:150px">' + (s.sheet ? "Original sheet: " + esc(s.sheet) + "<br>In the real app the PDF or photo opens here." : "No original sheet attached.") + "</div>" + (isLeader() && g.repertoire.indexOf(s.id) < 0 ? '<button class="btn primary block" data-act="add-rep" data-id="' + s.id + '">Add to our repertoire</button>' : "") + '<button class="btn ghost block" data-act="edit-song" data-id="' + s.id + '">' + icon("i-edit") + "Edit the sol-fa</button>";
+  return "<h3>" + esc(s.title) + '</h3><div class="list"><div class="li"><span class="grow small">Composer</span><b>' + esc(s.composer) + '</b></div><div class="li"><span class="grow small">Key · time</span><b>Doh is ' + KEYS[s.key] + " · " + s.time + '</b></div><div class="li"><span class="grow small">Shared by</span><b>' + esc(s.by) + '</b></div><div class="li"><span class="grow small">Tags</span><b>' + esc(s.tags.join(", ")) + '</b></div></div><div class="fakesheet" style="height:150px">' + (s.sheet ? "Original sheet: " + esc(s.sheet) + "<br>In the real app the PDF or photo opens here." : "No original sheet attached.") + "</div>" + (isLeader() && g.repertoire.indexOf(s.id) < 0 ? '<button class="btn primary block" data-act="add-rep" data-id="' + s.id + '">' + (isPersonal() ? "Save to my songs" : "Add to our repertoire") + "</button>" : "") + '<button class="btn ghost block" data-act="edit-song" data-id="' + s.id + '">' + icon("i-edit") + "Edit the sol-fa</button>";
 };
 SHEETS.format = function () {
   return '<h3>How to type sol-fa</h3><div class="list" style="font-size:13.5px">' +
@@ -1007,7 +1070,7 @@ SHEETS.format = function () {
 /* ---------- Render ---------- */
 function render(resetScroll) {
   var r = UI.route, scr = document.getElementById("screen");
-  if (!S.me && ["welcome", "joinProfile", "create"].indexOf(r.name) < 0) { UI.route = r = { name: "welcome", params: {} }; }
+  if (!S.me && ["welcome", "joinProfile", "create", "solo"].indexOf(r.name) < 0) { UI.route = r = { name: "welcome", params: {} }; }
   if ((r.name === "song" || r.name === "perform")) preparePlayer();
   var prevScroll = 0, a0 = scr.querySelector(".app"); if (a0 && !resetScroll) prevScroll = a0.scrollTop;
   scr.innerHTML = SCREENS[r.name]() + (UI.sheet ? '<div class="scrim" data-act="scrim"><div class="sheet" role="dialog" aria-modal="true"><div class="grab"></div>' + SHEETS[UI.sheet.type]() + "</div></div>" : "");
@@ -1043,14 +1106,14 @@ function refreshPlayer() {
   applyLevels();
 }
 
-var PERSONAS = [["adaeze", "Alto · member"], ["chiamaka", "Soprano · part leader"], ["emeka", "Bass · choirmaster"]];
+var PERSONAS = [["adaeze", "Alto · member"], ["chiamaka", "Soprano · part leader"], ["emeka", "Bass · choirmaster"], ["tobi", "Tenor · no group, sings at events"]];
 function renderGuide() {
   var g = document.getElementById("guide"), meId = S.me;
-  var people = PERSONAS.filter(function (p) { return S.users[p[0]] && S.groups.stmarys.members.some(function (m) { return m.userId === p[0]; }); });
+  var people = PERSONAS.filter(function (p) { return S.users[p[0]] && anyMember(p[0]); });
   var extra = meId && !PERSONAS.some(function (p) { return p[0] === meId; }) ? '<button class="persona on"><span class="avatar" style="background:var(--ink)">' + initials(S.users[meId].name) + "</span><span><b>" + esc(S.users[meId].name) + "</b><span>You, in " + esc(group().name) + "</span></span></button>" : "";
   g.innerHTML = '<div class="brandline"><div class="mark">' + icon("i-mark") + '</div><span class="wordmark">Abụ</span></div>' +
-    "<h1>Clickable prototype</h1><p>Everything on the phone works: join, play songs, plan services, take attendance. Changes stay in this browser only. The choir, people and most songs are examples.</p>" +
-    '<div class="gpanel"><h2>Try it as</h2>' + people.map(function (p) { var u = S.users[p[0]]; return '<button class="persona' + (meId === p[0] && S.groupId === "stmarys" ? " on" : "") + '" data-act="persona" data-id="' + p[0] + '"><span class="avatar" style="background:' + partColor(memberOfIn("stmarys", p[0]).part) + '">' + initials(u.name) + "</span><span><b>" + esc(u.name) + "</b><span>" + p[1] + "</span></span></button>"; }).join("") + extra +
+    "<h1>Clickable prototype</h1><p>Everything on the phone works: join a group or use Abụ on your own, play songs, plan services, take attendance. Changes stay in this browser only. The choir, people and most songs are examples.</p>" +
+    '<div class="gpanel"><h2>Try it as</h2>' + people.map(function (p) { var u = S.users[p[0]]; return '<button class="persona' + (meId === p[0] ? " on" : "") + '" data-act="persona" data-id="' + p[0] + '"><span class="avatar" style="background:' + partColor(anyMember(p[0]).part) + '">' + initials(u.name) + "</span><span><b>" + esc(u.name) + "</b><span>" + p[1] + "</span></span></button>"; }).join("") + extra +
     '<button class="linkbtn" data-act="restart" style="align-self:flex-start">Start over from the welcome screen</button></div>' +
     '<div class="gpanel"><h2>Things to try</h2><ol class="trylist">' +
       "<li>As Adaeze: open <b>Learn your part</b>, press play, then tap S, T and B to mute them.</li>" +
@@ -1059,19 +1122,20 @@ function renderGuide() {
       "<li>As Chiamaka: mark attendance for the sopranos.</li>" +
       "<li>As Emeka: edit the Mass song order, then start <b>performance mode</b>.</li>" +
       "<li>Songs → <b>Add song</b>: type sol-fa and watch the bar checks.</li>" +
-      "<li>Start over, join with <b>STM482</b>, or create a new group.</li>" +
+      "<li>As Tobi (no group): save a song, open his wedding setlist, then join St. Mary’s with <b>STM482</b> and switch back to My space.</li>" +
+      "<li>Start over and pick “use Abụ on my own”, join with <b>STM482</b>, or create a new group.</li>" +
     "</ol></div>";
   var pb = document.getElementById("protobar");
-  pb.innerHTML = "<span>Abụ prototype" + (meId ? " · " + esc(S.users[meId].name.split(" ")[0]) : "") + '</span><span style="display:flex;gap:6px">' + people.map(function (p) { return '<button data-act="persona" data-id="' + p[0] + '">' + esc(S.users[p[0]].name.split(" ")[0]) + "</button>"; }).join("") + '<button data-act="restart" aria-label="Start over">↺</button></span>';
+  pb.innerHTML = "<span><b>Abụ</b> prototype</span>" + '<span style="display:flex;gap:6px">' + people.map(function (p) { return '<button data-act="persona" data-id="' + p[0] + '">' + esc(S.users[p[0]].name.split(" ")[0]) + "</button>"; }).join("") + '<button data-act="restart" aria-label="Start over">↺</button></span>';
 }
-function memberOfIn(gid, id) { return S.groups[gid].members.filter(function (m) { return m.userId === id; })[0]; }
+
 
 /* ---------- Actions ---------- */
 var ACT = {};
 ACT.back = function () { back(); };
 ACT.tab = function (t) { go(t.dataset.to, {}, true); };
 ACT.goto = function (t) { go(t.dataset.to, {}); };
-ACT.persona = function (t) { S.me = t.dataset.id; S.groupId = "stmarys"; save(); UI.stack = []; go("home", {}, true); };
+ACT.persona = function (t) { S.me = t.dataset.id; var gs = myGroups(); S.groupId = gs.some(function (g) { return g.id === "stmarys"; }) ? "stmarys" : gs[0].id; save(); UI.stack = []; go("home", {}, true); };
 ACT.restart = function () { stopPlay(); S = seed(); save(); UI.stack = []; UI.player = null; UI.joinErr = ""; UI.createDraft = null; UI.songFilter = "All"; UI.songQuery = ""; go("welcome", {}, true); };
 ACT["open-song"] = function (t) { go("song", { id: t.dataset.id }); };
 ACT["open-event"] = function (t) { go("event", { id: t.dataset.id }); };
@@ -1090,7 +1154,7 @@ ACT.focus = function () { P().focus = !P().focus; refreshPlayer(); };
 ACT.loop = function () { P().loop = !P().loop; refreshPlayer(); };
 ACT.tempo = function (t) { var pl = P(); if (A.playing) { pl.anchorBeat = beatNow(); pl.anchorTime = A.ctx.currentTime; } pl.tempo = Math.max(40, Math.min(180, pl.tempo + +t.dataset.d)); refreshPlayer(); };
 ACT.key = function (t) { var pl = P(); pl.transpose = Math.max(-6, Math.min(6, pl.transpose + +t.dataset.d)); refreshPlayer(); };
-ACT["add-rep"] = function (t) { var g = group(); if (g.repertoire.indexOf(t.dataset.id) < 0) g.repertoire.push(t.dataset.id); save(); UI.sheet = null; render(); toast("Added to " + g.name + "’s repertoire."); };
+ACT["add-rep"] = function (t) { var g = group(); if (g.repertoire.indexOf(t.dataset.id) < 0) g.repertoire.push(t.dataset.id); save(); UI.sheet = null; render(); toast(isPersonal() ? "Saved to your songs." : "Added to " + g.name + "’s repertoire."); };
 ACT["new-song"] = function () { UI.draft = { id: null, title: "", composer: "", key: 7, time: "4/4", tags: [], solfa: "[Verse]\nS  d :r /m :f | s :- /- :- |\nW  Sing a new song\nA  s1:t1 /d :r | m :- /- :- |\nT  m :s /s :l | d':- /- :- |\nB  d :s1 /d :f1 | d :- /- :- |", sheet: null }; go("editor", {}); };
 ACT["edit-song"] = function (t) { var s = song(t.dataset.id); UI.draft = { id: s.id, title: s.title, composer: s.composer, key: s.key, time: s.time, tags: s.tags.slice(), solfa: s.solfa || "[Verse]\nS  \nW  \nA  \nT  \nB  ", sheet: s.sheet }; UI.sheet = null; go("editor", {}); };
 ACT.tag = function (t) { var d = UI.draft, i = d.tags.indexOf(t.dataset.t); if (i >= 0) d.tags.splice(i, 1); else d.tags.push(t.dataset.t); t.classList.toggle("on"); t.setAttribute("aria-pressed", i < 0); };
@@ -1108,7 +1172,7 @@ ACT["save-song"] = function () {
   if (hasSolfa && p.errors.length) { if (UI.route.name !== "editor") back(); toast("Fix the highlighted bars first."); return; }
   var g = group(), s;
   if (d.id) { s = song(d.id); s.title = d.title; s.composer = d.composer || s.composer; s.key = +d.key; s.time = d.time; s.tags = d.tags; s.solfa = hasSolfa ? d.solfa : ""; s.sheet = d.sheet; }
-  else { s = { id: uid("s"), title: d.title.trim(), composer: d.composer.trim() || "Unknown composer", key: +d.key, time: d.time, tags: d.tags, solfa: hasSolfa ? d.solfa : "", sheet: d.sheet, by: g.name }; S.songs.unshift(s); g.repertoire.push(s.id); }
+  else { s = { id: uid("s"), title: d.title.trim(), composer: d.composer.trim() || "Unknown composer", key: +d.key, time: d.time, tags: d.tags, solfa: hasSolfa ? d.solfa : "", sheet: d.sheet, by: isPersonal() ? me().name : g.name }; S.songs.unshift(s); g.repertoire.push(s.id); }
   save(); UI.player = null; UI.stack = [{ name: "songs", params: {} }]; UI.route = { name: "song", params: { id: s.id } }; render(true);
   toast("Saved. Everyone on Abụ can now find this song.");
 };
@@ -1140,6 +1204,15 @@ ACT["self-checkin"] = function () { var g = group(); g.selfCheckIn = !g.selfChec
 ACT["copy-code"] = function () { var c = group().code; var done = function () { toast("Invite code " + c + " copied."); }; try { navigator.clipboard.writeText("Join " + group().name + " on Abụ with code " + c).then(done, function () { toast("Share this code: " + c); }); } catch (e) { toast("Share this code: " + c); } };
 ACT["post-notice"] = function () { var t = val("ntText").trim(); if (!t) { document.getElementById("ntErr").textContent = "Write a message first."; return; } group().notices.unshift({ id: uid("n"), by: S.me, date: TODAY, text: t }); save(); UI.sheet = null; render(); toast("Notice posted to everyone."); };
 ACT["save-profile"] = function () { myMember().part = val("prPart"); save(); UI.sheet = null; UI.player = null; render(); toast("Your part is now " + myMember().part + "."); };
+ACT["switch-space"] = function (t) { S.groupId = t.dataset.id; save(); UI.sheet = null; UI.player = null; UI.stack = []; go("home", {}, true); toast("Now in " + group().name + "."); };
+ACT["do-join"] = function () {
+  var code = val("jgCode").trim().toUpperCase(), e = document.getElementById("jgErr");
+  if (!code) { e.textContent = "Enter the 6-letter code."; return; }
+  var g = Object.keys(S.groups).map(function (k) { return S.groups[k]; }).filter(function (x) { return x.code === code; })[0];
+  if (!g) { e.textContent = "No group has the code " + code + ". Check it with the leader."; return; }
+  if (!g.members.some(function (m) { return m.userId === S.me; })) g.members.push({ userId: S.me, part: myMember().part, role: "member", joined: TODAY });
+  S.groupId = g.id; save(); UI.sheet = null; UI.stack = []; go("home", {}, true); toast("Welcome to " + g.name + "! Switch back to My space from your profile.");
+};
 ACT["sign-out"] = function () { S.me = null; save(); UI.sheet = null; UI.stack = []; go("welcome", {}, true); };
 ACT["save-member"] = function () { var m = memberOf(UI.sheet.u); m.part = val("mbPart"); m.role = val("mbRole"); save(); UI.sheet = null; render(); toast(S.users[m.userId].name + " updated."); };
 ACT["ev-kind"] = function (t) { t.parentNode.querySelectorAll("button").forEach(function (b) { b.classList.toggle("on", b === t); b.setAttribute("aria-checked", b === t); }); var ti = document.getElementById("evTitle"); if (t.dataset.k === "rehearsal" && !ti.value) ti.value = "Rehearsal"; var tm = document.getElementById("evTime"); tm.value = t.dataset.k === "rehearsal" ? "17:00" : "08:00"; };
@@ -1183,11 +1256,17 @@ document.addEventListener("submit", function (e) {
     S.users[nid] = { id: nid, name: name }; S.groups[gid].members.push({ userId: nid, part: part, role: "member", joined: TODAY });
     S.me = nid; S.groupId = gid; save(); go("home", {}, true); toast("Welcome to " + S.groups[gid].name + "!");
   }
+  if (id === "soloForm") {
+    var sn = val("soName").trim(); if (!sn) { document.getElementById("soErr").textContent = "Enter your name."; return; }
+    var spart = document.querySelector("[data-act=pick-part].on").dataset.part, sid = uid("u"), pid = "p-" + sid;
+    S.users[sid] = { id: sid, name: sn }; S.groups[pid] = personalSpace(pid, sid, spart);
+    S.me = sid; S.groupId = pid; save(); go("home", {}, true); toast("Welcome, " + sn.split(" ")[0] + "! Every song on Abụ is open to you.");
+  }
   if (id === "createForm") {
-    var gname = val("cgName").trim(), mine = val("cgMe").trim();
+    var gname = val("cgName").trim(), mine = S.me ? S.users[S.me].name : val("cgMe").trim();
     if (!gname || !mine) { document.getElementById("cgErr").textContent = !gname ? "Give your group a name." : "Enter your name."; return; }
     var gidN = uid("g"), uidN = uid("u"), p = val("cgPart"), letters = gname.replace(/[^A-Za-z]/g, "").toUpperCase();
-    S.users[uidN] = { id: uidN, name: mine };
+    if (S.me) uidN = S.me; else S.users[uidN] = { id: uidN, name: mine };
     S.groups[gidN] = { id: gidN, name: gname, type: UI.createDraft.type, code: (letters + "XYZ").slice(0, 3) + String(100 + Math.floor(Math.random() * 900)), selfCheckIn: false,
       members: [{ userId: uidN, part: PARTS.indexOf(p) >= 0 ? p : "Soprano", role: "leader", joined: TODAY }], repertoire: [], notices: [], events: [] };
     S.me = uidN; S.groupId = gidN; UI.createDraft = null; save(); go("home", {}, true); toast(gname + " is ready. Share the invite code from the Group tab.");
