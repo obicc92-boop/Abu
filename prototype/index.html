@@ -187,9 +187,11 @@ textarea.code { font-family: var(--mono); font-size: 12.5px; line-height: 1.7; m
 .cell.dim { opacity: .3; }
 .lyr { font-size: 9.5px; color: var(--muted); white-space: nowrap; text-align: left; padding: 1px 0 3px 2px; overflow: visible; }
 .lyr.now { color: var(--red-deep); font-weight: 800; }
-.score.big .cell { font-size: 17px; padding: 4px 0; }
-.score.big .lyr { font-size: 12px; }
+.score.big .cell { font-size: var(--pf, 18px); padding: 4px 0; }
+.score.big .cell sub, .score.big .cell sup { font-size: .6em; }
+.score.big .lyr { font-size: calc(var(--pf, 18px) * .72); padding-bottom: 6px; }
 .score.big .lbl { font-size: 13px; }
+.score.big .sechead { font-size: 13px; }
 .score.big .system { padding: 10px 8px 8px 6px; }
 
 /* Player */
@@ -230,6 +232,13 @@ textarea.code { font-family: var(--mono); font-size: 12.5px; line-height: 1.7; m
 .perform .sheetonly { border: 1.5px dashed #5A4A42; border-radius: 12px; padding: 20px; text-align: center; color: #BFAEA5; }
 .pnav { flex: none; display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; padding: 10px 16px 16px; border-top: 1px solid #33241D; }
 .pnav .btn { background: #2B1E18; color: #F7EDE7; }
+.pnav .btn:disabled { opacity: .35; }
+.pnav .pos { font-family: var(--mono); font-weight: 700; color: #BFAEA5; font-size: 14px; text-align: center; }
+.pctl { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.pctl button { background: #2B1E18; color: #F7EDE7; border: 0; border-radius: 9px; padding: 6px 11px; font-weight: 800; font-size: 13px; }
+.pctl button.on { background: #F7EDE7; color: #140D0A; }
+.perform .lockline { font-size: 11.5px; color: #8E7A70; }
+.rnav { display: flex; align-items: center; gap: 8px; background: var(--sand); border-radius: 12px; padding: 7px 8px 7px 12px; }
 .pnav .play { width: 58px; height: 58px; }
 
 /* Sheet + toast */
@@ -554,7 +563,7 @@ function fmtBeat(s) {
 
 function scoreHTML(parsed, opts) {
   opts = opts || {};
-  var maxBeats = opts.big ? 8 : 12, html = "";
+  var maxBeats = opts.big ? (opts.size >= 23 ? 4 : opts.size >= 19 && opts.only ? 6 : 8) : 12, html = "";
   parsed.sections.forEach(function (sec) {
     if (sec.name) html += '<div class="sechead">' + esc(sec.name) + "</div>";
     var first = sec.order[0], bars = sec.bars[first], i = 0, beatAt = sec.start;
@@ -564,7 +573,9 @@ function scoreHTML(parsed, opts) {
       var take = [], n = 0;
       while (i + take.length < bars.length && take.length < per) { n += bars[i + take.length].length; take.push(i + take.length); }
       html += '<div class="system" style="grid-template-columns: 20px repeat(' + n + ', minmax(0,1fr))">';
-      sec.order.forEach(function (p) {
+      var rows = opts.only && sec.order.indexOf(opts.only) >= 0 ? [opts.only] : sec.order;
+      var lyrFrom = function (p) { if (sec.lyrics[p]) return p; if (opts.only) { for (var q = 0; q < sec.order.length; q++) if (sec.lyrics[sec.order[q]]) return sec.order[q]; } return null; };
+      rows.forEach(function (p) {
         html += '<div class="lbl" style="color:' + partColor(p) + '">' + esc(p.length > 2 ? p.slice(0, 2) : p) + "</div>";
         var b = beatAt;
         take.forEach(function (bi) {
@@ -574,16 +585,17 @@ function scoreHTML(parsed, opts) {
             b++;
           });
         });
-        if (sec.lyrics[p]) {
+        var lp = lyrFrom(p);
+        if (lp) {
           html += "<div></div>";
-          for (var x = beatAt; x < beatAt + n; x++) html += '<div class="lyr" data-beat="' + x + '">' + esc(sec.lyrics[p][x] || "") + "</div>";
+          for (var x = beatAt; x < beatAt + n; x++) html += '<div class="lyr" data-beat="' + x + '">' + esc(sec.lyrics[lp][x] || "") + "</div>";
         }
       });
       html += "</div>";
       beatAt += n; i += take.length;
     }
   });
-  return '<div class="score' + (opts.big ? " big" : "") + '" id="score">' + html + "</div>";
+  return '<div class="score' + (opts.big ? " big" : "") + '" id="score"' + (opts.size ? ' style="--pf:' + opts.size + 'px"' : "") + ">" + html + "</div>";
 }
 
 /* ---------- Audio engine ---------- */
@@ -833,10 +845,13 @@ SCREENS.songs = function () {
     '<button class="btn primary fab" data-act="new-song">' + icon("i-plus") + "Add song</button>" + tabbar("songs");
 };
 
+SCREENS.rehearse = function () { return SCREENS.song(); };
 SCREENS.song = function () {
-  var s = song(UI.route.params.id) || UI.draftSong, g = group(), ours = g.repertoire.indexOf(s.id) >= 0, preview = UI.route.params.preview;
-  var right = preview ? "" : '<button class="iconbtn" data-act="sheet" data-sheet="songinfo" aria-label="Song details">' + icon("i-file") + "</button>";
+  var reh = UI.route.name === "rehearse", re = reh ? ev(UI.route.params.id) : null, ri = reh ? (UI.route.params.i || 0) : 0;
+  var s = reh ? song(re.items[ri].songId) : (song(UI.route.params.id) || UI.draftSong), g = group(), ours = g.repertoire.indexOf(s.id) >= 0, preview = UI.route.params.preview;
+  var right = preview || reh ? "" : '<button class="iconbtn" data-act="sheet" data-sheet="songinfo" aria-label="Song details">' + icon("i-file") + "</button>";
   var html = '<div class="app">' + topbar(esc(s.title), esc(s.composer) + (s.solfa ? ' · <span id="keyLbl">Doh is ' + KEYS[s.key] + "</span> · " + s.time : ""), { right: right }) + '<div class="body" style="gap:11px">';
+  if (reh) html += '<div class="rnav"><div class="grow"><span class="k" style="color:var(--red-deep)">Rehearse · ' + (ri + 1) + " of " + re.items.length + '</span><div class="small" style="color:var(--ink);font-weight:700">' + esc(re.items[ri].section) + " · " + esc(re.title) + '</div></div><button class="iconbtn" data-act="perf-nav" data-d="-1" aria-label="Previous song"' + (ri === 0 ? " disabled" : "") + ">" + icon("i-back") + '</button><button class="iconbtn" data-act="perf-nav" data-d="1" aria-label="Next song"' + (ri === re.items.length - 1 ? " disabled" : "") + ' style="transform:scaleX(-1)">' + icon("i-back") + "</button></div>";
   if (preview) html += '<div class="card sand"><span class="small"><b>Preview.</b> This is how members will see and hear the song. Go back to keep editing, or save it.</span><button class="btn primary sm" style="align-self:flex-start" data-act="save-song">Save song</button></div>';
   if (!s.solfa) {
     html += '<div class="card sand"><span class="k">Original sheet</span><div class="fakesheet">' + icon("i-file").replace("<svg", '<svg width="34" height="34"') + "<br>" + esc(s.sheet || "No sheet attached") + '<br><span>In the real app the PDF or photo shows here.</span></div><span class="small">Nobody has typed this song in sol-fa yet, so it can’t play. Anyone in the group can add the sol-fa.</span></div>';
@@ -853,7 +868,7 @@ SCREENS.song = function () {
       '<div class="stepper"><span class="l">Key (doh)</span><div class="ctr"><button data-act="key" data-d="-1" aria-label="Lower key">−</button><span class="v" id="keyV">' + KEYS[(s.key + pl.transpose + 12) % 12] + '</span><button data-act="key" data-d="1" aria-label="Higher key">+</button></div></div></div>';
     html += '<span class="hint">Tap a letter to mute that part. “Mine” sets your part.</span>';
   }
-  if (!preview) {
+  if (!preview && !reh) {
     html += '<div class="row wrap">' + (ours ? '<span class="badge ok">' + (isPersonal() ? "In my songs" : "In our repertoire") + "</span>" : (isLeader() ? '<button class="btn ghost sm" data-act="add-rep" data-id="' + s.id + '">' + icon("i-plus") + (isPersonal() ? "Save to my songs" : "Add to our repertoire") + "</button>" : '<span class="badge">Shared by ' + esc(s.by) + "</span>")) +
       (!s.solfa ? '<button class="btn ghost sm" data-act="edit-song" data-id="' + s.id + '">' + icon("i-edit") + "Type the sol-fa</button>" : "") + "</div>";
   }
@@ -951,7 +966,12 @@ SCREENS.event = function () {
     return '<button class="li" data-act="open-song" data-id="' + s.id + '"><span class="ord">' + (i + 1) + '</span><div class="grow"><div class="k" style="font-size:10px">' + esc(it.section) + '</div><div class="title" style="font-size:14.5px">' + esc(s.title) + '</div></div><span class="small">' + (s.solfa ? KEYS[s.key] : "sheet") + "</span></button>";
   }).join("") + "</div>";
   if (editing) html += '<button class="btn ghost block" data-act="sheet" data-sheet="addsong">' + icon("i-plus") + "Add a song</button>";
-  if (e.kind !== "rehearsal" && e.items.length && !editing) html += '<button class="btn primary block" data-act="perform" data-id="' + e.id + '">Start performance mode</button>';
+  if (e.items.length && !editing) {
+    html += '<div class="card sand"><span class="k">Two ways to use this order</span>' +
+      '<button class="btn ghost block" data-act="rehearse" data-id="' + e.id + '">' + icon("i-play").replace("<svg", '<svg style="color:var(--red)"') + "Rehearse · play and practise each song</button>" +
+      (e.kind !== "rehearsal" ? '<button class="btn primary block" data-act="perform" data-id="' + e.id + '">Perform · read only, no sound</button>' : "") +
+      '<span class="small">' + (e.kind !== "rehearsal" ? "Perform shows large, clear sol-fa and words for the " + esc(kindLabel(e).toLowerCase()) + ". It has no play button, so nothing can start playing by accident." : "Go through the songs in order and practise your part.") + "</span></div>";
+  }
   html += "</div></div>";
   return html;
 };
@@ -987,13 +1007,20 @@ SCREENS.attendance = function () {
 };
 
 SCREENS.perform = function () {
-  var e = ev(UI.route.params.id), i = UI.route.params.i || 0, it = e.items[i], s = song(it.songId);
+  var e = ev(UI.route.params.id), i = UI.route.params.i || 0, it = e.items[i], s = song(it.songId), m = myMember();
+  var sizes = [16, 19, 23, 28], sz = sizes[UI.perfSize == null ? 1 : UI.perfSize];
+  var parsed = s.solfa ? parseSolfa(s.solfa, s.time) : null;
+  var mine = m ? PART_LETTER[m.part] : null, canMine = parsed && parsed.parts.length > 1 && parsed.parts.indexOf(mine) >= 0;
   var html = '<div class="perform"><div class="app">' +
-    '<div class="row between"><span class="k">' + esc(e.title) + " · " + (i + 1) + " of " + e.items.length + '</span><button class="btn sm" style="background:#2B1E18;color:#F7EDE7" data-act="back">Exit</button></div>' +
+    '<div class="row between"><span class="k">Perform · ' + esc(e.title) + '</span><button class="btn sm" style="background:#2B1E18;color:#F7EDE7" data-act="back">Exit</button></div>' +
     '<div><span class="k" style="color:var(--gold)">' + esc(it.section) + "</span><h2>" + esc(s.title) + '</h2><span class="small" style="color:#BFAEA5">' + esc(s.composer) + (s.solfa ? " · Doh is " + KEYS[s.key] + " · " + s.time : "") + "</span></div>";
-  if (s.solfa) html += scoreHTML(UI.player.parsed, { big: true });
-  else html += '<div class="sheetonly">' + icon("i-file").replace("<svg", '<svg width="30" height="30"') + "<br>Original sheet: " + esc(s.sheet || "") + "<br><span style='font-size:12px'>Shown full screen in the real app.</span></div>";
-  html += '</div><div class="pnav"><button class="btn" data-act="perf-nav" data-d="-1"' + (i === 0 ? " disabled" : "") + '>Previous</button>' + (s.solfa ? '<button class="play" data-act="play" aria-label="Play">' + icon("i-play") + "</button>" : "<span></span>") + '<button class="btn" data-act="perf-nav" data-d="1"' + (i === e.items.length - 1 ? " disabled" : "") + ">Next</button></div></div>";
+  if (parsed) {
+    html += '<div class="pctl"><button data-act="perf-size" data-d="-1" aria-label="Smaller text"' + (UI.perfSize === 0 ? " disabled" : "") + '>A−</button><button data-act="perf-size" data-d="1" aria-label="Bigger text"' + (UI.perfSize === 3 ? " disabled" : "") + ">A+</button>" +
+      (canMine ? '<button data-act="perf-parts" data-v="all" class="' + (UI.perfMine ? "" : "on") + '">All parts</button><button data-act="perf-parts" data-v="mine" class="' + (UI.perfMine ? "on" : "") + '">' + esc(m.part) + " only</button>" : "") + "</div>";
+    html += scoreHTML(parsed, { big: true, size: sz, only: canMine && UI.perfMine ? mine : null });
+  } else html += '<div class="sheetonly">' + icon("i-file").replace("<svg", '<svg width="30" height="30"') + "<br>Original sheet: " + esc(s.sheet || "") + "<br><span style='font-size:12px'>Shown full screen in the real app.</span></div>";
+  html += '<span class="lockline">Read only · no sound · screen stays on</span>';
+  html += '</div><div class="pnav"><button class="btn" data-act="perf-nav" data-d="-1"' + (i === 0 ? " disabled" : "") + '>Previous</button><span class="pos">' + (i + 1) + " / " + e.items.length + '</span><button class="btn" data-act="perf-nav" data-d="1"' + (i === e.items.length - 1 ? " disabled" : "") + ">Next</button></div></div>";
   return html;
 };
 
@@ -1071,15 +1098,19 @@ SHEETS.format = function () {
 function render(resetScroll) {
   var r = UI.route, scr = document.getElementById("screen");
   if (!S.me && ["welcome", "joinProfile", "create", "solo"].indexOf(r.name) < 0) { UI.route = r = { name: "welcome", params: {} }; }
-  if ((r.name === "song" || r.name === "perform")) preparePlayer();
+  if (r.name === "song" || r.name === "rehearse") preparePlayer(); else if (r.name === "perform") UI.player = null;
+  if (r.name === "perform") keepAwake(); else releaseAwake();
   var prevScroll = 0, a0 = scr.querySelector(".app"); if (a0 && !resetScroll) prevScroll = a0.scrollTop;
   scr.innerHTML = SCREENS[r.name]() + (UI.sheet ? '<div class="scrim" data-act="scrim"><div class="sheet" role="dialog" aria-modal="true"><div class="grab"></div>' + SHEETS[UI.sheet.type]() + "</div></div>" : "");
   var a1 = scr.querySelector(".app"); if (a1) a1.scrollTop = resetScroll ? 0 : prevScroll;
   var sb = document.getElementById("statusbar"); sb.className = "status" + (r.name === "welcome" ? " red" : r.name === "perform" ? " dark" : "");
-  if (UI.player && (r.name === "song" || r.name === "perform")) refreshPlayer();
+  if (UI.player && (r.name === "song" || r.name === "rehearse")) refreshPlayer();
   renderGuide(); renderToast(); syncPlayBtn();
   var f = scr.querySelector(".sheet input, .sheet textarea"); if (f) f.focus();
 }
+var WAKE = null;
+function keepAwake() { if (WAKE || !navigator.wakeLock) return; navigator.wakeLock.request("screen").then(function (w) { WAKE = w; }, function () {}); }
+function releaseAwake() { if (WAKE) { try { WAKE.release(); } catch (e) {} WAKE = null; } }
 function preparePlayer() {
   var r = UI.route, s;
   if (r.name === "song") s = song(r.params.id) || UI.draftSong;
@@ -1120,7 +1151,7 @@ function renderGuide() {
       "<li>Change the tempo and key, or tap <b>Solo</b> on Tenor.</li>" +
       "<li>Open the <b>5 Nov rehearsal</b> and check in with code <b>4827</b>.</li>" +
       "<li>As Chiamaka: mark attendance for the sopranos.</li>" +
-      "<li>As Emeka: edit the Mass song order, then start <b>performance mode</b>.</li>" +
+      "<li>As Emeka: edit the Mass song order. Then try <b>Rehearse</b> (plays each song) and <b>Perform</b> (read only, no sound, bigger text).</li>" +
       "<li>Songs → <b>Add song</b>: type sol-fa and watch the bar checks.</li>" +
       "<li>As Tobi (no group): save a song, open his wedding setlist, then join St. Mary’s with <b>STM482</b> and switch back to My space.</li>" +
       "<li>Start over and pick “use Abụ on my own”, join with <b>STM482</b>, or create a new group.</li>" +
@@ -1146,7 +1177,7 @@ ACT.scrim = function (t, e) { if (e.target === t) { UI.sheet = null; render(); }
 ACT["pick-part"] = function (t) { t.parentNode.querySelectorAll(".opt").forEach(function (b) { b.classList.remove("on"); b.setAttribute("aria-checked", "false"); }); t.classList.add("on"); t.setAttribute("aria-checked", "true"); };
 ACT["pick-type"] = function (t) { var d = UI.createDraft; d.name = val("cgName"); d.me = val("cgMe"); d.type = t.dataset.type; render(); };
 ACT["song-filter"] = function (t) { UI.songFilter = t.dataset.f; render(true); };
-ACT.play = function () { A.playing ? stopPlay() : startPlay(); };
+ACT.play = function () { if (UI.route.name === "perform") return; A.playing ? stopPlay() : startPlay(); };
 ACT.mute = function (t) { var p = t.dataset.part, pl = P(); if (pl.solo) { pl.solo = null; } else pl.muted[p] = !pl.muted[p]; refreshPlayer(); };
 ACT.solo = function (t) { var pl = P(), p = t.dataset.part; pl.solo = pl.solo === p ? null : p; refreshPlayer(); };
 ACT.mine = function (t) { P().mine = t.dataset.part; refreshPlayer(); };
@@ -1180,7 +1211,10 @@ ACT["toggle-edit"] = function () { UI.editingOrder = !UI.editingOrder; render();
 ACT.move = function (t) { var e = ev(UI.route.params.id), i = +t.dataset.i, j = i + +t.dataset.d; if (j < 0 || j >= e.items.length) return; var x = e.items[i]; e.items[i] = e.items[j]; e.items[j] = x; save(); render(); };
 ACT["remove-item"] = function (t) { var e = ev(UI.route.params.id); e.items.splice(+t.dataset.i, 1); save(); render(); };
 ACT["pick-song"] = function (t) { var e = ev(UI.route.params.id); e.items.push({ section: val("asSec"), songId: t.dataset.id }); var g = group(); if (g.repertoire.indexOf(t.dataset.id) < 0) g.repertoire.push(t.dataset.id); save(); UI.sheet = null; render(); toast("Song added to the order."); };
-ACT.perform = function (t) { UI.player = null; go("perform", { id: t.dataset.id, i: 0 }); };
+ACT.perform = function (t) { if (A.playing) stopPlay(); UI.player = null; go("perform", { id: t.dataset.id, i: 0 }); };
+ACT.rehearse = function (t) { UI.player = null; go("rehearse", { id: t.dataset.id, i: 0 }); };
+ACT["perf-size"] = function (t) { UI.perfSize = Math.max(0, Math.min(3, (UI.perfSize == null ? 1 : UI.perfSize) + +t.dataset.d)); render(); };
+ACT["perf-parts"] = function (t) { UI.perfMine = t.dataset.v === "mine"; render(); };
 ACT["perf-nav"] = function (t) { if (A.playing) stopPlay(); var r = UI.route; r.params.i = Math.max(0, Math.min(ev(r.params.id).items.length - 1, (r.params.i || 0) + +t.dataset.d)); UI.player = null; render(true); };
 ACT.rsvp = function (t) { var e = ev(UI.route.params.id); e.rsvp[S.me] = t.dataset.v; save(); render(); toast(t.dataset.v === "going" ? "Thanks. See you there." : "Got it. Your leader will see you as excused."); };
 ACT["do-checkin"] = function () {
