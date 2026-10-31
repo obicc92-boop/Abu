@@ -12,7 +12,7 @@
    that wrap, then how screens connect and the open questions. Single light theme on purpose. */
 :root {
   color-scheme: light;
-  --red: #D93A1E;          /* primary, from the Awele shirt, deepened for white text */
+  --red: #D93A1E;          /* primary: vermilion red, deep enough for white text */
   --red-deep: #A3261A;     /* pressed / headers */
   --red-tint: #FCEAE5;     /* highlights, current beat */
   --gold: #E6A325;         /* secondary accent */
@@ -235,14 +235,14 @@ section > p.lead { margin: 0 0 20px; color: var(--muted); max-width: 65ch; }
       <span class="wordmark">Abụ</span>
     </div>
     <span class="meta">MVP screen design · draft 1 · 31 October 2026</span>
-    <h1>Seven screens to take one choir off paper</h1>
-    <p>A phone-friendly web app for choristers who read tonic sol-fa. The player (screen 4) works: press play to hear the hymn in four parts, then mute, solo or focus on one part, change the tempo, or move doh to another key.</p>
+    <h1>Eight screens to take a choir or music group off paper</h1>
+    <p>A phone-friendly web app for choirs and music groups: Catholic, Anglican and Pentecostal choirs, and orchestras, bands and other groups outside the church. It starts with tonic sol-fa. The player (screen 4) works: press play to hear the hymn in four parts, then mute, solo or focus on one part, change the tempo, or move doh to another key.</p>
     <p class="note">Example content only. The choir, members and songs other than the hymn are made up for this mockup. The hymn is <em>Old Hundredth</em> (Genevan Psalter, 1551; words by William Kethe, 1561), which is in the public domain. The four-part harmony is a simple demo arrangement.</p>
   </header>
 
   <section>
     <h2>Brand</h2>
-    <p class="lead">Red and white lead, taken from the Awele Group shirt. Gold is the warm secondary colour. Each voice part keeps one colour everywhere in the app so a chorister finds their line at a glance.</p>
+    <p class="lead">Red and white lead. Gold is the warm secondary colour. Each voice part keeps one colour everywhere in the app so a chorister finds their line at a glance.</p>
     <div class="brand">
       <div class="panel">
         <h3>Colour</h3>
@@ -259,7 +259,7 @@ section > p.lead { margin: 0 0 20px; color: var(--muted); max-width: 65ch; }
         <h3>Type</h3>
         <div class="typesample">
           <div class="ts-display">Abụ · All Saints’ Day</div>
-          <div class="ts-cap">Marcellus for the name and big headings only, echoing the serif capitals in the Awele logo</div>
+          <div class="ts-cap">Marcellus for the name and big headings only</div>
           <div class="ts-body">Rehearsal moved to Thursday, 5:00 PM in the church hall.</div>
           <div class="ts-cap">Figtree for everything people read and tap</div>
           <div class="ts-mono">d :- :d :t<sub style="font-size:11px">1</sub> | l<sub style="font-size:11px">1</sub> :s<sub style="font-size:11px">1</sub> :d :r</div>
@@ -280,34 +280,62 @@ section > p.lead { margin: 0 0 20px; color: var(--muted); max-width: 65ch; }
 
   <section>
     <h2>The MVP screens</h2>
-    <p class="lead">Bottom tabs: Home, Songs, Events, Choir. A chorister usually needs two taps from Home to hear their part.</p>
+    <p class="lead">Bottom tabs: Home, Songs, Events, Group. A member usually needs two taps from Home to hear their part.</p>
     <div class="screens">
 
       <!-- 1 Welcome -->
       <div class="shot">
-        <div class="cap"><span class="num">01</span><h3>Welcome and join</h3><p>The choirmaster creates the choir and shares a 6-letter code. Members join with the code, then pick their voice part.</p></div>
+        <div class="cap"><span class="num">01</span><h3>Welcome and join</h3><p>The leader creates the group and shares a 6-letter code. Members join with the code, then pick their voice part or instrument.</p></div>
         <div class="phone">
           <div class="status" style="background:var(--red);color:#fff"><span>9:41</span><span class="dots">•••</span></div>
           <div class="welcome">
             <div>
               <div class="bigmark" style="color:var(--red)"><svg><use href="#i-mark"/></svg></div>
               <h5>Abụ</h5>
-              <p>Learn your part on your phone. Keep the whole choir in one place.</p>
+              <p>Learn your part on your phone. Keep your whole group in one place.</p>
             </div>
             <div style="display:flex;flex-direction:column;gap:12px">
-              <span style="font-size:13px;font-weight:700">Join your choir with its code</span>
+              <span style="font-size:13px;font-weight:700">Join your group with its code</span>
               <div class="codebox"><span>S</span><span>T</span><span>M</span><span>4</span><span>8</span><span>2</span></div>
-              <button class="btn light block" type="button">Join choir</button>
-              <button class="btn block" type="button" style="background:transparent;color:#fff;border:1.5px solid rgba(255,255,255,.5)">I lead a choir: create one</button>
+              <button class="btn light block" type="button">Join group</button>
+              <button class="btn block" type="button" style="background:transparent;color:#fff;border:1.5px solid rgba(255,255,255,.5)">I lead a group: create one</button>
               <span class="fine">Works offline once songs are saved · light on data</span>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- 2 Home -->
+      <!-- 2 Create group -->
       <div class="shot">
-        <div class="cap"><span class="num">02</span><h3>Home</h3><p>What's next for this choir: the next service, the next rehearsal, the songs you still need to learn, and notices.</p></div>
+        <div class="cap"><span class="num">02</span><h3>Create a group</h3><p>The leader names the group and picks its type. The type sets the section names used in song orders and the default parts. Everything can be renamed later.</p></div>
+        <div class="phone">
+          <div class="status"><span>9:41</span><span class="dots">•••</span></div>
+          <div class="app">
+            <div class="topbar">
+              <span class="iconbtn"><svg><use href="#i-back"/></svg></span>
+              <h4>Create your group</h4>
+            </div>
+            <div class="body">
+              <div class="field"><label>Group name</label><div class="input">St. Mary’s Choir</div></div>
+              <span class="k">What kind of group?</span>
+              <div class="list" style="gap:6px">
+                <div class="card" style="border:2px solid var(--red);background:var(--red-tint)"><div class="row"><div class="grow"><div class="title" style="font-size:14px">Catholic choir</div><div class="small">Entrance, Kyrie, Gloria, Offertory, Communion…</div></div><span class="badge red">✓</span></div></div>
+                <div class="card"><div class="title" style="font-size:14px">Anglican choir</div><div class="small">Introit, Psalm, Canticles, Anthem, Hymns…</div></div>
+                <div class="card"><div class="title" style="font-size:14px">Pentecostal or gospel choir</div><div class="small">Praise, Worship, Special number, Offering…</div></div>
+                <div class="card"><div class="title" style="font-size:14px">Band, orchestra or music group</div><div class="small">Opening, Set 1, Set 2, Encore…</div></div>
+              </div>
+              <span class="k">Parts</span>
+              <div class="chips" style="flex-wrap:wrap"><span class="pp s">Soprano</span><span class="pp a">Alto</span><span class="pp t">Tenor</span><span class="pp b">Bass</span><span class="chip" style="padding:2px 9px">+ Add part</span></div>
+              <span class="small">Add parts like Soprano 2, Violin I or Keyboard.</span>
+              <button class="btn primary block" type="button">Create group</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3 Home -->
+      <div class="shot">
+        <div class="cap"><span class="num">03</span><h3>Home</h3><p>What's next for this choir: the next service, the next rehearsal, the songs you still need to learn, and notices.</p></div>
         <div class="phone">
           <div class="status"><span>9:41</span><span class="dots">•••</span></div>
           <div class="app">
@@ -339,13 +367,13 @@ section > p.lead { margin: 0 0 20px; color: var(--muted); max-width: 65ch; }
               </div>
             </div>
           </div>
-          <nav class="tabbar"><span class="tab on"><svg><use href="#i-home"/></svg>Home</span><span class="tab"><svg><use href="#i-songs"/></svg>Songs</span><span class="tab"><svg><use href="#i-cal"/></svg>Events</span><span class="tab"><svg><use href="#i-people"/></svg>Choir</span></nav>
+          <nav class="tabbar"><span class="tab on"><svg><use href="#i-home"/></svg>Home</span><span class="tab"><svg><use href="#i-songs"/></svg>Songs</span><span class="tab"><svg><use href="#i-cal"/></svg>Events</span><span class="tab"><svg><use href="#i-people"/></svg>Group</span></nav>
         </div>
       </div>
 
       <!-- 3 Songs -->
       <div class="shot">
-        <div class="cap"><span class="num">03</span><h3>Song library</h3><p>All the choir's songs, filtered by when they're sung in a service, the season, or the language. A tick means the song is saved for offline use.</p></div>
+        <div class="cap"><span class="num">04</span><h3>Song library</h3><p>All the choir's songs, filtered by when they're sung in a service, the season, or the language. A tick means the song is saved for offline use.</p></div>
         <div class="phone">
           <div class="status"><span>9:41</span><span class="dots">•••</span></div>
           <div class="app">
@@ -364,13 +392,13 @@ section > p.lead { margin: 0 0 20px; color: var(--muted); max-width: 65ch; }
             </div>
           </div>
           <button class="btn primary fab" type="button"><svg width="16" height="16"><use href="#i-plus"/></svg>New song</button>
-          <nav class="tabbar"><span class="tab"><svg><use href="#i-home"/></svg>Home</span><span class="tab on"><svg><use href="#i-songs"/></svg>Songs</span><span class="tab"><svg><use href="#i-cal"/></svg>Events</span><span class="tab"><svg><use href="#i-people"/></svg>Choir</span></nav>
+          <nav class="tabbar"><span class="tab"><svg><use href="#i-home"/></svg>Home</span><span class="tab on"><svg><use href="#i-songs"/></svg>Songs</span><span class="tab"><svg><use href="#i-cal"/></svg>Events</span><span class="tab"><svg><use href="#i-people"/></svg>Group</span></nav>
         </div>
       </div>
 
       <!-- 4 Player -->
       <div class="shot">
-        <div class="cap"><span class="num">04</span><h3>Song player · try it</h3><p>The core of the app. The sol-fa score with each beat in its own column, a mixer for the four parts, and controls for tempo and key.</p></div>
+        <div class="cap"><span class="num">05</span><h3>Song player · try it</h3><p>The core of the app. The sol-fa score with each beat in its own column, a mixer for the four parts, and controls for tempo and key.</p></div>
         <div class="phone">
           <div class="status"><span>9:41</span><span class="dots">•••</span></div>
           <div class="app">
@@ -398,13 +426,13 @@ section > p.lead { margin: 0 0 20px; color: var(--muted); max-width: 65ch; }
               <span class="audio-note" id="audioNote">Tap a part to mute it. Tap the ring under it for your part.</span>
             </div>
           </div>
-          <nav class="tabbar"><span class="tab"><svg><use href="#i-home"/></svg>Home</span><span class="tab on"><svg><use href="#i-songs"/></svg>Songs</span><span class="tab"><svg><use href="#i-cal"/></svg>Events</span><span class="tab"><svg><use href="#i-people"/></svg>Choir</span></nav>
+          <nav class="tabbar"><span class="tab"><svg><use href="#i-home"/></svg>Home</span><span class="tab on"><svg><use href="#i-songs"/></svg>Songs</span><span class="tab"><svg><use href="#i-cal"/></svg>Events</span><span class="tab"><svg><use href="#i-people"/></svg>Group</span></nav>
         </div>
       </div>
 
       <!-- 5 Service order -->
       <div class="shot">
-        <div class="cap"><span class="num">05</span><h3>Service order</h3><p>The choirmaster puts the songs in order for each service. On the day, members tap through it in performance mode: big text, and the screen stays on.</p></div>
+        <div class="cap"><span class="num">06</span><h3>Service order</h3><p>The leader puts the songs in order for each service, concert or event, using section names that fit their group. On the day, members tap through it in performance mode: big text, and the screen stays on.</p></div>
         <div class="phone">
           <div class="status"><span>9:41</span><span class="dots">•••</span></div>
           <div class="app">
@@ -428,13 +456,13 @@ section > p.lead { margin: 0 0 20px; color: var(--muted); max-width: 65ch; }
               <button class="btn primary block" type="button">Start performance mode</button>
             </div>
           </div>
-          <nav class="tabbar"><span class="tab"><svg><use href="#i-home"/></svg>Home</span><span class="tab"><svg><use href="#i-songs"/></svg>Songs</span><span class="tab on"><svg><use href="#i-cal"/></svg>Events</span><span class="tab"><svg><use href="#i-people"/></svg>Choir</span></nav>
+          <nav class="tabbar"><span class="tab"><svg><use href="#i-home"/></svg>Home</span><span class="tab"><svg><use href="#i-songs"/></svg>Songs</span><span class="tab on"><svg><use href="#i-cal"/></svg>Events</span><span class="tab"><svg><use href="#i-people"/></svg>Group</span></nav>
         </div>
       </div>
 
       <!-- 6 Editor -->
       <div class="shot">
-        <div class="cap"><span class="num">06</span><h3>Add a song in sol-fa</h3><p>Type or paste each part the way it's written on paper. The app checks every bar against the time signature and points to any mistake before saving.</p></div>
+        <div class="cap"><span class="num">07</span><h3>Add a song in sol-fa</h3><p>Type or paste each part the way it's written on paper. The app checks every bar against the time signature and points to any mistake before saving.</p></div>
         <div class="phone">
           <div class="status"><span>9:41</span><span class="dots">•••</span></div>
           <div class="app">
@@ -468,11 +496,11 @@ section > p.lead { margin: 0 0 20px; color: var(--muted); max-width: 65ch; }
 
       <!-- 7 Choir -->
       <div class="shot">
-        <div class="cap"><span class="num">07</span><h3>Choir and members</h3><p>Members grouped by voice part, with their roles. Choirmasters and part leaders can invite people, change parts, and post notices.</p></div>
+        <div class="cap"><span class="num">08</span><h3>Group and members</h3><p>Members grouped by voice part, with their roles. Leaders and part leaders can invite people, change parts, and post notices.</p></div>
         <div class="phone">
           <div class="status"><span>9:41</span><span class="dots">•••</span></div>
           <div class="app">
-            <div class="topbar"><h4>Choir<span class="sub">St. Mary’s Choir · 39 members</span></h4><span class="iconbtn"><svg><use href="#i-plus"/></svg></span></div>
+            <div class="topbar"><h4>Group<span class="sub">St. Mary’s Choir · 39 members</span></h4><span class="iconbtn"><svg><use href="#i-plus"/></svg></span></div>
             <div class="body">
               <div class="card sand">
                 <div class="row"><div class="grow"><span class="k">Invite code</span><div style="font-family:var(--mono);font-weight:700;font-size:20px;letter-spacing:.12em">STM482</div></div><button class="btn primary" type="button" style="padding:8px 12px;font-size:13px">Share</button></div>
@@ -500,7 +528,7 @@ section > p.lead { margin: 0 0 20px; color: var(--muted); max-width: 65ch; }
               </div>
             </div>
           </div>
-          <nav class="tabbar"><span class="tab"><svg><use href="#i-home"/></svg>Home</span><span class="tab"><svg><use href="#i-songs"/></svg>Songs</span><span class="tab"><svg><use href="#i-cal"/></svg>Events</span><span class="tab on"><svg><use href="#i-people"/></svg>Choir</span></nav>
+          <nav class="tabbar"><span class="tab"><svg><use href="#i-home"/></svg>Home</span><span class="tab"><svg><use href="#i-songs"/></svg>Songs</span><span class="tab"><svg><use href="#i-cal"/></svg>Events</span><span class="tab on"><svg><use href="#i-people"/></svg>Group</span></nav>
         </div>
       </div>
 
@@ -513,29 +541,28 @@ section > p.lead { margin: 0 0 20px; color: var(--muted); max-width: 65ch; }
     <div class="flow">
       <div class="panel"><h3>Home</h3><ol><li>Next service → its song order</li><li>Next rehearsal → I'm going / can't come</li><li>Learn your part → player, your part in focus</li><li>Notices from the choirmaster</li></ol></div>
       <div class="panel"><h3>Songs</h3><ol><li>Search and filter the library</li><li>Song → player</li><li>New song → sol-fa editor</li><li>Save for offline use</li></ol></div>
-      <div class="panel"><h3>Events</h3><ol><li>Upcoming services and rehearsals</li><li>Service → song order → performance mode</li><li>Choirmaster: create an event and order its songs</li></ol></div>
-      <div class="panel"><h3>Choir</h3><ol><li>Invite code and share link</li><li>Members by voice part</li><li>Roles: Choirmaster, Part leader, Member</li><li>Profile and my voice part</li></ol></div>
+      <div class="panel"><h3>Events</h3><ol><li>Upcoming services, concerts and rehearsals</li><li>Event → song order → performance mode</li><li>Leader: create an event and order its songs</li></ol></div>
+      <div class="panel"><h3>Group</h3><ol><li>Invite code and share link</li><li>Members by voice part</li><li>Roles: Leader (shown as Choirmaster, Music director or Bandleader), Part leader, Member</li><li>Profile and my part</li></ol></div>
     </div>
   </section>
 
   <section>
     <h2>Design decisions</h2>
     <div class="decisions">
-      <div class="panel"><h4>Sol-fa stays sol-fa</h4><p>We don't convert it to staff notation. Each beat gets a column, with “:” between beats and “|” between bars, just like printed sheets. Changing the key changes only the “Doh is …” label, as it does on paper.</p></div>
+      <div class="panel"><h4>Sol-fa stays sol-fa</h4><p>We don't convert it to staff notation. Each beat gets a column, with “:” between beats and “|” between bars, just like printed sheets. Changing the key changes only the “Doh is …” label, as it does on paper. Tenor is written an octave above where it sounds, as on printed sheets; the app plays it at the right pitch.</p></div>
       <div class="panel"><h4>Your part comes first</h4><p>Each member sets their voice part once. The player opens with that part in focus and the others quieter. Home tracks how far you've got with each song.</p></div>
       <div class="panel"><h4>Built for church halls</h4><p>Saved songs, orders and notices work without data. Large tap targets, high contrast, and pages that stay small for cheaper Android phones.</p></div>
-      <div class="panel"><h4>Two kinds of user</h4><p>Choirmasters build and organise: songs, events, orders, notices. Members mostly read and listen. Members see no admin controls, so their screens stay simple.</p></div>
+      <div class="panel"><h4>One app for every kind of group</h4><p>When a group is created, its type sets sensible defaults: Mass parts for Catholic choirs, Introit, Psalm and Anthem for Anglican, Praise, Worship and Special number for Pentecostal, and Opening, Sets and Encore for bands and orchestras. Leaders can rename sections and add parts or instruments.</p></div>
+      <div class="panel"><h4>Two kinds of user</h4><p>Leaders build and organise: songs, events, orders, notices. Members mostly read and listen. Members see no admin controls, so their screens stay simple.</p></div>
     </div>
   </section>
 
   <section class="qs">
     <h2 style="font-family:var(--display);font-weight:400;font-size:24px;margin-bottom:10px">Questions for you</h2>
     <ol>
-      <li>Is “Abụ” the product name, and is it an Awele Group product? Should the app say so, e.g. “Abụ by Awele Group”?</li>
-      <li>Does the red match your shirt and logo? If you have the exact brand colour code or the logo file, I'll use those.</li>
-      <li>How does your choir write tenor and bass in sol-fa? Many sheets write the tenor an octave higher than it's sung. I assumed that here.</li>
-      <li>Which church types should the first version suit: Catholic Mass parts (Kyrie, Gloria, …), Anglican, Pentecostal, or all of them through custom section names?</li>
-      <li>Should the first version also include attendance at rehearsals, or leave that for later?</li>
+      <li>Should the first version include attendance at rehearsals, or leave that for later?</li>
+      <li>Orchestras and bands often read staff notation rather than sol-fa. Is sol-fa enough for the first non-church groups you have in mind, or do they need staff notation early?</li>
+      <li>Can you share one or two real sol-fa sheets from your choir, even photos? They'll be the test for the notation format.</li>
     </ol>
   </section>
 
