@@ -67,11 +67,22 @@ input, select, textarea { font: inherit; color: inherit; }
 .protobar { display: none; }
 #screen { flex: 1; display: flex; flex-direction: column; min-height: 0; position: relative; }
 
+.phone.wide { width: min(860px, calc(100vw - 40px)); }
+@media (max-width: 1260px) { .stage.wide .guide { display: none; } }
+.wtools { display: flex; gap: 8px; align-items: center; }
+.play.wplay { width: 46px; height: 46px; flex: none; box-shadow: none; }
+.play.wplay svg { width: 20px; height: 20px; }
+.wcanvases { display: flex; flex-direction: column; gap: 10px; }
+canvas.wsys { display: block; width: 100%; touch-action: none; border-radius: 12px; background: #fff; border: 1px solid var(--line); cursor: crosshair; }
+.wpre { font-family: var(--mono); font-size: 12px; line-height: 1.65; margin: 0; white-space: pre; overflow-x: auto; background: var(--sand); border-radius: 10px; padding: 8px 10px; }
+.fixgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.fixgrid button { height: 50px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--white); font-family: var(--mono); font-size: 20px; font-weight: 700; }
+.fixgrid button sub, .fixgrid button sup { font-size: 11px; }
 @media (max-width: 760px) {
   .stage { padding: 0; display: block; height: 100%; }
   .guide { display: none; }
   .device { height: 100%; }
-  .phone { width: 100%; height: 100%; max-height: none; min-height: 0; border: 0; border-radius: 0; box-shadow: none; }
+  .phone, .phone.wide { width: 100%; height: 100%; max-height: none; min-height: 0; border: 0; border-radius: 0; box-shadow: none; }
   .status { display: none; }
   .protobar { display: flex; flex: none; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 14px; background: var(--ink); color: #fff; font-size: 12px; }
   .protobar button { background: rgba(255,255,255,.14); border: 0; border-radius: 8px; padding: 4px 10px; color: #fff; font-weight: 700; font-size: 12px; }
@@ -290,6 +301,7 @@ textarea.code { font-family: var(--mono); font-size: 12.5px; line-height: 1.7; m
   <symbol id="i-down" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/></symbol>
   <symbol id="i-file" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></g></symbol>
   <symbol id="i-edit" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M4 20h4L19 9l-4-4L4 16z"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></g></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
 </svg>
 
@@ -690,6 +702,7 @@ function draw() {
   A.raf = requestAnimationFrame(draw);
 }
 function highlight(b) {
+  if (UI.route.name === "write" && UI.write) { UI.write.now = b; drawWrite(); return; }
   var sc = document.getElementById("score"); if (!sc) return;
   sc.querySelectorAll(".now").forEach(function (c) { c.classList.remove("now"); });
   if (b < 0) return;
@@ -702,6 +715,7 @@ function highlight(b) {
 }
 function stopPlay() {
   A.playing = false;
+  if (UI.write && UI.write.now !== -1) { UI.write.now = -1; drawWrite(); }
   if (A.timer) clearInterval(A.timer); A.timer = null;
   if (A.raf) cancelAnimationFrame(A.raf); A.raf = null;
   A.live.slice().forEach(function (o) { try { o.stop(); } catch (e) {} }); A.live = [];
@@ -709,7 +723,7 @@ function stopPlay() {
   syncPlayBtn();
 }
 function syncPlayBtn() {
-  document.querySelectorAll("[data-act=play]").forEach(function (b) {
+  document.querySelectorAll("[data-act=play], [data-act=write-play]").forEach(function (b) {
     b.innerHTML = icon(A.playing ? "i-stop" : "i-play"); b.setAttribute("aria-label", A.playing ? "Stop" : "Play");
   });
 }
@@ -905,6 +919,7 @@ SCREENS.editor = function () {
       '<div class="two"><div class="field"><label for="edKey">Key (doh is)</label><select class="input" id="edKey" data-draft="key">' + KEYS.map(function (k, i) { return '<option value="' + i + '"' + (i === d.key ? " selected" : "") + ">" + k + "</option>"; }).join("") + '</select></div>' +
       '<div class="field"><label for="edTime">Time</label><select class="input" id="edTime" data-draft="time">' + TIMES.map(function (t) { return "<option" + (t === d.time ? " selected" : "") + ">" + t + "</option>"; }).join("") + "</select></div></div>" +
       '<div class="field"><span class="lbltxt">Tags</span><div class="chips" style="flex-wrap:wrap">' + TAGS.map(function (t) { return '<button class="chip' + (d.tags.indexOf(t) >= 0 ? " on" : "") + '" data-act="tag" data-t="' + t + '" aria-pressed="' + (d.tags.indexOf(t) >= 0) + '">' + t + "</button>"; }).join("") + "</div></div>" +
+      '<button class="btn ghost block" data-act="open-write" style="border-color:var(--red);color:var(--red-deep)">' + icon("i-edit") + "Write it by hand with a pen or finger</button>" +
       '<div class="field"><div class="row between"><label for="edSolfa">Sol-fa</label><button class="linkbtn" data-act="sheet" data-sheet="format" style="font-size:12.5px">How to type it</button></div>' +
         '<textarea class="input code" id="edSolfa" data-draft="solfa" spellcheck="false" autocapitalize="off" autocomplete="off">' + esc(d.solfa) + "</textarea></div>" +
       '<div class="checks" id="checks">' + checksHTML() + "</div>" +
@@ -1118,6 +1133,221 @@ SHEETS.format = function () {
     '</div><p class="small" style="margin:0">Write the tenor as on paper, an octave above how it sounds. Abụ plays it at the right pitch.</p><button class="btn primary block" data-act="close-sheet">Got it</button>';
 };
 
+/* ---------- Write with pen ---------- */
+var DEMO = null, WLANES = ["S", "W", "A", "T", "B"], WCUR = null;
+function demoGuide() {
+  if (DEMO) return DEMO;
+  var p = parseSolfa(OLD100, "4/4"), sec = p.sections[0], g = { S: [], A: [], T: [], B: [], W: sec.lyrics.S || {} };
+  ["S", "A", "T", "B"].forEach(function (k) { sec.bars[k].forEach(function (bar) { bar.forEach(function (t) { g[k].push(t); }); }); });
+  return (DEMO = g);
+}
+function wBpb() { return parseInt(String(UI.draft.time).split("/")[0], 10) || 4; }
+function newWrite() { return { bars: 4, tool: "pen", guide: true, strokes: [], undo: [], typed: { S: {}, A: {}, T: {}, B: {}, W: {} }, unsure: {}, penSeen: false, now: -1 }; }
+function wLayout(width) {
+  var W = UI.write, bpb = wBpb(), label = 26, minBox = 44;
+  var bpr = Math.max(1, Math.min(W.bars, Math.floor((width - label) / (bpb * minBox))));
+  var boxW = (width - label) / (bpr * bpb), noteH = Math.round(Math.max(48, Math.min(72, boxW * 1.15))), wordH = 32, y = 6, lanes = {};
+  WLANES.forEach(function (k) { var h = k === "W" ? wordH : noteH; lanes[k] = { y: y, h: h }; y += h + 4; });
+  return { width: width, label: label, bpb: bpb, bpr: bpr, boxW: boxW, lanes: lanes, height: y + 2, rows: Math.ceil(W.bars / bpr) };
+}
+function partHasLane(k) { return k === "W" || ["S", "A", "T", "B"].indexOf(k) >= 0; }
+function drawTok(ctx, tok, x, y, size, color, align) {
+  ctx.fillStyle = color; ctx.textBaseline = "alphabetic";
+  var segs = [], re = /([a-z]+)(['’¹²]+|[12₁₂])?|([^a-z]+)/g, m;
+  while ((m = re.exec(tok))) segs.push(m[3] ? { t: m[3], o: 0 } : { t: m[1], o: octOf(m[2]) });
+  var font = function (s) { return "700 " + s + "px 'JetBrains Mono', ui-monospace, monospace"; }, total = 0;
+  segs.forEach(function (s) { ctx.font = font(size); s.w = ctx.measureText(s.t).width; ctx.font = font(size * .55); s.mw = s.o ? ctx.measureText(String(Math.abs(s.o))).width + 1 : 0; total += s.w + s.mw; });
+  var cx = align === "right" ? x - total : align === "left" ? x : x - total / 2;
+  segs.forEach(function (s) {
+    ctx.font = font(size); ctx.fillText(s.t, cx, y); cx += s.w;
+    if (s.o) { ctx.font = font(size * .55); ctx.fillText(String(Math.abs(s.o)), cx + 1, s.o > 0 ? y - size * .55 : y + size * .2); cx += s.mw; }
+  });
+}
+function drawWrite() {
+  var W = UI.write; if (!W || !W.L) return;
+  var L = W.L, g = demoGuide(), per = L.bpr * L.bpb, dpr = window.devicePixelRatio || 1;
+  document.querySelectorAll("canvas.wsys").forEach(function (cv) {
+    var si = +cv.dataset.sys, first = si * per, n = Math.min(per, W.bars * L.bpb - first), ctx = cv.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, L.width, L.height);
+    WLANES.forEach(function (k) {
+      var ln = L.lanes[k];
+      ctx.fillStyle = k === "W" ? "#FFFFFF" : "#F7F1ED"; ctx.fillRect(L.label, ln.y, n * L.boxW, ln.h);
+      ctx.fillStyle = k === "W" ? "#9C8A80" : ({ S: "#D93A1E", A: "#C98410", T: "#1C8173", B: "#3A4AA6" })[k];
+      ctx.font = "800 11px Figtree, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(k === "W" ? "W" : k, L.label / 2, ln.y + ln.h / 2); ctx.textAlign = "left";
+      if (k === "W") { ctx.save(); ctx.translate(L.label / 2, ln.y + ln.h / 2); ctx.restore(); }
+      for (var j = 0; j < n; j++) {
+        var b = first + j, x = L.label + j * L.boxW;
+        if (W.now === b) { ctx.fillStyle = "rgba(217,58,30,.12)"; ctx.fillRect(x, ln.y, L.boxW, ln.h); }
+        ctx.strokeStyle = b % L.bpb === 0 ? "#B9A79D" : "#E3D6CF"; ctx.lineWidth = b % L.bpb === 0 ? 1.6 : 1;
+        ctx.setLineDash(b % L.bpb === 0 ? [] : [3, 4]); ctx.beginPath(); ctx.moveTo(x + .5, ln.y); ctx.lineTo(x + .5, ln.y + ln.h); ctx.stroke(); ctx.setLineDash([]);
+        var hasInk = W.strokes.some(function (s) { return s.lane === k && s.beat === b; }), t = W.typed[k][b];
+        var exp = k === "W" ? g.W[b] : g[k][b];
+        if (W.guide && exp && !hasInk && t == null) {
+          if (k === "W") { ctx.font = "500 13px Figtree, sans-serif"; ctx.fillStyle = "rgba(34,22,15,.2)"; ctx.textBaseline = "middle"; ctx.fillText(exp, x + 4, ln.y + ln.h / 2); }
+          else drawTok(ctx, exp === "-" ? "–" : exp, x + L.boxW / 2, ln.y + ln.h * .62, Math.min(ln.h * .48, L.boxW * .5), "rgba(34,22,15,.16)");
+        }
+        if (t != null) {
+          var un = W.unsure[k + b];
+          if (k === "W") {
+            ctx.font = "700 11px Figtree, sans-serif"; var tw = ctx.measureText(t).width + 8;
+            ctx.fillStyle = un ? "#FDE7B0" : "#E1F2EE"; ctx.fillRect(x + 2, ln.y + ln.h - 15, tw, 13);
+            ctx.fillStyle = un ? "#7A5200" : "#1C8173"; ctx.textBaseline = "alphabetic"; ctx.fillText(t, x + 6, ln.y + ln.h - 5);
+          } else {
+            var tok = t === "-" ? "–" : t; ctx.font = "700 12px 'JetBrains Mono', monospace";
+            var w = ctx.measureText(tok).width + 12;
+            ctx.fillStyle = un ? "#FDE7B0" : "#E1F2EE"; roundRect(ctx, x + L.boxW - w - 3, ln.y + ln.h - 18, w, 15, 4); ctx.fill();
+            drawTok(ctx, tok, x + L.boxW - 8, ln.y + ln.h - 6.5, 11, un ? "#7A5200" : "#1C8173", "right");
+          }
+        }
+      }
+      ctx.strokeStyle = "#B9A79D"; ctx.lineWidth = 1.6; var xe = L.label + n * L.boxW - .5;
+      ctx.beginPath(); ctx.moveTo(xe, ln.y); ctx.lineTo(xe, ln.y + ln.h); ctx.stroke();
+    });
+    ctx.strokeStyle = "#22160F"; ctx.lineCap = "round"; ctx.lineJoin = "round";
+    W.strokes.forEach(function (s) {
+      if (s.beat < first || s.beat >= first + n) return;
+      var ln = L.lanes[s.lane], ox = L.label + (s.beat - first) * L.boxW;
+      for (var i = 1; i < s.pts.length; i++) {
+        var a = s.pts[i - 1], c = s.pts[i];
+        ctx.lineWidth = 1.3 + (c[2] || .5) * 2.6;
+        ctx.beginPath(); ctx.moveTo(ox + a[0] * L.boxW, ln.y + a[1] * ln.h); ctx.lineTo(ox + c[0] * L.boxW, ln.y + c[1] * ln.h); ctx.stroke();
+      }
+      if (s.pts.length === 1) { var p0 = s.pts[0]; ctx.fillStyle = "#22160F"; ctx.beginPath(); ctx.arc(ox + p0[0] * L.boxW, ln.y + p0[1] * ln.h, 1.8, 0, 7); ctx.fill(); }
+    });
+  });
+  var pv = document.getElementById("wPreview"); if (pv) pv.innerHTML = writePreviewHTML();
+}
+function roundRect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+window.__getL = function () { return UI.write && UI.write.L; };
+function initWrite() {
+  var W = UI.write, box = document.getElementById("wCanvases"); if (!W || !box) return;
+  var width = box.clientWidth; W.L = wLayout(width);
+  var dpr = window.devicePixelRatio || 1, html = "";
+  for (var i = 0; i < W.L.rows; i++) html += '<canvas class="wsys" data-sys="' + i + '" width="' + Math.round(width * dpr) + '" height="' + Math.round(W.L.height * dpr) + '" style="height:' + W.L.height + 'px" aria-label="Writing area, bars ' + (i * W.L.bpr + 1) + " to " + Math.min(W.bars, (i + 1) * W.L.bpr) + '"></canvas>';
+  box.innerHTML = html;
+  box.querySelectorAll("canvas").forEach(function (cv) {
+    cv.addEventListener("pointerdown", wDown); cv.addEventListener("pointermove", wMove);
+    cv.addEventListener("pointerup", wUp); cv.addEventListener("pointercancel", wUp);
+  });
+  drawWrite();
+}
+function wHit(cv, e) {
+  var W = UI.write, L = W.L, r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, lane = null;
+  WLANES.forEach(function (k) { var ln = L.lanes[k]; if (y >= ln.y - 2 && y <= ln.y + ln.h + 2) lane = k; });
+  if (!lane || x < L.label) return null;
+  var j = Math.floor((x - L.label) / L.boxW), b = +cv.dataset.sys * L.bpr * L.bpb + j;
+  if (j < 0 || b >= W.bars * L.bpb) return null;
+  var ln = L.lanes[lane];
+  return { lane: lane, beat: b, nx: (x - L.label - j * L.boxW) / L.boxW, ny: (y - ln.y) / ln.h };
+}
+function wSnap() { var W = UI.write; W.undo.push(JSON.stringify({ s: W.strokes, t: W.typed, u: W.unsure })); if (W.undo.length > 60) W.undo.shift(); }
+function wDown(e) {
+  var W = UI.write;
+  if (e.pointerType === "pen") { if (!W.penSeen) { W.penSeen = true; var pr = document.getElementById("palmNote"); if (pr) pr.textContent = "Pen detected: touches from your hand are ignored while you write."; } }
+  if (e.pointerType === "touch" && W.penSeen) return;
+  var h = wHit(e.currentTarget, e); if (!h) return;
+  e.preventDefault();
+  if (W.tool === "fix") { UI.sheet = { type: "fix", lane: h.lane, beat: h.beat }; UI.fixOct = null; render(); return; }
+  try { e.currentTarget.setPointerCapture(e.pointerId); } catch (x) {}
+  wSnap();
+  if (W.tool === "erase") { WCUR = { erase: true, cv: e.currentTarget, touched: {} }; wErase(e.currentTarget, e); return; }
+  WCUR = { lane: h.lane, beat: h.beat, pts: [[h.nx, h.ny, e.pressure || .5]] };
+  W.strokes.push(WCUR); clearTimeout(W["t" + h.lane + h.beat]); drawWrite();
+}
+function wMove(e) {
+  if (!WCUR) return; e.preventDefault();
+  var W = UI.write;
+  if (WCUR.erase) { wErase(e.currentTarget, e); return; }
+  var L = W.L, ln = L.lanes[WCUR.lane], r = e.currentTarget.getBoundingClientRect(), first = +e.currentTarget.dataset.sys * L.bpr * L.bpb;
+  var ox = L.label + (WCUR.beat - first) * L.boxW;
+  var evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e]; if (!evs.length) evs = [e];
+  evs.forEach(function (ev) { WCUR.pts.push([(ev.clientX - r.left - ox) / L.boxW, (ev.clientY - r.top - ln.y) / ln.h, ev.pressure || .5]); });
+  drawWrite();
+}
+function wUp() {
+  var W = UI.write; if (!WCUR) return;
+  if (WCUR.erase) { Object.keys(WCUR.touched).forEach(function (k) { recognizeLater(k.split("|")[0], +k.split("|")[1], 0); }); }
+  else recognizeLater(WCUR.lane, WCUR.beat, 650);
+  WCUR = null;
+}
+function wErase(cv, e) {
+  var W = UI.write, h = wHit(cv, e); if (!h) return;
+  var before = W.strokes.length;
+  W.strokes = W.strokes.filter(function (s) {
+    if (s.lane !== h.lane || s.beat !== h.beat) return true;
+    return !s.pts.some(function (p) { return Math.abs(p[0] - h.nx) * W.L.boxW < 12 && Math.abs(p[1] - h.ny) * W.L.lanes[h.lane].h < 12; });
+  });
+  if (W.strokes.length !== before) { WCUR.touched[h.lane + "|" + h.beat] = 1; drawWrite(); }
+}
+function recognizeLater(lane, beat, ms) {
+  var W = UI.write, key = "t" + lane + beat; clearTimeout(W[key]);
+  W[key] = setTimeout(function () { recognize(lane, beat); }, ms);
+}
+function recognize(lane, beat) {
+  var W = UI.write; if (!W) return;
+  var has = W.strokes.some(function (s) { return s.lane === lane && s.beat === beat; }), key = lane + beat;
+  if (!has) { delete W.typed[lane][beat]; delete W.unsure[key]; drawWrite(); return; }
+  var g = demoGuide(), exp = lane === "W" ? g.W[beat] : g[lane][beat];
+  if (!exp) { W.typed[lane][beat] = "?"; W.unsure[key] = true; }
+  else { W.typed[lane][beat] = exp; if (lane !== "W" && exp !== "-" && (beat * 7 + lane.charCodeAt(0)) % 9 === 0) W.unsure[key] = true; else delete W.unsure[key]; }
+  drawWrite();
+}
+function writeSolfa() {
+  var W = UI.write, bpb = wBpb(), last = -1;
+  ["S", "A", "T", "B"].forEach(function (p) { Object.keys(W.typed[p]).forEach(function (b) { last = Math.max(last, Math.floor(+b / bpb)); }); });
+  if (last < 0) return "";
+  var lines = ["[Verse]"];
+  ["S", "A", "T", "B"].forEach(function (p) {
+    if (!Object.keys(W.typed[p]).length) return;
+    var bars = [];
+    for (var b = 0; b <= last; b++) {
+      var s = "";
+      for (var k = 0; k < bpb; k++) { var t = W.typed[p][b * bpb + k]; t = t && t !== "?" ? t : ""; s += (k === 0 ? "" : bpb === 4 && k === 2 ? " /" : " :") + t; }
+      bars.push(s.trim() === "" ? ":".repeat(bpb - 1) : s);
+    }
+    lines.push(p + "  " + bars.join(" | ") + " |");
+    if (p === "S") {
+      var words = []; for (var x = 0; x < (last + 1) * bpb; x++) { var w = W.typed.W[x]; if (w && w !== "?") words.push(w); }
+      if (words.length) lines.push("W  " + words.join(" "));
+    }
+  });
+  return lines.join("\n");
+}
+function writePreviewHTML() {
+  var W = UI.write, txt = writeSolfa(), unsure = Object.keys(W.unsure).length;
+  if (!txt) return '<span class="small">The typed version appears here as you write.</span>';
+  var p = parseSolfa(txt, UI.draft.time), h = '<pre class="wpre">' + esc(txt) + "</pre>";
+  h += '<div class="row wrap">' + (unsure ? '<span class="badge warn">' + unsure + " to check · use Fix</span>" : '<span class="badge ok">✓ nothing to check</span>') + (p.errors.length ? '<span class="badge red">' + p.errors.length + " bar problem" + (p.errors.length === 1 ? "" : "s") + "</span>" : "") + "</div>";
+  return h;
+}
+
+SCREENS.write = function () {
+  var W = UI.write, d = UI.draft;
+  return '<div class="app">' + topbar("Write with pen", "Doh is " + KEYS[d.key] + " · " + d.time + (d.title ? " · " + esc(d.title) : ""), { right: '<button class="btn primary sm" data-act="write-done">Done</button>' }) +
+    '<div class="body" style="gap:10px">' +
+      '<div class="card sand" style="gap:4px"><span class="small"><b>Demo:</b> trace the faint notes of <i>All People That on Earth Do Dwell</i>, or write your own. In this prototype the conversion is simulated: it follows the demo hymn. Boxes it can’t read show “?”. Use <b>Fix</b> to correct any box.</span></div>' +
+      '<div class="wtools"><div class="seg" style="flex:1">' + [["pen", "Pen"], ["erase", "Eraser"], ["fix", "Fix"]].map(function (t) { return '<button data-act="write-tool" data-t="' + t[0] + '" class="' + (W.tool === t[0] ? "on" : "") + '" aria-pressed="' + (W.tool === t[0]) + '">' + t[1] + "</button>"; }).join("") + '</div>' +
+      '<button class="iconbtn" data-act="write-undo" aria-label="Undo"' + (W.undo.length ? "" : " disabled") + ">" + icon("i-undo") + '</button>' +
+      '<button class="play wplay" data-act="write-play" aria-label="Play">' + icon("i-play") + "</button></div>" +
+      '<div id="wCanvases" class="wcanvases"></div>' +
+      '<div class="row wrap between"><label class="toggles" style="gap:8px"><button class="switch" data-act="write-guide" role="switch" aria-checked="' + W.guide + '" aria-label="Show guide notes"></button><span style="font-size:13px">Guide notes</span></label><button class="btn ghost sm" data-act="write-addbar">' + icon("i-plus") + "Add bar</button></div>" +
+      '<span class="small" id="palmNote">' + (W.penSeen ? "Pen detected: touches from your hand are ignored while you write." : "Works with a stylus, Apple Pencil, S Pen, or your finger.") + "</span>" +
+      '<div class="card"><span class="k">Typed version</span><div id="wPreview"></div></div>' +
+    "</div></div>";
+};
+SHEETS.fix = function () {
+  var W = UI.write, k = UI.sheet.lane, b = UI.sheet.beat, bpb = wBpb(), cur = W.typed[k][b];
+  var head = "<h3>Bar " + (Math.floor(b / bpb) + 1) + ", beat " + (b % bpb + 1) + ' · ' + (k === "W" ? "Words" : partName(k)) + "</h3>";
+  if (k === "W") return head + '<div class="field"><label for="fxWord">Word or syllable</label><input class="input" id="fxWord" value="' + esc(cur && cur !== "?" ? cur : "") + '" placeholder="e.g. peo-"></div><button class="btn primary block" data-act="fix-word">Save</button><button class="btn ghost block" data-act="fix-set" data-v="">Clear this box</button>';
+  var m = cur && cur !== "?" ? cur.match(/^([a-z]+)(['’]+|[12₁₂])?$/) : null, oct = UI.fixOct != null ? UI.fixOct : (m ? octOf(m[2]) : 0);
+  var sfx = oct > 0 ? "'" : oct < 0 ? "1" : "";
+  return head + '<span class="small">Now: <b style="font-family:var(--mono)">' + esc(cur == null ? "empty" : cur === "-" ? "– (hold)" : cur) + "</b></span>" +
+    '<div class="seg">' + [[-1, "Low ₁"], [0, "Middle"], [1, "High '"]].map(function (o) { return '<button data-act="fix-oct" data-o="' + o[0] + '" class="' + (oct === o[0] ? "on" : "") + '">' + o[1] + "</button>"; }).join("") + "</div>" +
+    '<div class="fixgrid">' + ["d", "r", "m", "f", "s", "l", "t"].map(function (n) { return '<button data-act="fix-set" data-v="' + n + sfx + '">' + fmtBeat(n + sfx) + "</button>"; }).join("") + '<button data-act="fix-set" data-v="-">–</button></div>' +
+    '<div class="two"><button class="btn ghost" data-act="fix-set" data-v="">Rest (empty)</button><button class="btn ghost" data-act="fix-clear">Erase ink</button></div>';
+};
+
 /* ---------- Render ---------- */
 function render(resetScroll) {
   var r = UI.route, scr = document.getElementById("screen");
@@ -1130,6 +1360,8 @@ function render(resetScroll) {
   var sb = document.getElementById("statusbar"); sb.className = "status" + (r.name === "welcome" ? " red" : r.name === "perform" ? (perfLight() ? " paper" : " dark") : "");
   if (UI.player && (r.name === "song" || r.name === "rehearse")) refreshPlayer();
   renderGuide(); renderToast(); syncPlayBtn();
+  var wide = r.name === "write"; document.querySelector(".phone").classList.toggle("wide", wide); document.querySelector(".stage").classList.toggle("wide", wide);
+  if (r.name === "write") initWrite();
   var f = scr.querySelector(".sheet input, .sheet textarea"); if (f) f.focus();
 }
 var WAKE = null;
@@ -1177,6 +1409,7 @@ function renderGuide() {
       "<li>As Chiamaka: mark attendance for the sopranos.</li>" +
       "<li>As Emeka: edit the Mass song order. Then try <b>Rehearse</b> (plays each song) and <b>Perform</b> (read only, no sound, bigger text, dark or light page).</li>" +
       "<li>Songs → <b>Add song</b>: type sol-fa and watch the bar checks.</li>" +
+      "<li>Songs → <b>Add song</b> → <b>Write it by hand</b>: trace the faint notes with a pen or finger, then press play. Best on a tablet.</li>" +
       "<li>As Tobi (no group): save a song, open his wedding setlist, then join St. Mary’s with <b>STM482</b> and switch back to My space.</li>" +
       "<li>Start over and pick “use Abụ on my own”, join with <b>STM482</b>, or create a new group.</li>" +
     "</ol></div>";
@@ -1210,7 +1443,7 @@ ACT.loop = function () { P().loop = !P().loop; refreshPlayer(); };
 ACT.tempo = function (t) { var pl = P(); if (A.playing) { pl.anchorBeat = beatNow(); pl.anchorTime = A.ctx.currentTime; } pl.tempo = Math.max(40, Math.min(180, pl.tempo + +t.dataset.d)); refreshPlayer(); };
 ACT.key = function (t) { var pl = P(); pl.transpose = Math.max(-6, Math.min(6, pl.transpose + +t.dataset.d)); refreshPlayer(); };
 ACT["add-rep"] = function (t) { var g = group(); if (g.repertoire.indexOf(t.dataset.id) < 0) g.repertoire.push(t.dataset.id); save(); UI.sheet = null; render(); toast(isPersonal() ? "Saved to your songs." : "Added to " + g.name + "’s repertoire."); };
-ACT["new-song"] = function () { UI.draft = { id: null, title: "", composer: "", key: 7, time: "4/4", tags: [], solfa: "[Verse]\nS  d :r /m :f | s :- /- :- |\nW  Sing a new song\nA  s1:t1 /d :r | m :- /- :- |\nT  m :s /s :l | d':- /- :- |\nB  d :s1 /d :f1 | d :- /- :- |", sheet: null }; go("editor", {}); };
+ACT["new-song"] = function () { UI.write = null; UI.draft = { id: null, title: "", composer: "", key: 7, time: "4/4", tags: [], solfa: "[Verse]\nS  d :r /m :f | s :- /- :- |\nW  Sing a new song\nA  s1:t1 /d :r | m :- /- :- |\nT  m :s /s :l | d':- /- :- |\nB  d :s1 /d :f1 | d :- /- :- |", sheet: null }; go("editor", {}); };
 ACT["edit-song"] = function (t) { var s = song(t.dataset.id); UI.draft = { id: s.id, title: s.title, composer: s.composer, key: s.key, time: s.time, tags: s.tags.slice(), solfa: s.solfa || "[Verse]\nS  \nW  \nA  \nT  \nB  ", sheet: s.sheet }; UI.sheet = null; go("editor", {}); };
 ACT.tag = function (t) { var d = UI.draft, i = d.tags.indexOf(t.dataset.t); if (i >= 0) d.tags.splice(i, 1); else d.tags.push(t.dataset.t); t.classList.toggle("on"); t.setAttribute("aria-pressed", i < 0); };
 ACT["preview-song"] = function () {
@@ -1238,6 +1471,26 @@ ACT["pick-song"] = function (t) { var e = ev(UI.route.params.id); e.items.push({
 ACT.perform = function (t) { if (A.playing) stopPlay(); UI.player = null; go("perform", { id: t.dataset.id, i: 0 }); };
 ACT.rehearse = function (t) { UI.player = null; go("rehearse", { id: t.dataset.id, i: 0 }); };
 ACT["perf-size"] = function (t) { UI.perfSize = Math.max(0, Math.min(3, (UI.perfSize == null ? 1 : UI.perfSize) + +t.dataset.d)); render(); };
+ACT["open-write"] = function () { if (!UI.write || UI.write.time !== UI.draft.time) { UI.write = newWrite(); UI.write.time = UI.draft.time; } go("write", {}); };
+ACT["write-tool"] = function (t) { UI.write.tool = t.dataset.t; render(); if (t.dataset.t === "fix") toast("Tap any box to correct it."); };
+ACT["write-undo"] = function () { var W = UI.write, s = W.undo.pop(); if (!s) return; s = JSON.parse(s); W.strokes = s.s; W.typed = s.t; W.unsure = s.u; render(); };
+ACT["write-guide"] = function () { UI.write.guide = !UI.write.guide; render(); };
+ACT["write-addbar"] = function () { UI.write.bars = Math.min(24, UI.write.bars + 1); render(); var a = document.querySelector(".app"); if (a) a.scrollTop = a.scrollHeight; };
+ACT["write-play"] = function () {
+  if (A.playing) { stopPlay(); UI.write.now = -1; drawWrite(); return; }
+  var txt = writeSolfa(), p = parseSolfa(txt, UI.draft.time);
+  if (!txt || !p.total) { toast("Write a few notes first."); return; }
+  UI.player = newPlayer({ id: "__write", title: "Draft", key: +UI.draft.key, time: UI.draft.time, solfa: txt }, p); UI.player.focus = false; startPlay();
+};
+ACT["write-done"] = function () {
+  var txt = writeSolfa(); if (A.playing) stopPlay();
+  if (txt) { UI.draft.solfa = txt; UI.draft.sheet = "Handwritten manuscript (" + UI.write.bars + " bars)"; }
+  back(); toast(txt ? "Converted. Check the sol-fa, then preview or save. Your handwriting is kept as the original." : "Nothing written yet.");
+};
+ACT["fix-oct"] = function (t) { UI.fixOct = +t.dataset.o; render(); };
+ACT["fix-set"] = function (t) { var W = UI.write, k = UI.sheet.lane, b = UI.sheet.beat; wSnap(); if (t.dataset.v === "") delete W.typed[k][b]; else W.typed[k][b] = t.dataset.v; delete W.unsure[k + b]; UI.sheet = null; render(); };
+ACT["fix-word"] = function () { var W = UI.write, v = val("fxWord").trim(), b = UI.sheet.beat; wSnap(); if (v) W.typed.W[b] = v; else delete W.typed.W[b]; delete W.unsure["W" + b]; UI.sheet = null; render(); };
+ACT["fix-clear"] = function () { var W = UI.write, k = UI.sheet.lane, b = UI.sheet.beat; wSnap(); W.strokes = W.strokes.filter(function (s) { return !(s.lane === k && s.beat === b); }); delete W.typed[k][b]; delete W.unsure[k + b]; UI.sheet = null; render(); };
 ACT["perf-theme"] = function (t) { S.prefs = S.prefs || {}; S.prefs.perfLight = t.dataset.v === "light"; save(); render(); };
 ACT["perf-parts"] = function (t) { UI.perfMine = t.dataset.v === "mine"; render(); };
 ACT["perf-nav"] = function (t) { if (A.playing) stopPlay(); var r = UI.route; r.params.i = Math.max(0, Math.min(ev(r.params.id).items.length - 1, (r.params.i || 0) + +t.dataset.d)); UI.player = null; render(true); };
@@ -1337,6 +1590,7 @@ document.addEventListener("submit", function (e) {
     group().events.push(ne); save(); UI.stack = [{ name: "events", params: {} }]; UI.route = { name: "event", params: { id: ne.id } }; UI.editingOrder = true; render(true);
   }
 });
+window.addEventListener("resize", function () { clearTimeout(window.__rz); window.__rz = setTimeout(function () { if (UI.route.name === "write") initWrite(); }, 150); });
 document.addEventListener("keydown", function (e) { if (e.key === "Escape" && UI.sheet) { UI.sheet = null; render(); } });
 
 render(true);
