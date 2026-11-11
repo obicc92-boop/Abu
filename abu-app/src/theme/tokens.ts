@@ -11,6 +11,26 @@ export const colors = {
   white: '#FFFFFF',
   board: '#EDE4DE',
   ok: '#1C8173',
+  /** Holds, rests and beat separators in the score. */
+  faint: '#B9A79D',
+  barline: '#CDBEB5',
+  switchOff: '#D8CCC5',
+} as const;
+
+/**
+ * Font families, named after the files loaded in src/app/_layout.tsx.
+ * Each weight is its own family, so don't also set fontWeight.
+ */
+export const fonts = {
+  /** Marcellus: the app name and big headings only. */
+  display: 'Marcellus_400Regular',
+  /** Figtree: UI text. */
+  body: 'Figtree_500Medium',
+  bold: 'Figtree_700Bold',
+  heavy: 'Figtree_800ExtraBold',
+  /** JetBrains Mono: sol-fa, so beats line up. */
+  mono: 'JetBrainsMono_500Medium',
+  monoBold: 'JetBrainsMono_700Bold',
 } as const;
 
 /** Fixed colour per voice part. */
@@ -25,4 +45,9 @@ export const partColors: Readonly<Record<string, string>> = {
 export function partColor(part: string): string {
   if (/^solo/i.test(part)) return partColors.Solo;
   return partColors[part.charAt(0).toUpperCase()] ?? colors.muted;
+}
+
+/** Short label for a part in narrow places: "S", "Solo" → "So". */
+export function partLetter(part: string): string {
+  return part.length > 2 ? part.slice(0, 2) : part;
 }
