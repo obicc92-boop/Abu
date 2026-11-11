@@ -13,6 +13,7 @@ import { SearchIcon } from '@/components/icons';
 import { Body, Button, Card, Chip, ErrorText, Field, Kicker, Loading, Page, TopBar } from '@/components/ui';
 import { agoText } from '@/lib/dates';
 import { nextSection, sectionChoices } from '@/lib/order';
+import { useOnline } from '@/lib/online';
 import { useSerial } from '@/lib/serial';
 import { KEY_NAMES } from '@/solfa';
 import { useSession } from '@/state/session';
@@ -21,12 +22,14 @@ import { colors, fonts } from '@/theme/tokens';
 export default function OrderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const s = useSession();
+  const online = useOnline();
   const details = useQuery({ queryKey: ['event', id], queryFn: () => api.event(id), enabled: s.status === 'signedIn' && !!id });
   const group = s.groups.find((g) => g.id === details.data?.event.group_id);
   const [version, setVersion] = useState(0);
 
   if (s.status === 'signedOut') return <Redirect href="/welcome" />;
-  if (!details.data || !group) {
+  // Edit from the server's latest order, not a copy saved on the phone (offline, nothing can be saved anyway).
+  if (!details.data || !group || (online && !details.isFetchedAfterMount)) {
     return (
       <Page>
         <TopBar back title="Song order" />

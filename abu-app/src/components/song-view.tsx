@@ -8,6 +8,8 @@ import { api, type Song } from '@/api/client';
 import { partLevel } from '@/audio/engine';
 import { useSongPlayer } from '@/audio/use-song-player';
 import { DEMO_SONGS, type DemoSong } from '@/data/demo-songs';
+import { dayKey } from '@/lib/dates';
+import { queuePlay } from '@/lib/outbox';
 import { KEY_NAMES, mod12, parseSolfa } from '@/solfa';
 import { useSession } from '@/state/session';
 import { colors, fonts } from '@/theme/tokens';
@@ -77,8 +79,9 @@ function Player({ song, apiSong, banner }: { song: DemoSong; apiSong?: Song; ban
     if (p.timesPlayed <= counted.current) return;
     counted.current = p.timesPlayed;
     if (status !== 'signedIn' || !apiSong) return;
+    const day = dayKey();
     void api
-      .recordPlay(song.id)
+      .recordPlay(song.id, day)
       .then(() =>
         Promise.all([
           queryClient.invalidateQueries({ queryKey: ['songForMe', song.id] }),
@@ -86,7 +89,8 @@ function Player({ song, apiSong, banner }: { song: DemoSong; apiSong?: Song; ban
           queryClient.invalidateQueries({ queryKey: ['readiness'] }),
         ]),
       )
-      .catch(() => {});
+      // No connection: keep the play and send it when the phone is back online.
+      .catch((e: { status?: number }) => e.status === 0 && queuePlay({ songId: song.id, day }));
   }, [p.timesPlayed, status, apiSong, song.id, queryClient]);
   const insets = useSafeAreaInsets();
   const keyName = KEY_NAMES[mod12(song.key + p.transpose)];

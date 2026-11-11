@@ -13,6 +13,7 @@ import { api, type AttendanceStatus, type SheetRow } from '@/api/client';
 import { Avatar, Body, Button, Card, Chip, ErrorText, Kicker, Loading, Page, TopBar } from '@/components/ui';
 import { checkInOpen, fmtDate, fmtTime } from '@/lib/dates';
 import { kindLabel } from '@/lib/group-types';
+import { useOnline } from '@/lib/online';
 import { useSerial } from '@/lib/serial';
 import { partName, partPlural } from '@/solfa';
 import { useSession } from '@/state/session';
@@ -31,6 +32,7 @@ export default function AttendanceScreen() {
   const s = useSession();
   const queryClient = useQueryClient();
   const signedIn = s.status === 'signedIn';
+  const online = useOnline();
   const details = useQuery({ queryKey: ['event', id], queryFn: () => api.event(id), enabled: signedIn && !!id });
   const sheet = useQuery({ queryKey: ['attendance', id], queryFn: () => api.attendance(id), enabled: signedIn && !!id, refetchInterval: 10_000 });
   const [filter, setFilter] = useState<Filter>('all');
@@ -44,7 +46,8 @@ export default function AttendanceScreen() {
   });
 
   if (s.status === 'signedOut') return <Redirect href="/welcome" />;
-  if (!details.data || !sheet.data) {
+  // Mark from the latest register, not a copy saved on the phone.
+  if (!details.data || !sheet.data || (online && !sheet.isFetchedAfterMount)) {
     const error = details.error ?? sheet.error;
     return (
       <Page>

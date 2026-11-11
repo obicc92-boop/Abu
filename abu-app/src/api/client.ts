@@ -305,7 +305,7 @@ export const api = {
   },
   removeSheet: (id: string) => request<Song>(`/songs/${id}/sheet`, { method: 'DELETE' }),
   /** One play-through, on today's date on this phone (for the week and streak on Me). */
-  recordPlay: (id: string) => request<{ plays: number }>(`/songs/${id}/plays`, json('POST', { day: dayKey() })),
+  recordPlay: (id: string, day = dayKey()) => request<{ plays: number }>(`/songs/${id}/plays`, json('POST', { day })),
   practiceSummary: () => request<PracticeSummary>(`/me/practice/summary?today=${dayKey()}`),
 
   notices: (groupId: string) => request<Notice[]>(`/groups/${groupId}/notices`),

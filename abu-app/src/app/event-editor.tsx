@@ -12,6 +12,7 @@ import { api, type EventKind, type GroupEvent } from '@/api/client';
 import { Body, Button, Card, Chip, ErrorText, Field, Kicker, Loading, Page, TopBar } from '@/components/ui';
 import { addDays, fmtDate, startOfDay } from '@/lib/dates';
 import { defaultTitle, kindLabel } from '@/lib/group-types';
+import { useOnline } from '@/lib/online';
 import { useSession } from '@/state/session';
 import { colors, fonts } from '@/theme/tokens';
 
@@ -29,9 +30,11 @@ const timeLabel = (t: string) => {
 export default function EventEditorScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { status } = useSession();
+  const online = useOnline();
   const existing = useQuery({ queryKey: ['event', id], queryFn: () => api.event(id!), enabled: !!id });
   if (status === 'signedOut') return <Redirect href="/welcome" />;
-  if (id && !existing.data) {
+  // Change the latest details, not a copy saved on the phone.
+  if (id && (!existing.data || (online && !existing.isFetchedAfterMount))) {
     return (
       <Page>
         <TopBar back title="Change details" />

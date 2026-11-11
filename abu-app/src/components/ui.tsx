@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextInputProps, type ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useOnline } from '@/lib/online';
 import { partName } from '@/solfa';
 import { colors, fonts, partColor, partLetter } from '@/theme/tokens';
 
@@ -126,6 +127,15 @@ export function ErrorText({ message }: { message: string }) {
 }
 
 export function Loading({ label = 'Loading…' }: { label?: string }) {
+  const online = useOnline();
+  // Offline, a query with nothing saved waits for a connection: say so instead of spinning.
+  if (!online) {
+    return (
+      <View style={styles.loading}>
+        <Text style={[styles.hint, { textAlign: 'center' }]}>This isn’t saved on this phone yet. It will load when you’re back online.</Text>
+      </View>
+    );
+  }
   return (
     <View style={styles.loading}>
       <ActivityIndicator color={colors.red} />
