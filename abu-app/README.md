@@ -30,6 +30,12 @@ Sound on Android and iOS comes from `react-native-audio-api`, a native module, s
 - Local: install Android Studio (it brings the JDK), then `npx expo run:android` with a phone plugged in or an emulator running.
 - Cloud: `npx eas-cli@latest build --profile development --platform android`, then install the APK on the phone.
 
+## Database (Supabase)
+
+- **Schema and security rules:** `supabase/migrations/`. Who can see and change what (leaders, part leaders, members, pending members, outsiders, signed-out visitors) is enforced in the database with row-level security, not just in the app.
+- **Tests:** `npm run test:db` runs the rules as the prototype's personas, in an in-process Postgres (PGlite), so it needs no Docker and no Supabase account. `npm test` runs these and the app's unit tests.
+- **Going live:** once the owner has run `npx supabase login` on this Mac, the project is created and linked with `npx supabase projects create` and `npx supabase link`, and `npx supabase db push` applies the migrations.
+
 ## Layout
 
 - `src/app/`: screens (Expo Router).

@@ -81,7 +81,7 @@ The real app's web build is live at https://abu.adalingo.workers.dev (Cloudflare
 1. **Done.** Expo SDK 58 (TypeScript, Expo Router) is scaffolded in `abu-app/`, with routes in `abu-app/src/app/`. See `abu-app/README.md`.
 2. **Done.** `parseSolfa` is ported to `abu-app/src/solfa/` with tests covering every row of the format table, the spec example and the demo songs. `abu-app/src/solfa/README.md` lists where it differs from the prototype and the assumptions the owner should confirm.
 3. **Done on web; Android not yet checked.** The score (`abu-app/src/components/score.tsx`, laid out by `abu-app/src/score/layout.ts`) and the player (`abu-app/src/app/song/[id].tsx`, engine in `abu-app/src/audio/`) are built. On web, all four parts were checked in headless Chrome to play the right pitches on the right beats. Phones use `react-native-audio-api`, which needs a development build; nobody has heard it on an Android phone yet (see `abu-app/README.md`). Practice counts are kept for the session only until accounts exist.
-4. **Next: build the MVP in the milestones listed under "Building the MVP" in `docs/app-plan.md`**, starting with the database (schema, security rules and tests). The entities the prototype uses:
+4. **Building the MVP in the milestones under "Building the MVP" in `docs/app-plan.md`.** Milestone 1 (database) is done: `abu-app/supabase/migrations/` has the schema and its row-level security, tested by `npm run test:db` (see `abu-app/README.md`). Next is milestone 2, sign-in and onboarding, which needs the owner to run `npx supabase login` first. The schema covers the entities the prototype uses:
    - `users`
    - `groups` (type, invite code, self check-in on/off, approval on/off, personal flag)
    - `memberships` (part, role, pending or active)
@@ -93,7 +93,7 @@ The real app's web build is live at https://abu.adalingo.workers.dev (Cloudflare
    - `attendance`
    - `notices`
    - `practice_counts`
-   - `user_prefs`. The Perform background stays per device, not in the database.
+   - `user_prefs`: not created yet. The Perform background stays per device, not in the database.
 
 ## Open questions for the owner
 

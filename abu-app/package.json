@@ -28,6 +28,7 @@
     "react-native-worklets": "0.13.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.16",
     "@jest/globals": "^30.5.2",
     "@types/node": "^24.19.2",
     "@types/react": "~19.3.0",
@@ -44,16 +45,21 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "test": "jest",
+    "test": "jest && npm run test:db",
     "typecheck": "tsc --noEmit",
     "build:web": "expo export --platform web && cp dist/+not-found.html dist/404.html",
-    "deploy:web": "npm run build:web && wrangler deploy"
+    "deploy:web": "npm run build:web && wrangler deploy",
+    "test:db": "node --test 'supabase/tests/*.test.ts'"
   },
   "private": true,
   "jest": {
     "preset": "jest-expo",
     "moduleNameMapper": {
       "^@/(.*)$": "<rootDir>/src/$1"
-    }
+    },
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "<rootDir>/supabase/"
+    ]
   }
 }
