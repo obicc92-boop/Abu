@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Abụ motif, draft. One repeat of a line pattern drawn from adire
+       (rings and dots) and uli (fine lines, small stars). Rings at the tile
+       corners join into full sets of sound rings when the tile repeats.
+       Use one colour at low strength: see design/brand-draft.html. -->
+  <g fill="none" stroke="#A3261A" stroke-width="1.6" stroke-linecap="round">
+    <path d="M10 0A10 10 0 0 1 0 10M18 0A18 18 0 0 1 0 18M26 0A26 26 0 0 1 0 26"/>
+    <path d="M54 0A10 10 0 0 0 64 10M46 0A18 18 0 0 0 64 18M38 0A26 26 0 0 0 64 26"/>
+    <path d="M0 54A10 10 0 0 1 10 64M0 46A18 18 0 0 1 18 64M0 38A26 26 0 0 1 26 64"/>
+    <path d="M64 54A10 10 0 0 0 54 64M64 46A18 18 0 0 0 46 64M64 38A26 26 0 0 0 38 64"/>
+    <path d="M32 24.5v-4M32 39.5v4M24.5 32h-4M39.5 32h4"/>
+  </g>
+  <circle cx="32" cy="32" r="2.4" fill="#A3261A"/>
+</svg>

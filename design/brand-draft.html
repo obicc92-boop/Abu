@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Abụ brand draft</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@500;700;800&family=JetBrains+Mono:wght@500;700&family=Marcellus&display=swap" rel="stylesheet">
+<style>
+:root {
+  --red: #D93A1E; --red-deep: #A3261A; --red-tint: #FCEAE5; --gold: #E6A325;
+  --ink: #22160F; --muted: #76655C; --line: #E9DED8; --sand: #F7F1ED; --white: #FFFFFF; --board: #EDE4DE;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--board); color: var(--ink); font: 500 15px/1.5 Figtree, system-ui, sans-serif; }
+main { max-width: 1040px; margin: 0 auto; padding: 32px 16px 56px; display: grid; gap: 22px; }
+h1 { font: 400 40px/1.1 Marcellus, Georgia, serif; color: var(--red); margin: 0; }
+h2 { font: 800 13px/1 Figtree; letter-spacing: .08em; text-transform: uppercase; color: var(--red-deep); margin: 0 0 14px; }
+p { margin: 0; }
+.lede { color: var(--muted); max-width: 680px; }
+.panel { background: var(--white); border-radius: 18px; padding: 22px; border: 1px solid var(--line); }
+.row { display: flex; flex-wrap: wrap; gap: 22px; align-items: flex-end; }
+.cap { font-size: 12.5px; color: var(--muted); text-align: center; margin-top: 6px; }
+.fig { display: flex; flex-direction: column; align-items: center; }
+.sq { border-radius: 22.5%; display: block; }
+.circle { border-radius: 50%; display: block; }
+.notes { display: grid; gap: 6px; margin-top: 16px; padding-left: 18px; color: var(--ink); }
+.notes li { padding-left: 2px; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 22px; }
+
+/* Phone home screen */
+.home { width: 300px; border-radius: 34px; padding: 36px 22px 30px; background: linear-gradient(160deg, #3b2f4a, #1d2d3a 60%, #22160F); display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px 10px; }
+.app { display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10.5px; color: #fff; }
+.app span.ph { width: 54px; height: 54px; border-radius: 50%; background: rgba(255,255,255,.18); display: block; }
+.app img { width: 54px; height: 54px; }
+.themed .app span.ph, .themed .tile { background: #3d4a42; }
+.tile { width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center; }
+
+/* Splash */
+.phone { width: 180px; height: 360px; border-radius: 28px; background: var(--red); display: grid; place-items: center; border: 6px solid var(--ink); }
+
+/* Motif uses */
+.motif { position: relative; overflow: hidden; }
+.motif > svg.pat { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.motif > svg.pat.fade { -webkit-mask-image: linear-gradient(to left, #000 15%, transparent 70%); mask-image: linear-gradient(to left, #000 15%, transparent 70%); }
+.motif > .in { position: relative; }
+.hero { background: var(--red); color: #fff; border-radius: 16px; padding: 18px; min-height: 150px; display: flex; flex-direction: column; gap: 4px; }
+.hero .k { font: 800 11px/1 Figtree; letter-spacing: .08em; text-transform: uppercase; color: #FFD9CF; }
+.hero .t { font: 800 19px/1.25 Figtree; }
+.hero .s { font-size: 13px; color: #FFE7E0; }
+.hero .b { margin-top: 10px; align-self: flex-start; background: #fff; color: var(--red-deep); border-radius: 10px; padding: 8px 12px; font: 800 13px/1 Figtree; }
+.welcome { background: var(--red); color: #fff; border-radius: 16px; padding: 28px 18px; min-height: 240px; text-align: center; display: grid; place-items: center; }
+.welcome h3 { font: 400 44px/1 Marcellus, serif; margin: 10px 0 6px; }
+.welcome p { color: #FFE7E0; font-size: 14px; }
+.empty { background: var(--sand); border-radius: 16px; padding: 26px 18px; min-height: 150px; text-align: center; display: grid; place-items: center; }
+.empty b { display: block; font-size: 15px; }
+.empty span { font-size: 13px; color: var(--muted); }
+.perform { background: #140D0A; color: #F7EDE7; border-radius: 16px; padding: 18px; min-height: 120px; }
+.perform .k { font: 800 11px/1 Figtree; letter-spacing: .08em; text-transform: uppercase; color: #E8A592; }
+.perform .t { font: 800 18px/1.3 Figtree; }
+.swatch { width: 192px; height: 192px; border-radius: 14px; border: 1px solid var(--line); background: var(--sand); }
+code { font: 500 13px JetBrains Mono, monospace; background: var(--sand); padding: 1px 5px; border-radius: 5px; }
+</style>
+</head>
+<body>
+<main>
+  <header style="display:grid;gap:8px">
+    <h1>Abụ brand draft</h1>
+    <p class="lede">First draft of the app icon and the visual motif, for the owner to react to. Draft A is already in the app; draft B is an alternative. Source files are in <code>design/brand/</code>.</p>
+  </header>
+
+  <section class="panel">
+    <h2>App icon · draft A (in the app now)</h2>
+    <div class="row">
+      <div class="fig"><img class="sq" src="brand/icon.svg" width="200" height="200" alt="Draft A app icon"><div class="cap">iPhone shape</div></div>
+      <div class="fig"><img class="circle" src="brand/icon.svg" width="140" height="140" alt=""><div class="cap">Android, round crop</div></div>
+      <div class="fig"><img class="sq" src="brand/icon.svg" width="60" height="60" alt=""><div class="cap">60</div></div>
+      <div class="fig"><img class="sq" src="brand/icon.svg" width="40" height="40" alt=""><div class="cap">40</div></div>
+      <div class="fig"><img class="sq" src="brand/icon.svg" width="24" height="24" alt=""><div class="cap">24 (browser tab)</div></div>
+    </div>
+    <ul class="notes">
+      <li><b>Four rounded bars are the four voice parts</b>, carried over from the prototype's mark. They're centred like a sung waveform rather than standing on a line, because rising bars on a line look like a phone's signal-strength icon.</li>
+      <li><b>The gold dot below</b> is the dot under the <b>ụ</b> in Abụ: a quiet nod to the Igbo name that also reads as a note.</li>
+      <li><b>Faint sound rings</b> come from the motif. They disappear at small sizes, so the icon stays simple where it has to.</li>
+    </ul>
+  </section>
+
+  <section class="two">
+    <div class="panel">
+      <h2>On an Android home screen</h2>
+      <div class="home">
+        <div class="app"><span class="ph"></span>Phone</div>
+        <div class="app"><span class="ph"></span>Messages</div>
+        <div class="app"><img class="circle" src="brand/icon.svg" alt=""><b>Abụ</b></div>
+        <div class="app"><span class="ph"></span>Camera</div>
+        <div class="app"><span class="ph"></span>Gallery</div>
+        <div class="app"><span class="ph"></span>Bible</div>
+        <div class="app"><span class="ph"></span>Calendar</div>
+        <div class="app"><span class="ph"></span>Settings</div>
+      </div>
+      <p class="cap" style="text-align:left;margin-top:10px">Grey circles stand in for other apps.</p>
+    </div>
+    <div class="panel">
+      <h2>Themed icons and splash screen</h2>
+      <div class="row" style="align-items:center">
+        <div class="home themed" style="width:150px;grid-template-columns:repeat(2,1fr);padding:26px 16px">
+          <div class="app"><span class="ph"></span></div>
+          <div class="app"><span class="tile"><svg width="34" height="34" viewBox="245 238 534 548"><g fill="#C9E4D3"><rect x="245" y="339" width="96" height="218" rx="48"/><rect x="391" y="276" width="96" height="344" rx="48"/><rect x="537" y="238" width="96" height="420" rx="48"/><rect x="683" y="313.5" width="96" height="269" rx="48"/><circle cx="512" cy="750" r="36"/></g></svg></span>Abụ</div>
+        </div>
+        <div class="phone"><img src="../abu-app/assets/images/splash-icon.png" width="76" alt="Splash screen mark"></div>
+      </div>
+      <p class="cap" style="text-align:left;margin-top:10px">Left: Android's one-colour "themed icons". Right: the splash screen while the app opens.</p>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>App icon · draft B (alternative)</h2>
+    <div class="row">
+      <div class="fig"><img class="sq" src="brand/icon-b-part-colours.svg" width="200" height="200" alt="Draft B app icon"><div class="cap">iPhone shape</div></div>
+      <div class="fig"><img class="circle" src="brand/icon-b-part-colours.svg" width="140" height="140" alt=""><div class="cap">Android, round crop</div></div>
+      <div class="fig"><img class="sq" src="brand/icon-b-part-colours.svg" width="60" height="60" alt=""><div class="cap">60</div></div>
+      <div class="fig"><img class="sq" src="brand/icon-b-part-colours.svg" width="40" height="40" alt=""><div class="cap">40</div></div>
+    </div>
+    <ul class="notes">
+      <li>The same mark on cream, each bar in its part colour: Soprano, Alto, Tenor, Bass. It ties the icon to the colours members see all through the app.</li>
+      <li>Friendlier and more colourful; draft A is bolder and easier to spot on a busy home screen.</li>
+    </ul>
+  </section>
+
+  <section class="panel">
+    <h2>Motif</h2>
+    <div class="row" style="align-items:flex-start">
+      <div class="fig"><div class="swatch motif" data-motif="#A3261A" data-o="1" data-scale="2"></div><div class="cap">One repeat, shown twice the size</div></div>
+      <ul class="notes" style="flex:1;min-width:260px;margin-top:0">
+        <li><b>Rings and dots from adire</b>, the Yoruba resist-dyed cloth, and <b>fine lines and small stars from uli</b>, the Igbo line art. It's drawn as lines only, so it stays light.</li>
+        <li>Where the tiles meet, the corner arcs join into <b>sets of sound rings</b>: music spreading out from the voice.</li>
+        <li><b>One colour, at low strength</b>: white at about 10% on red, gold at about 28% on sand. On cards with text, it sits at the right and fades out before the words (white about 16%, or red about 30% on the dark Perform page).</li>
+        <li><b>Only on</b> the welcome screen, the card for the next service, and empty screens. <b>Never</b> behind the score, the words or lists, where it would get in the way of reading.</li>
+        <li>A Nigerian illustrator could redraw it by hand later; the rules above would stay.</li>
+      </ul>
+    </div>
+    <div class="two" style="margin-top:22px">
+      <div class="welcome motif" data-motif="#FFFFFF" data-o="0.10" data-scale="1.5"><div class="in"><img src="brand/icon.svg" width="64" height="64" class="sq" alt=""><h3>Abụ</h3><p>Learn your part. Keep your choir together.</p></div></div>
+      <div style="display:grid;gap:22px">
+        <div class="hero motif" data-motif="#FFFFFF" data-o="0.16" data-scale="1.5" data-fade="1"><div class="in" style="display:flex;flex-direction:column;gap:4px"><span class="k">Next Mass · in 4 days</span><span class="t">33rd Sunday in Ordinary Time</span><span class="s">Sun 15 Nov · 8:00 AM · 9 songs</span><span class="b">Open song order</span></div></div>
+        <div class="empty motif" data-motif="#E6A325" data-o="0.28" data-scale="1.5"><div class="in"><b>No notices yet</b><span>Leaders and part leaders can post one for the whole group.</span></div></div>
+        <div class="perform motif" data-motif="#D93A1E" data-o="0.30" data-scale="1.5" data-fade="1"><div class="in"><span class="k">Perform · 3 of 9</span><div class="t">Offertory: Ekele Diri Chukwu</div></div></div>
+      </div>
+    </div>
+  </section>
+</main>
+<script>
+  // Draws the motif behind each .motif element in its chosen colour.
+  const TILE = '<path d="M10 0A10 10 0 0 1 0 10M18 0A18 18 0 0 1 0 18M26 0A26 26 0 0 1 0 26"/>' +
+    '<path d="M54 0A10 10 0 0 0 64 10M46 0A18 18 0 0 0 64 18M38 0A26 26 0 0 0 64 26"/>' +
+    '<path d="M0 54A10 10 0 0 1 10 64M0 46A18 18 0 0 1 18 64M0 38A26 26 0 0 1 26 64"/>' +
+    '<path d="M64 54A10 10 0 0 0 54 64M64 46A18 18 0 0 0 46 64M64 38A26 26 0 0 0 38 64"/>' +
+    '<path d="M32 24.5v-4M32 39.5v4M24.5 32h-4M39.5 32h4"/>';
+  document.querySelectorAll('.motif').forEach((el, i) => {
+    const c = el.dataset.motif, o = el.dataset.o, s = Number(el.dataset.scale || 1), w = 64 * s;
+    el.insertAdjacentHTML('afterbegin',
+      `<svg class="pat${el.dataset.fade ? ' fade' : ''}" aria-hidden="true"><defs><pattern id="m${i}" width="${w}" height="${w}" patternUnits="userSpaceOnUse">` +
+      `<g transform="scale(${s})" opacity="${o}"><g fill="none" stroke="${c}" stroke-width="1.6" stroke-linecap="round">${TILE}</g><circle cx="32" cy="32" r="2.4" fill="${c}"/></g>` +
+      `</pattern></defs><rect width="100%" height="100%" fill="url(#m${i})"/></svg>`);
+  });
+</script>
+</body>
+</html>

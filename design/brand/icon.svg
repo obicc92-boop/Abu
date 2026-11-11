@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Abụ app icon, draft A (in use). Four rounded bars: the four voice parts,
+       centred like a sung waveform so they don't read as phone signal bars.
+       A gold dot below, like the dot under the ụ in Abụ.
+       Faint sound rings from the motif sit behind. -->
+  <rect width="1024" height="1024" fill="#D93A1E"/>
+  <g fill="none" stroke="#C93118" stroke-width="18">
+    <circle cx="0" cy="1024" r="330"/>
+    <circle cx="0" cy="1024" r="470"/>
+    <circle cx="0" cy="1024" r="610"/>
+    <circle cx="0" cy="1024" r="750"/>
+    <circle cx="0" cy="1024" r="890"/>
+  </g>
+  <g id="mark">
+    <g fill="#FFFFFF">
+      <rect x="245" y="339" width="96" height="218" rx="48"/>
+      <rect x="391" y="276" width="96" height="344" rx="48"/>
+      <rect x="537" y="238" width="96" height="420" rx="48"/>
+      <rect x="683" y="313.5" width="96" height="269" rx="48"/>
+    </g>
+    <circle cx="512" cy="750" r="36" fill="#E6A325"/>
+  </g>
+</svg>

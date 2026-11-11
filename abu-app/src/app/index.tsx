@@ -2,6 +2,7 @@ import { Link } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BrandMark, Motif } from '@/components/brand';
 import { DEMO_SONGS } from '@/data/demo-songs';
 import { KEY_NAMES, parseSolfa, partName } from '@/solfa';
 import { colors, fonts, partColor } from '@/theme/tokens';
@@ -14,7 +15,12 @@ export default function Home() {
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.body}>
-        <Text style={styles.brand}>Abụ</Text>
+        <View style={styles.hero}>
+          <Motif color={colors.white} opacity={0.16} fade />
+          <BrandMark size={38} />
+          <Text style={styles.brand}>Abụ</Text>
+          <Text style={styles.tagline}>Learn your part. Keep your choir together.</Text>
+        </View>
         <Text style={styles.lede}>Demo songs. Tap one to hear it.</Text>
 
         {DEMO_SONGS.map((s) => {
@@ -52,8 +58,10 @@ export default function Home() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.sand },
   body: { padding: 16, gap: 12, maxWidth: 560, width: '100%', alignSelf: 'center' },
-  brand: { fontFamily: fonts.display, fontSize: 38, color: colors.red },
-  lede: { fontFamily: fonts.body, fontSize: 15, color: colors.muted, marginBottom: 4 },
+  hero: { backgroundColor: colors.red, borderRadius: 18, padding: 20, paddingTop: 22, gap: 2, overflow: 'hidden' },
+  brand: { fontFamily: fonts.display, fontSize: 40, lineHeight: 50, color: colors.white, marginTop: 8 },
+  tagline: { fontFamily: fonts.body, fontSize: 15, color: '#FFE7E0' },
+  lede: { fontFamily: fonts.body, fontSize: 15, color: colors.muted, marginTop: 4, marginBottom: 2 },
   card: {
     flexDirection: 'row',
     gap: 12,
