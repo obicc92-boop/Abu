@@ -9,7 +9,7 @@
  */
 import { keyAfterPivot, keyFromSemitone, parseKey, parseKeyLine, type KeyInfo, type Pivot } from './keys';
 import { normalizePart, parseNote, partName } from './syllables';
-import type { Issue, KeyChange, Mark, MarkName, NoteEvent, ParseOptions, ParsedSong, Section, SongMeta, Tempo } from './types';
+import type { Issue, KeyChange, MarkName, NoteEvent, ParseOptions, ParsedSong, Section, SongMeta, Tempo } from './types';
 
 const EPS = 1e-6;
 
