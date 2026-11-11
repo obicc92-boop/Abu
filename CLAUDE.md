@@ -2,7 +2,7 @@
 
 Abụ (Igbo for "song") is an app for choirs and music groups that read **tonic sol-fa**. Members learn their part by hearing it played, and leaders organise songs, services and rehearsals in one place. The first users are church choirs in Nigeria (Catholic, Anglican, Pentecostal), plus non-church groups such as bands and orchestras. It will go international later.
 
-The product owner has a pilot choir ready to test. The real app is started: `abu-app/` (the Expo app: sol-fa reader, score and player, live on the web) and `abu-api/` (the Cloudflare Worker: website hosting, API and D1 database). **Next: milestone 5, attendance (see `docs/app-plan.md`).**
+The product owner has a pilot choir ready to test. The real app is started: `abu-app/` (the Expo app: sol-fa reader, score and player, live on the web) and `abu-api/` (the Cloudflare Worker: website hosting, API and D1 database). **Next: milestone 6, Group and Me (see `docs/app-plan.md`).**
 
 ## Decisions already made (don't re-ask)
 
@@ -103,7 +103,13 @@ The real app is live at https://abu.adalingo.workers.dev: one Cloudflare Worker 
      - **Rehearse** steps through the order with the full player. **Perform** has no audio code at all, with large type (A−/A+), all parts or my part only, dark or light (remembered on the device), and the screen kept on.
      - **Home:** the next service with your reply, the next rehearsal, "Learn for upcoming" with your own practice, and readiness per part for leaders and part leaders.
      - **Checked end to end** on the live site (33 checks, including that Perform never creates an audio context), with the test data deleted afterwards.
-   - Next is milestone 5, attendance: marking, self check-in with the code, attendance rates and reports.
+   - Milestone 5 (attendance) is done:
+     - **Marking:** a register per service or rehearsal, by part. Tap a status to cycle Present → Absent → Excused; "Mark the rest present" or "absent" finishes it, and "Can't come" replies become excused. Leaders mark anyone, part leaders only their own part.
+     - **Self check-in:** when the leader switches it on, members check in from Home or the rehearsal's page with the 4-digit code, from 3 hours before the start to 6 hours after. Leaders and part leaders show the code full screen, with the screen kept on and check-ins counted as they come in.
+     - **Rates:** present out of present and absent; excused doesn't count against anyone. **Leaders and part leaders see everyone's rates** (Group tab and reports); **members see only their own** (on Home). This privacy split was the builder's call, following the practice rule; the owner can change it.
+     - **Reports:** last 4 weeks, 3 months or this year; the group's rate, services not marked yet, by part, by month and by member, and the register as a spreadsheet (CSV, dated in the viewer's time zone, safe against formula injection).
+     - **Checked end to end** on the live site (25 attendance checks, plus the schedule suite again), with the test data deleted afterwards.
+   - Next is milestone 6, Group and Me: notices, settings (section names, leader title), and Me (profile, switching groups, your practice, settings).
 
    The schema covers the entities the prototype uses:
    - `users`

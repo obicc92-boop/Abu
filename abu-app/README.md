@@ -35,15 +35,16 @@ Sound on Android and iOS comes from `react-native-audio-api`, a native module, s
   - `song/[id].tsx`: the player (`components/song-view.tsx`), with the song's actions and your practice (`components/song-actions.tsx`). Sheet-only songs show their sheet and a "Type the sol-fa" button.
   - `song-editor.tsx`: add a song, or edit one (`?id=`). It checks the sol-fa as you type (`components/solfa-check.tsx`), previews and plays it, takes tags, and attaches the original sheet.
   - `event-editor.tsx`: plan a service, rehearsal or concert (a setlist in your own space), or change one (`?id=`). Dates and times are tapped, not typed; rehearsals can repeat weekly.
-  - `event/[id]/`: a service's page (`index.tsx`: details, your reply, the order by section, readiness for leaders), the order editor (`order.tsx`, saving each change in turn), Rehearse (`rehearse.tsx`: the player for each song) and Perform (`perform.tsx`: no audio code at all; A−/A+, my part only, dark or light, the screen kept on).
+  - `event/[id]/`: a service's page (`index.tsx`: details, your reply, the order by section, readiness for leaders), the order editor (`order.tsx`, saving each change in turn), Rehearse (`rehearse.tsx`: the player for each song), Perform (`perform.tsx`: no audio code at all; A−/A+, my part only, dark or light, the screen kept on), the attendance register (`attendance.tsx`) and the check-in code full screen (`code.tsx`).
+  - `attendance-report.tsx`: attendance reports for leaders and part leaders, with the spreadsheet download.
 - `src/api/`: the API client and types (`client.ts`), and where the API lives (`config.ts`, `config.web.ts`).
 - `src/auth/`: the Better Auth client: secure storage on phones, cookies on the web.
 - `src/state/session.tsx`: who is signed in, their groups, the current group (remembered on the device), and "looking around".
-- `src/lib/`: device settings storage, dates as people say them (`dates.ts`), song order helpers (`order.ts`), keeping the screen on (`screen-on.ts`), group type names, and suggested song tags.
+- `src/lib/`: device settings storage, dates as people say them (`dates.ts`), song order helpers (`order.ts`), keeping the screen on (`screen-on.ts`), one-request-at-a-time saving (`serial.ts`), attendance report ranges and colours (`attendance.ts`), downloads (`download.ts`), group type names, and suggested song tags.
 - `src/solfa/`: the sol-fa reader and pitch helpers, ported from the prototype. Read its README first.
 - `src/score/layout.ts`: splits a song into lines of beat columns (port of `scoreHTML`).
 - `src/audio/`: the synth and scheduler (`engine.ts`), the audio context for web (`context.web.ts`) and phones (`context.ts`), and the `useSongPlayer` hook.
-- `src/components/`: shared UI (`ui.tsx`: pages, buttons, fields, cards, the part picker), icons, the invite card, song rows, the song view (player or sheet), event cards, the Going / Can't come buttons, readiness per part, the score (player, dark and light themes), the player controls, and the brand mark and motif (`brand.tsx`).
+- `src/components/`: shared UI (`ui.tsx`: pages, buttons, fields, cards, the part picker), icons, the invite card, song rows, the song view (player or sheet), event cards, the Going / Can't come buttons, self check-in, readiness per part, the score (player, dark and light themes), the player controls, and the brand mark and motif (`brand.tsx`).
 - `src/splash/`: the opening animation that follows the still splash screen, and its particle layout.
 - `src/data/demo-songs.ts`: the prototype's demo songs (public domain or written for the demo). Never add the pilot choir's copyrighted sheets.
 - `src/theme/tokens.ts`: brand colours, part colours and fonts.
