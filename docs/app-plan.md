@@ -190,9 +190,10 @@ Each milestone ends merged, pushed and deployed. Home grows with them: each mile
    - Our repertoire and My songs; the player on real songs; private practice counts.
 4. **Schedule.** *Done.* Services, rehearsals and concerts; song orders by section (reorder, change section, add, remove, copy an earlier order, "last sung" hints); replies; Rehearse and Perform; weekly repeating rehearsals; the next service, "Learn for upcoming" and readiness on Home. Still to come: the month view, and rehearsals on two days a week in one go (for now, plan each day's series).
 5. **Attendance.** *Done.* Marking (leaders anyone, part leaders their own part; mark the rest present or absent), self check-in with the 4-digit code from Home or the rehearsal page, the code shown full screen, attendance rates (leaders and part leaders see everyone's, members their own), and reports by part, month and member with a spreadsheet export.
-6. **Group and Me.**
-   - Group: members by part, changing parts and roles, notices (post and pin), settings (approval, self check-in, section names).
-   - Me: profile, switching groups, your practice, downloads, settings.
+6. **Group and Me.** *Done.*
+   - Group: members by part, changing parts and roles, notices to everyone or one part (post, pin, delete), settings (approval, self check-in, part leaders editing orders, name, leader's title, section names).
+   - Me: profile, your part in each group, switching groups, your practice (this week, songs you know, a gentle streak), changing your password, Perform's background, About.
+   - Later: the group photo, birthdays, text size, language and notifications. Downloads and the data saver move to milestone 7.
 7. **Offline and installable.** Songs, song orders and notices for upcoming services kept on the phone; the installable website; the data saver.
 8. **Pilot ready.**
    - Home complete: the next service, replying, checking in, learning, readiness per part, and the leader's To do.

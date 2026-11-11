@@ -36,7 +36,8 @@ D1 has no row-level security, so every action in `src/domain/` checks access fir
 - Leaders edit song orders. Part leaders can too when a leader switches on `part_leaders_edit_orders` ("Part leaders can edit song orders"); see `requireOrderEditor` in `src/domain/access.ts`.
 - Leaders mark anyone's attendance; part leaders mark only their own part.
 - Self check-in needs the 4-digit code, which only leaders and part leaders can show. It works from 3 hours before the start to 6 hours after, and locks after five wrong codes.
-- Practice is private. Leaders and part leaders see only totals per part (`partReadiness`).
+- Practice is private. Leaders and part leaders see only totals per part (`partReadiness`). Your week and streak (`practiceSummary`) are only ever yours.
+- Notices: leaders and part leaders post, to everyone or one part; part leaders only to everyone or their own part. Leaders pin; the author or a leader deletes.
 - Attendance rates: leaders and part leaders see everyone's (`attendanceReport`); members see only their own (`myAttendance`). A rate is present out of present and absent, so excused (and "Can't come") never counts against anyone.
 - Songs are public, even signed out. Whoever shared a song, or anyone in the group it came from, can edit it.
 
@@ -66,7 +67,9 @@ The database itself guarantees what must never break: a group always keeps a lea
     - the register: `GET /api/events/:id/attendance`, `PUT /api/events/:id/attendance/:userId`, `POST /api/events/:id/attendance/rest` (mark everyone unmarked present or absent)
     - self check-in: `GET /api/events/:id/check-in-code`, `POST /api/events/:id/check-in`
     - rates: `GET /api/groups/:id/my-attendance` (yours), `GET /api/groups/:id/attendance` and `.../attendance.csv` (the report; optional `from`, `to` and `tz`, the viewer's `getTimezoneOffset()`)
-  - Notices get routes with their milestone.
+  - Notices: `GET` and `POST /api/groups/:id/notices` (`body`, optional `part`), `PUT /api/notices/:id/pin`, `DELETE /api/notices/:id`.
+  - Your practice week: `GET /api/me/practice/summary?today=YYYY-MM-DD`; `POST /api/songs/:id/plays` takes the phone's `day`.
+  - Changing your password is Better Auth's own `POST /api/auth/change-password`.
 - `src/domain/`: groups and people, songs and repertoire, events and replies, attendance and check-in, practice, notices.
 - `src/errors.ts`: errors with an HTTP status and a message safe to show people.
 - `src/auth.ts`: sign-in.

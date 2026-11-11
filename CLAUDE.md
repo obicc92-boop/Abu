@@ -2,7 +2,7 @@
 
 Abụ (Igbo for "song") is an app for choirs and music groups that read **tonic sol-fa**. Members learn their part by hearing it played, and leaders organise songs, services and rehearsals in one place. The first users are church choirs in Nigeria (Catholic, Anglican, Pentecostal), plus non-church groups such as bands and orchestras. It will go international later.
 
-The product owner has a pilot choir ready to test. The real app is started: `abu-app/` (the Expo app: sol-fa reader, score and player, live on the web) and `abu-api/` (the Cloudflare Worker: website hosting, API and D1 database). **Next: milestone 6, Group and Me (see `docs/app-plan.md`).**
+The product owner has a pilot choir ready to test. The real app is started: `abu-app/` (the Expo app: sol-fa reader, score and player, live on the web) and `abu-api/` (the Cloudflare Worker: website hosting, API and D1 database). **Next: milestone 7, offline and installable (see `docs/app-plan.md`).**
 
 ## Decisions already made (don't re-ask)
 
@@ -110,7 +110,13 @@ The real app is live at https://abu.adalingo.workers.dev: one Cloudflare Worker 
      - **Rates:** present out of present and absent; excused doesn't count against anyone. **Leaders and part leaders see everyone's rates** (Group tab and reports); **members see only their own** (on Home). This privacy split was the builder's call, following the practice rule; the owner can change it.
      - **Reports:** last 4 weeks, 3 months or this year; the group's rate, services not marked yet, by part, by month and by member, and the register as a spreadsheet (CSV, dated in the viewer's time zone, safe against formula injection).
      - **Checked end to end** on the live site (25 attendance checks, plus the schedule suite again), with the test data deleted afterwards.
-   - Next is milestone 6, Group and Me: notices, settings (section names, leader title), and Me (profile, switching groups, your practice, settings).
+   - Milestone 6 (Group and Me) is done:
+     - **Notices:** leaders and part leaders post to everyone or to one part ("Tenors, watch bar 6"); part leaders only to everyone or their own part. Leaders pin; whoever posted, or a leader, deletes. The Group tab shows them all; Home shows yours (everyone's and your part's), pinned first. Migration `0005` adds the part.
+     - **Group details (leaders):** name, church, town, the leader's title, and the song order sections (rename, reorder, add, remove), in `group-settings`.
+     - **Me:** your practice (plays this week, songs you know, and a gentle streak of days in a row, counted on the phone's calendar in the new `practice_days` table; private to you), your part in each group, changing your password (other phones are signed out), Perform's background on this phone, and About.
+     - **Checked end to end** on the live site (21 Group and Me checks, plus the other suites), with the test data deleted afterwards.
+     - **Left for later:** the group photo, birthdays, text size, language and notifications. Downloads and the data saver come with milestone 7.
+   - Next is milestone 7, offline and installable: songs, song orders and notices for upcoming services kept on the phone; the installable website; the data saver.
 
    The schema covers the entities the prototype uses:
    - `users`
