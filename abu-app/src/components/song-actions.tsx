@@ -25,6 +25,9 @@ export function SongActions({ songId, song }: { songId: string; song?: Song }) {
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: ['songForMe', songId] });
     await queryClient.invalidateQueries({ queryKey: ['repertoire'] });
+    // Home's "Learn for upcoming" and leaders' readiness totals use your practice.
+    await queryClient.invalidateQueries({ queryKey: ['myPractice'] });
+    await queryClient.invalidateQueries({ queryKey: ['readiness'] });
   };
   const toggleIn = useMutation({
     mutationFn: ({ groupId, add }: { groupId: string; add: boolean }) => (add ? api.addToRepertoire(groupId, songId) : api.removeFromRepertoire(groupId, songId)),
