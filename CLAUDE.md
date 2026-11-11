@@ -2,7 +2,7 @@
 
 Abụ (Igbo for "song") is an app for choirs and music groups that read **tonic sol-fa**. Members learn their part by hearing it played, and leaders organise songs, services and rehearsals in one place. The first users are church choirs in Nigeria (Catholic, Anglican, Pentecostal), plus non-church groups such as bands and orchestras. It will go international later.
 
-The product owner has a pilot choir ready to test. Nothing has been built yet beyond design and a clickable prototype. **The next job is to start the real app.**
+The product owner has a pilot choir ready to test. The real app is started in `abu-app/`: the sol-fa reader, the score and the player work on the web, and the web build is live. **Next: the Supabase schema, then the screens in `docs/app-plan.md`.**
 
 ## Decisions already made (don't re-ask)
 
@@ -21,6 +21,12 @@ The product owner has a pilot choir ready to test. Nothing has been built yet be
 | Song order modes | **Rehearse**: steps through the order with the full player. **Perform**: read only, with **no play button and no audio at all** (so nothing can start playing during Mass or a show), large text, A−/A+ size, "all parts" or "my part only", **dark or light background** (remembered per device), and the screen kept on. |
 | Pen input | **Version 1.5, after the MVP.** Composers write sol-fa by hand on a tablet in a guided grid (one lane per part plus words, beat boxes, bar lines pre-drawn). Each box is converted to text with uncertain boxes flagged, the result plays back, and the handwriting is kept as the original manuscript. A phone sol-fa keypad covers quick entry without a pen. |
 | Copyright | The owner's sample sheets (PDFs) are copyrighted. **Never commit them.** `docs/solfa-format.md` records what was learned from them. |
+| Tabs | **Home · Songs · Schedule · Group · Me.** Learning lives on Home. Without a group, Schedule is "Setlists" and Group is "Groups". Full plan: `docs/app-plan.md`. |
+| Sign-in | **Google and email** at launch. Phone number with an SMS code comes later. |
+| Joining | A code or invite link joins **instantly by default**; the leader can switch on approval for new members. |
+| Practice privacy | Leaders see **totals per part** (practice, and how many marked "I know my part"). A member's own practice history is visible only to them. |
+| Roles | **Leader, part leader and member** only, for now. |
+| Icon and motif | **Drafts** in `design/brand-draft.html`, to refine later. Icon draft A is in the app: four rounded voice-part bars, centred so they don't look like signal bars, with a gold dot below. Motif: adire and uli line pattern, used only on the welcome screen, the next-service card and empty screens. |
 
 ## What's in the repository
 
@@ -36,6 +42,8 @@ The product owner has a pilot choir ready to test. Nothing has been built yet be
   - **Audio engine** (`voice`, `tick`, `startPlay`, `partRef`, `doh`): Web Audio synth with per-part gain for mute, solo and "focus my part" (others at 28%), tempo changes while playing, transpose and loop. On native, `react-native-audio-api` (Software Mansion) offers a Web Audio-style API, so the engine can be shared across web and phones.
   - **Write-with-pen screen** (`SCREENS.write`, `wDown`, `wMove`, `wUp`, `writeSolfa`): ink with pen pressure, palm rejection once a stylus is seen, eraser, undo and the Fix keypad. Recognition there is **simulated** against a demo hymn, so the real version needs an actual recogniser.
 - **`docs/solfa-format.md`:** the sol-fa text format spec, based on real choir sheets. Treat it as the source of truth for the parser.
+- **`docs/app-plan.md`:** the agreed plan for the whole app: the five tabs, onboarding, what each tab contains, roles, look and feel, Nigeria-first details, and the order of work after the MVP.
+- **`design/brand-draft.html`:** the draft app icon and motif, with the master SVGs in `design/brand/`. The app's icon PNGs in `abu-app/assets/images/` are exported from `design/brand/icon.svg`.
 - **`design/mvp-screens.html`:** the earlier static design board with the brand, palette and screen rationale.
 
 The live prototype the owner shares with colleagues is published from `prototype/index.html`.
@@ -91,5 +99,5 @@ The real app's web build is live at https://abu.adalingo.workers.dev (Cloudflare
 ## Open questions for the owner
 
 - The company name, to show once confirmed.
-- Exact roles and permissions beyond the prototype, for example whether part leaders can edit song orders.
+- Whether part leaders can edit song orders (roles stay leader, part leader and member for now).
 - How songs are licensed and paid for, before the paid features.
