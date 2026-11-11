@@ -2,7 +2,7 @@ import { describe, expect, it } from '@jest/globals';
 
 import type { OrderItem } from '@/api/client';
 
-import { agoText, checkInOpen, dayKey, hasStarted, isOver, monthName, postedText, relDay, sinceText, weekBucket } from '../dates';
+import { agoText, checkInOpen, countdownText, dayKey, hasStarted, isOver, monthName, postedText, relDay, sinceText, weekBucket } from '../dates';
 import { bySection, nextSection, sectionChoices } from '../order';
 
 // Wednesday 11 November 2026, 10:00 local time.
@@ -48,6 +48,16 @@ describe('dates', () => {
     expect(postedText(at(1), NOW)).toBe('Sun 1 Nov');
     expect(dayKey(NOW)).toBe('2026-11-11');
     expect(dayKey(new Date(2026, 0, 5))).toBe('2026-01-05');
+  });
+
+  it('counts down to the next service on the day', () => {
+    const inMinutes = (n: number) => new Date(NOW.getTime() + n * 60_000).toISOString();
+    expect(countdownText(inMinutes(40), NOW)).toBe('Starts in 40 minutes');
+    expect(countdownText(inMinutes(1), NOW)).toBe('Starts in 1 minute');
+    expect(countdownText(inMinutes(150), NOW)).toBe('Starts in 3 hours');
+    expect(countdownText(inMinutes(60 * 13), NOW)).toBe('');
+    expect(countdownText(inMinutes(-30), NOW)).toBe('On now');
+    expect(countdownText(inMinutes(-200), NOW)).toBe('');
   });
 
   it('says when something was last saved', () => {

@@ -35,6 +35,15 @@ export function postedText(iso: string, now = new Date()): string {
   return fmtDate(iso);
 }
 
+/** For the next service: "Starts in 40 minutes", "Starts in 3 hours", "On now" (until 3 hours in), or "" further out. */
+export function countdownText(iso: string, now = new Date()): string {
+  const minutes = Math.round((new Date(iso).getTime() - now.getTime()) / 60_000);
+  if (minutes <= 0) return minutes > -180 ? 'On now' : '';
+  if (minutes < 60) return `Starts in ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
+  const hours = Math.round(minutes / 60);
+  return hours <= 12 ? `Starts in ${hours} ${hours === 1 ? 'hour' : 'hours'}` : '';
+}
+
 /** How long ago, to the minute: "just now", "5 minutes ago", "today at 4:30 PM", "yesterday", or the date. */
 export function sinceText(iso: string, now = new Date()): string {
   const minutes = Math.floor((now.getTime() - new Date(iso).getTime()) / 60_000);

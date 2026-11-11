@@ -194,6 +194,20 @@ export interface AttendanceReport {
 
 export type CheckInResult = 'present' | 'wrong_code' | 'locked';
 
+export type TodoKind = 'unmarked' | 'no_replies' | 'no_songs' | 'no_solfa' | 'waiting';
+
+/** Something waiting for a leader (or a part leader, for their part). */
+export interface TodoItem {
+  kind: TodoKind;
+  count: number;
+  event_id?: string;
+  event_title?: string;
+  event_kind?: EventKind;
+  starts_at?: string;
+  song_id?: string;
+  song_title?: string;
+}
+
 export interface Notice {
   id: string;
   group_id: string;
@@ -335,6 +349,7 @@ export const api = {
   reply: (eventId: string, status: Reply) => request<{ ok: true }>(`/events/${eventId}/reply`, json('PUT', { status })),
   replies: (eventId: string) => request<{ user_id: string; status: Reply; display_name: string; part: string | null }[]>(`/events/${eventId}/replies`),
   readiness: (eventId: string) => request<PartReadiness[]>(`/events/${eventId}/readiness`),
+  todo: (groupId: string) => request<TodoItem[]>(`/groups/${groupId}/todo`),
 
   attendance: (eventId: string) => request<SheetRow[]>(`/events/${eventId}/attendance`),
   mark: (eventId: string, userId: string, status: AttendanceStatus) => request<{ ok: true }>(`/events/${eventId}/attendance/${userId}`, json('PUT', { status })),
@@ -370,6 +385,16 @@ export function sheetUrl(songId: string): string {
 }
 
 /** A link to a song's page, for sharing. */
+/** A link to a service or rehearsal's page, for WhatsApp. */
+export function eventLink(eventId: string): string {
+  return `${SITE_URL}/event/${encodeURIComponent(eventId)}`;
+}
+
+/** Opens WhatsApp (or its website) with a message ready to send to a chat. */
+export function whatsappUrl(message: string): string {
+  return `https://wa.me/?text=${encodeURIComponent(message)}`;
+}
+
 export function songLink(songId: string): string {
   return `${SITE_URL}/song/${encodeURIComponent(songId)}`;
 }

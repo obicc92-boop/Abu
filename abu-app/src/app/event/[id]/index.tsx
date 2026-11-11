@@ -4,9 +4,10 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Redirect, router, useLocalSearchParams } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { api, type EventDetails, type OrderItem, type Reply } from '@/api/client';
+import { api, eventLink, whatsappUrl, type EventDetails, type OrderItem, type Reply } from '@/api/client';
 import { CheckedIn, CheckIn } from '@/components/check-in';
 import { Readiness } from '@/components/readiness';
 import { ReplyButtons } from '@/components/reply-buttons';
@@ -14,7 +15,7 @@ import { Body, Button, Card, ErrorText, Kicker, Loading, Page, TopBar } from '@/
 import { checkInOpen, fmtDate, fmtTime, hasStarted, isOver, relDay } from '@/lib/dates';
 import { kindLabel, kindNoun } from '@/lib/group-types';
 import { bySection } from '@/lib/order';
-import { KEY_NAMES } from '@/solfa';
+import { KEY_NAMES, partPlural } from '@/solfa';
 import { useSession } from '@/state/session';
 import { colors, fonts } from '@/theme/tokens';
 
@@ -69,6 +70,7 @@ function EventView({ details }: { details: EventDetails }) {
       ) : null}
 
       {!personal && !past ? <ReplyCard details={details} /> : null}
+      {!personal && !past && (leader || my_role === 'part_leader') ? <WhoIsComing details={details} /> : null}
       {!personal ? <AttendanceSection details={details} /> : null}
 
       <View style={styles.sectHead}>
@@ -113,6 +115,21 @@ function EventView({ details }: { details: EventDetails }) {
       ) : null}
 
       {!personal && (leader || my_role === 'part_leader') && items.length ? <Readiness eventId={e.id} /> : null}
+
+      <Button
+        small
+        kind="ghost"
+        label="Share on WhatsApp"
+        accessibilityLabel={`Share ${e.title} on WhatsApp`}
+        onPress={() =>
+          void Linking.openURL(
+            whatsappUrl(
+              `${e.title}: ${fmtDate(e.starts_at)} at ${fmtTime(e.starts_at)}${e.venue ? `, ${e.venue}` : ''}.${items.length ? ' The song order is on Abụ:' : ''} ${eventLink(e.id)}`,
+            ),
+          )
+        }
+        style={{ alignSelf: 'center' }}
+      />
     </Page>
   );
 }
@@ -144,7 +161,7 @@ function ReplyCard({ details }: { details: EventDetails }) {
     mutationFn: (status: Reply) => api.reply(details.event.id, status),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['event', details.event.id] });
-      void queryClient.invalidateQueries({ queryKey: ['home'] });
+      void queryClient.invalidateQueries({ queryKey: ['replies', details.event.id] });
     },
   });
   const mine = send.isPending ? send.variables : details.my_reply;
@@ -160,6 +177,47 @@ function ReplyCard({ details }: { details: EventDetails }) {
         </Text>
       ) : null}
       {send.error ? <ErrorText message={send.error.message} /> : null}
+    </Card>
+  );
+}
+
+/**
+ * Leaders: who's coming, who can't and who hasn't replied, by name, and a
+ * WhatsApp reminder. Part leaders see their own part.
+ */
+function WhoIsComing({ details }: { details: EventDetails }) {
+  const e = details.event;
+  const partLeader = details.my_role === 'part_leader' ? details.my_part : null;
+  const replies = useQuery({ queryKey: ['replies', e.id], queryFn: () => api.replies(e.id) });
+  const members = useQuery({ queryKey: ['members', e.group_id], queryFn: () => api.members(e.group_id) });
+  const [open, setOpen] = useState(false);
+  if (!replies.data || !members.data) return null;
+
+  const people = members.data.filter((m) => m.status === 'active' && (!partLeader || m.part === partLeader));
+  const reply = new Map(replies.data.map((r) => [r.user_id, r.status]));
+  const going = people.filter((m) => reply.get(m.user_id) === 'going');
+  const cant = people.filter((m) => reply.get(m.user_id) === 'cant');
+  const none = people.filter((m) => !reply.has(m.user_id));
+  const names = (list: typeof people) => list.map((m) => m.display_name).join(', ');
+  const reminder = `Please reply on Abụ: are you coming to ${e.title} on ${fmtDate(e.starts_at)} at ${fmtTime(e.starts_at)}? Tap Going or Can’t come: ${eventLink(e.id)}`;
+
+  return (
+    <Card>
+      <Kicker>{partLeader ? `Who’s coming · ${partPlural(partLeader)}` : 'Who’s coming'}</Kicker>
+      <Text style={styles.title}>
+        {going.length} going · {cant.length} can’t come · {none.length} no reply yet
+      </Text>
+      {open ? (
+        <View style={{ gap: 6 }}>
+          {going.length ? <Text style={styles.small}>Going: {names(going)}</Text> : null}
+          {cant.length ? <Text style={styles.small}>Can’t come: {names(cant)}</Text> : null}
+          {none.length ? <Text style={styles.small}>No reply yet: {names(none)}</Text> : null}
+        </View>
+      ) : null}
+      <View style={styles.actions}>
+        <Button small kind="ghost" label={open ? 'Hide names' : 'Show names'} onPress={() => setOpen(!open)} />
+        {none.length ? <Button small kind="ghost" label="Remind on WhatsApp" onPress={() => void Linking.openURL(whatsappUrl(reminder))} /> : null}
+      </View>
     </Card>
   );
 }
@@ -267,5 +325,6 @@ const styles = StyleSheet.create({
   small: { fontFamily: fonts.body, fontSize: 12.5, color: colors.muted },
   key: { fontFamily: fonts.monoBold, fontSize: 13, color: colors.redDeep },
   attHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   copyRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6, borderTopWidth: 1, borderTopColor: colors.line },
 });

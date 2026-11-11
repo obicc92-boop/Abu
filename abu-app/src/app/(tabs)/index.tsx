@@ -7,7 +7,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { api, type EventDetails, type GroupEvent, type MyGroup, type OrderItem, type Practice, type Reply } from '@/api/client';
+import { api, type EventDetails, type GroupEvent, type GroupType, type MyGroup, type OrderItem, type Practice, type Reply } from '@/api/client';
 import { BrandMark, Motif } from '@/components/brand';
 import { CheckedIn, CheckIn } from '@/components/check-in';
 import { EventCard } from '@/components/event-card';
@@ -17,10 +17,11 @@ import { NoticesSection } from '@/components/notices';
 import { Readiness } from '@/components/readiness';
 import { ReplyButtons } from '@/components/reply-buttons';
 import { SongRow } from '@/components/song-row';
+import { LeaderTodo } from '@/components/todo';
 import { Avatar, Body, Button, Card, ErrorText, Kicker, Loading, Page, PartTag } from '@/components/ui';
 import { DEMO_SONGS } from '@/data/demo-songs';
 import { rateColor } from '@/lib/attendance';
-import { checkInOpen, fmtDate, fmtTime, hasStarted, isOver, relDay, startOfDay } from '@/lib/dates';
+import { checkInOpen, countdownText, fmtDate, fmtTime, hasStarted, isOver, relDay, startOfDay } from '@/lib/dates';
 import { kindLabel, kindNoun } from '@/lib/group-types';
 import { partName } from '@/solfa';
 import { useSession } from '@/state/session';
@@ -69,10 +70,16 @@ export default function Home() {
   if (s.loadingMe || !s.group || !s.profile) return <Loading />;
 
   const g = s.group;
-  // Songs in the next service and rehearsal, each once, in order.
-  const toLearn = [...(upcoming.serviceDetails?.items ?? []), ...(upcoming.rehearsalDetails?.items ?? [])].filter(
-    (item, i, all) => all.findIndex((x) => x.song_id === item.song_id) === i,
-  );
+  // Songs for the next service and rehearsal, soonest first, each song once.
+  const seen = new Set<string>();
+  const toLearn = [upcoming.serviceDetails, upcoming.rehearsalDetails]
+    .filter((d): d is EventDetails => !!d)
+    .sort((a, b) => a.event.starts_at.localeCompare(b.event.starts_at))
+    .map((d) => ({
+      event: d.event,
+      items: d.items.filter((i) => !seen.has(i.song_id) && !!seen.add(i.song_id)),
+    }))
+    .filter((x) => x.items.length);
   const firstName = s.profile.display_name.split(' ')[0] || 'there';
   const choirs = s.groups.filter((x) => x.type !== 'personal');
 
@@ -161,6 +168,8 @@ export default function Home() {
         </Card>
       )}
 
+      {choir && (choir.role === 'leader' || choir.role === 'part_leader') ? <LeaderTodo group={choir} /> : null}
+
       {g.type === 'personal' && upcoming.service ? (
         <>
           <Kicker>Your next setlist</Kicker>
@@ -181,7 +190,7 @@ export default function Home() {
         </>
       ) : null}
 
-      {toLearn.length ? <LearnForUpcoming items={toLearn} practice={practice.data} part={g.part} /> : null}
+      {toLearn.length ? <LearnForUpcoming groups={toLearn} practice={practice.data} part={g.part} type={g.type} /> : null}
 
       {choir ? <NoticesSection group={choir} me={s.profile.id} forMe limit={3} /> : null}
 
@@ -251,6 +260,7 @@ function NextService({
   const mine = send.isPending ? (send.variables ?? null) : myReply;
   const personal = group.type === 'personal';
   const when = relDay(event.starts_at);
+  const countdown = countdownText(event.starts_at);
   const open = () => router.push({ pathname: '/event/[id]', params: { id: event.id } });
   return (
     <Card tone="red">
@@ -262,6 +272,7 @@ function NextService({
       <Pressable onPress={open} accessibilityRole="link">
         <Text style={[styles.cardTitle, { color: colors.white }]}>{event.title}</Text>
         <Text style={styles.onRed}>{[fmtDate(event.starts_at), fmtTime(event.starts_at), event.venue].filter(Boolean).join(' · ')}</Text>
+        {countdown ? <Text style={styles.countdown}>{countdown}</Text> : null}
       </Pressable>
       {!personal ? <ReplyButtons light value={mine} onChange={(v) => send.mutate(v)} /> : null}
       {send.error ? <ErrorText message={send.error.message} /> : null}
@@ -278,28 +289,49 @@ function NextService({
   );
 }
 
-/** Songs coming up, with how far along you are on each (your own practice, seen only by you). */
-function LearnForUpcoming({ items, practice, part }: { items: OrderItem[]; practice?: Practice[]; part: string | null }) {
+/** Songs coming up, by service, with how far along you are on each (your own practice, seen only by you). */
+function LearnForUpcoming({
+  groups,
+  practice,
+  part,
+  type,
+}: {
+  groups: { event: GroupEvent; items: OrderItem[] }[];
+  practice?: Practice[];
+  part: string | null;
+  type: GroupType;
+}) {
   const bySong = new Map((practice ?? []).map((p) => [p.song_id, p]));
-  const known = items.filter((i) => bySong.get(i.song_id)?.knows_part).length;
   return (
     <View style={{ gap: 8 }}>
       <View style={styles.learnHead}>
         <Kicker>Learn for upcoming</Kicker>
-        <Text style={styles.small}>
-          {part ? `${partName(part)} · ` : ''}
-          {known} of {items.length} known
-        </Text>
+        {part ? <Text style={styles.small}>{partName(part)}</Text> : null}
       </View>
-      {items.slice(0, 8).map((item) => {
-        const p = bySong.get(item.song_id);
-        const note = p?.knows_part ? '✓ Know it' : p?.plays ? `${p.plays} ${p.plays === 1 ? 'play' : 'plays'}` : 'New';
+      {groups.map(({ event, items }) => {
+        const known = items.filter((i) => bySong.get(i.song_id)?.knows_part).length;
         return (
-          <SongRow
-            key={item.song_id}
-            song={{ id: item.song_id, title: item.title, composer: item.composer, doh: item.doh, time: item.time_signature, playable: item.playable }}
-            note={note}
-          />
+          <View key={event.id} style={{ gap: 8 }}>
+            <View style={styles.learnHead}>
+              <Text style={styles.learnTitle} numberOfLines={1}>
+                {event.title || kindLabel(type, event.kind)} · {fmtDate(event.starts_at)}
+              </Text>
+              <Text style={[styles.small, known === items.length && { color: colors.ok }]}>
+                {known} of {items.length} known
+              </Text>
+            </View>
+            {items.slice(0, 8).map((item) => {
+              const p = bySong.get(item.song_id);
+              const note = p?.knows_part ? '✓ Know it' : p?.plays ? `${p.plays} ${p.plays === 1 ? 'play' : 'plays'}` : 'New';
+              return (
+                <SongRow
+                  key={item.song_id}
+                  song={{ id: item.song_id, title: item.title, composer: item.composer, doh: item.doh, time: item.time_signature, playable: item.playable }}
+                  note={note}
+                />
+              );
+            })}
+          </View>
         );
       })}
     </View>
@@ -345,6 +377,8 @@ const styles = StyleSheet.create({
   cardTitle: { fontFamily: fonts.heavy, fontSize: 20, color: colors.ink },
   onRed: { fontFamily: fonts.body, fontSize: 14.5, lineHeight: 20, color: '#FFE7E0' },
   row: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginTop: 4 },
-  learnHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  learnHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  learnTitle: { flex: 1, fontFamily: fonts.heavy, fontSize: 14, color: colors.ink },
+  countdown: { fontFamily: fonts.heavy, fontSize: 14, color: colors.white, marginTop: 2 },
   small: { fontFamily: fonts.body, fontSize: 12.5, color: colors.muted },
 });
