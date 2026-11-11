@@ -27,7 +27,23 @@ import {
   type GroupSettings,
   type GroupType,
 } from './domain/groups';
-import { myPractice, recordPlay, setKnowsPart } from './domain/practice';
+import {
+  addToOrder,
+  copyOrder,
+  createEvent,
+  deleteEvent,
+  eventDetails,
+  listEvents,
+  listReplies,
+  removeFromOrder,
+  reply,
+  setOrder,
+  songHistory,
+  updateEvent,
+  type EventKind,
+  type Reply,
+} from './domain/events';
+import { myPractice, partReadiness, recordPlay, setKnowsPart } from './domain/practice';
 import {
   addToRepertoire,
   deleteSong,
@@ -183,6 +199,7 @@ app.use('/me', signedIn);
 app.use('/me/*', signedIn);
 app.use('/groups', signedIn);
 app.use('/groups/*', signedIn);
+app.use('/events/*', signedIn);
 
 app.get('/me', async (c) => {
   const me = c.get('userId');
@@ -273,6 +290,91 @@ app.delete('/groups/:id/repertoire/:songId', async (c) => {
   await removeFromRepertoire(c.env.DB, c.get('userId'), c.req.param('id'), c.req.param('songId'));
   return c.json({ ok: true });
 });
+
+/* ---------- Schedule: services, rehearsals, concerts and their song orders ---------- */
+
+const kind = (b: Record<string, unknown>): EventKind | undefined => text(b, 'kind') as EventKind | undefined;
+
+app.get('/groups/:id/events', async (c) =>
+  c.json(await listEvents(c.env.DB, c.get('userId'), c.req.param('id'), { from: c.req.query('from'), to: c.req.query('to') })),
+);
+
+app.post('/groups/:id/events', async (c) => {
+  const b = await body(c);
+  const event = await createEvent(c.env.DB, c.get('userId'), c.req.param('id'), {
+    kind: kind(b) ?? ('' as EventKind),
+    title: text(b, 'title') ?? '',
+    startsAt: text(b, 'starts_at') ?? '',
+    venue: text(b, 'venue'),
+    note: text(b, 'note'),
+    repeatWeeks: typeof b.repeat_weeks === 'number' ? b.repeat_weeks : 0,
+  });
+  return c.json(event, 201);
+});
+
+/** When each song was last sung, for "last sung 3 weeks ago" while planning. */
+app.get('/groups/:id/song-history', async (c) => c.json(await songHistory(c.env.DB, c.get('userId'), c.req.param('id'))));
+
+app.get('/events/:id', async (c) => c.json(await eventDetails(c.env.DB, c.get('userId'), c.req.param('id'))));
+
+app.patch('/events/:id', async (c) => {
+  const b = await body(c);
+  return c.json(
+    await updateEvent(c.env.DB, c.get('userId'), c.req.param('id'), {
+      kind: kind(b),
+      title: text(b, 'title'),
+      startsAt: text(b, 'starts_at'),
+      venue: text(b, 'venue'),
+      note: text(b, 'note'),
+    }),
+  );
+});
+
+app.delete('/events/:id', async (c) => {
+  await deleteEvent(c.env.DB, c.get('userId'), c.req.param('id'));
+  return c.json({ ok: true });
+});
+
+app.post('/events/:id/items', async (c) => {
+  const b = await body(c);
+  const songId = text(b, 'song_id');
+  if (!songId) throw badRequest('Choose a song.');
+  return c.json(await addToOrder(c.env.DB, c.get('userId'), c.req.param('id'), { songId, section: text(b, 'section') }), 201);
+});
+
+app.delete('/events/:id/items/:itemId', async (c) => {
+  await removeFromOrder(c.env.DB, c.get('userId'), c.req.param('itemId'));
+  return c.json({ ok: true });
+});
+
+/** The whole order, top to bottom, each song with its section. */
+app.put('/events/:id/order', async (c) => {
+  const b = await body(c);
+  const items = Array.isArray(b.items)
+    ? b.items
+        .filter((i): i is Record<string, unknown> => !!i && typeof i === 'object')
+        .map((i) => ({ id: String(i.id ?? ''), section: typeof i.section === 'string' ? i.section : '' }))
+    : null;
+  if (!items) throw badRequest('Send the order as a list.');
+  return c.json(await setOrder(c.env.DB, c.get('userId'), c.req.param('id'), items));
+});
+
+app.post('/events/:id/copy-order', async (c) => {
+  const from = text(await body(c), 'from_event_id');
+  if (!from) throw badRequest('Choose which service to copy from.');
+  return c.json(await copyOrder(c.env.DB, c.get('userId'), c.req.param('id'), from));
+});
+
+app.put('/events/:id/reply', async (c) => {
+  const status = text(await body(c), 'status') as Reply | undefined;
+  await reply(c.env.DB, c.get('userId'), c.req.param('id'), status ?? ('' as Reply));
+  return c.json({ ok: true });
+});
+
+app.get('/events/:id/replies', async (c) => c.json(await listReplies(c.env.DB, c.get('userId'), c.req.param('id'))));
+
+/** How ready each part is: totals only, for leaders and part leaders. */
+app.get('/events/:id/readiness', async (c) => c.json(await partReadiness(c.env.DB, c.get('userId'), c.req.param('id'))));
 
 /* ---------- Errors ---------- */
 

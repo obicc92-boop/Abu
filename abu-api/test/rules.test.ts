@@ -188,7 +188,7 @@ describe('Services, replies and attendance', () => {
     const { db, id, event } = await world();
     await reply(db, id.adaeze, event.id, 'going');
     await reply(db, id.adaeze, event.id, 'cant');
-    expect(await listReplies(db, id.emeka, event.id)).toEqual([{ user_id: id.adaeze, status: 'cant' }]);
+    expect((await listReplies(db, id.emeka, event.id)).map((r) => [r.user_id, r.status, r.display_name, r.part])).toEqual([[id.adaeze, 'cant', 'Adaeze Obi', 'A']]);
     await expect(reply(db, id.tobi, event.id, 'going')).rejects.toMatchObject(denied());
   });
 
