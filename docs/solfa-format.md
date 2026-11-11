@@ -44,7 +44,7 @@ tempo: 84
 
 [Verse]
 S  d :- /d :t1 | l1:s1 /d :r  | m :- /- :-  |
-W  All - peo-ple that on earth do dwell
+W  All peo-ple that on earth do dwell
 A  s1:- /l1:s1 | m1:m1 /s1:t1 | d :- /- :-  |
 T  m :- /f :r  | d :d  /m :r  | s :- /- :-  |
 B  d1:- /f1:s1 | l1:m1 /d1:s1 | d1:- /- :-  |
