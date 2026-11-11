@@ -11,6 +11,8 @@
   "type": "module",
   "private": true,
   "dependencies": {
+    "@better-auth/expo": "^1.7.20",
+    "better-auth": "^1.7.20",
     "hono": "^4.13.18"
   },
   "devDependencies": {

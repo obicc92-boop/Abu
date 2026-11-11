@@ -77,6 +77,20 @@ export async function ensureUser(db: D1Database, user: { id: string; name?: stri
   ]);
 }
 
+/** Change your own name. */
+export async function updateProfile(db: D1Database, me: string, patch: { display_name?: string }): Promise<Profile> {
+  if (patch.display_name !== undefined) {
+    const name = patch.display_name.trim();
+    if (!name) throw badRequest('Enter your name.');
+    try {
+      await db.prepare('update profiles set display_name = ? where id = ?').bind(name.slice(0, 80), me).run();
+    } catch (e) {
+      throw friendly(e);
+    }
+  }
+  return getProfile(db, me, me);
+}
+
 /** Your own profile, or someone you share a group with. */
 export async function getProfile(db: D1Database, me: string, userId: string): Promise<Profile> {
   if (userId !== me && !(await sharesGroup(db, me, userId))) throw notFound('That person isn’t in any of your groups.');

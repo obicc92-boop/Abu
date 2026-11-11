@@ -13,8 +13,8 @@
     "run_worker_first": ["/api/*"],
     // /song/old100 serves song/old100.html
     "html_handling": "auto-trailing-slash",
-    // Unknown paths get dist/404.html (a copy of Expo Router's +not-found page)
-    "not_found_handling": "404-page",
+    // The web app is a single-page app: any other path loads it, and its router takes over.
+    "not_found_handling": "single-page-application",
   },
   "d1_databases": [
     {
@@ -24,5 +24,7 @@
       "migrations_dir": "migrations",
     },
   ],
+  // Where sign-in lives. Change when Abụ gets its own domain.
+  "vars": { "BETTER_AUTH_URL": "https://abu.adalingo.workers.dev" },
   "observability": { "enabled": true },
 }

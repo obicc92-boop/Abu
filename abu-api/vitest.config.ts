@@ -9,7 +9,13 @@ export default defineConfig(async () => {
     plugins: [
       cloudflareTest({
         wrangler: { configPath: './wrangler.jsonc' },
-        miniflare: { bindings: { TEST_MIGRATIONS: migrations } },
+        miniflare: {
+          bindings: {
+            TEST_MIGRATIONS: migrations,
+            BETTER_AUTH_URL: 'https://abu.test',
+            BETTER_AUTH_SECRET: 'test-only-secret-that-is-long-enough-for-better-auth',
+          },
+        },
       }),
     ],
     test: { setupFiles: ['./test/apply-migrations.ts'] },
