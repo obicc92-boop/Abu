@@ -1,0 +1,28 @@
+// The "abu" Worker: serves the web app (built into ../abu-app/dist) and the
+// API under /api, backed by the D1 database "abu".
+// Deploy with `npm run deploy` (builds the web app first).
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "abu",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "../abu-app/dist",
+    "binding": "ASSETS",
+    // Only the API runs Worker code; pages and files are served directly.
+    "run_worker_first": ["/api/*"],
+    // /song/old100 serves song/old100.html
+    "html_handling": "auto-trailing-slash",
+    // Unknown paths get dist/404.html (a copy of Expo Router's +not-found page)
+    "not_found_handling": "404-page",
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "abu",
+      "database_id": "c69131cb-a523-4959-a843-e2d4fcbc5d83",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "observability": { "enabled": true },
+}
