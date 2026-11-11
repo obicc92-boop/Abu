@@ -55,6 +55,7 @@ import {
   type AttendanceStatus,
 } from './domain/attendance';
 import { deleteNotice, listNotices, pinNotice, postNotice } from './domain/notices';
+import { leaderTodo } from './domain/todo';
 import { myPractice, partReadiness, practiceSummary, recordPlay, setKnowsPart } from './domain/practice';
 import {
   addToRepertoire,
@@ -443,6 +444,11 @@ app.get('/groups/:id/attendance.csv', async (c) => {
     'cache-control': 'private, no-store',
   });
 });
+
+/* ---------- The leader's To do ---------- */
+
+/** What needs doing now, most urgent first (leaders; part leaders for their part). */
+app.get('/groups/:id/todo', async (c) => c.json(await leaderTodo(c.env.DB, c.get('userId'), c.req.param('id'))));
 
 /* ---------- Notices ---------- */
 
