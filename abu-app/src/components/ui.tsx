@@ -180,6 +180,15 @@ export function PartPicker({ value, onChange, allowNone }: { value: string | nul
   );
 }
 
+/** A rounded toggle, for filters and tags. */
+export function Chip({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityState={{ selected: on }} style={[styles.chip, on && styles.chipOn]}>
+      <Text style={[styles.chipText, on && { color: colors.white }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
 /** A part's name in its colour, e.g. for "Alto" next to a name. */
 export function PartTag({ part }: { part: string | null }) {
   if (!part) return null;
@@ -210,6 +219,8 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     fontSize: 16,
     color: colors.ink,
+    // The focus ring, in the brand red instead of the browser's blue.
+    outlineColor: colors.red,
   },
   hint: { fontFamily: fonts.body, fontSize: 12.5, color: colors.muted },
   error: { fontFamily: fonts.bold, fontSize: 13.5, color: colors.redDeep },
@@ -239,4 +250,7 @@ const styles = StyleSheet.create({
   partDotText: { fontFamily: fonts.heavy, fontSize: 13, color: colors.white },
   partLabel: { fontFamily: fonts.bold, fontSize: 15, color: colors.muted },
   partTag: { fontFamily: fonts.bold, fontSize: 13 },
+  chip: { paddingHorizontal: 13, paddingVertical: 7, borderRadius: 999, borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.white },
+  chipOn: { backgroundColor: colors.ink, borderColor: colors.ink },
+  chipText: { fontFamily: fonts.bold, fontSize: 13, color: colors.ink },
 });

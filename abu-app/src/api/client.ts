@@ -68,6 +68,45 @@ export interface Song {
   time_signature: string;
   tags: string[];
   solfa: string;
+  sheet_key: string | null;
+  sheet_type: string | null;
+  shared_by: string | null;
+  shared_by_name: string | null;
+  shared_from_group: string | null;
+  group_name: string | null;
+}
+
+export interface SongInput {
+  title: string;
+  composer: string;
+  doh: number;
+  time_signature: string;
+  tags: string[];
+  solfa: string;
+}
+
+/** What you can do with a song, and your own practice of it. */
+export interface SongForMe {
+  can_edit: boolean;
+  /** Your groups that have it in their repertoire (your own space = My songs). */
+  in_groups: string[];
+  plays: number;
+  knows_part: boolean;
+}
+
+export interface SongFilters {
+  query?: string;
+  tag?: string;
+  playable?: boolean;
+}
+
+/** A file to attach: on the web a File, on phones a local uri. */
+export interface PickedFile {
+  name: string;
+  type: string;
+  size?: number;
+  uri: string;
+  file?: Blob;
 }
 
 export class ApiError extends Error {
@@ -81,7 +120,7 @@ export class ApiError extends Error {
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
-  if (init.body) headers.set('Content-Type', 'application/json');
+  if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   const cookie = await authCookie();
   if (cookie) headers.set('Cookie', cookie);
   let res: Response;
@@ -113,9 +152,41 @@ export const api = {
     request<{ ok: true }>(`/groups/${groupId}/members/${userId}`, json('PATCH', patch)),
   removeMember: (groupId: string, userId: string) => request<{ ok: true }>(`/groups/${groupId}/members/${userId}`, { method: 'DELETE' }),
 
-  songs: (query?: string) => request<Song[]>(`/songs${query ? `?q=${encodeURIComponent(query)}` : ''}`),
+  songs: (f: SongFilters = {}) => {
+    const q = new URLSearchParams();
+    if (f.query?.trim()) q.set('q', f.query.trim());
+    if (f.tag) q.set('tag', f.tag);
+    if (f.playable) q.set('playable', '1');
+    const qs = q.toString();
+    return request<Song[]>(`/songs${qs ? `?${qs}` : ''}`);
+  },
   song: (id: string) => request<Song>(`/songs/${encodeURIComponent(id)}`),
+  songForMe: (id: string) => request<SongForMe>(`/songs/${encodeURIComponent(id)}/me`),
+  shareSong: (input: SongInput & { shared_from_group: string | null }) => request<Song>('/songs', json('POST', input)),
+  editSong: (id: string, patch: Partial<SongInput>) => request<Song>(`/songs/${id}`, json('PATCH', patch)),
+  deleteSong: (id: string) => request<{ ok: true }>(`/songs/${id}`, { method: 'DELETE' }),
+  attachSheet: async (id: string, picked: PickedFile) => {
+    const body = picked.file ?? (await (await fetch(picked.uri)).blob());
+    return request<Song>(`/songs/${id}/sheet`, { method: 'PUT', body, headers: { 'Content-Type': picked.type } });
+  },
+  removeSheet: (id: string) => request<Song>(`/songs/${id}/sheet`, { method: 'DELETE' }),
+  recordPlay: (id: string) => request<{ plays: number }>(`/songs/${id}/plays`, { method: 'POST' }),
+  setKnowsPart: (id: string, knows: boolean) => request<{ ok: true }>(`/songs/${id}/knows`, json('PUT', { knows })),
+
+  repertoire: (groupId: string) => request<Song[]>(`/groups/${groupId}/repertoire`),
+  addToRepertoire: (groupId: string, songId: string) => request<{ ok: true }>(`/groups/${groupId}/repertoire`, json('POST', { song_id: songId })),
+  removeFromRepertoire: (groupId: string, songId: string) => request<{ ok: true }>(`/groups/${groupId}/repertoire/${songId}`, { method: 'DELETE' }),
 };
+
+/** Where the original sheet can be opened (anyone may view it). */
+export function sheetUrl(songId: string): string {
+  return `${API_URL}/api/songs/${encodeURIComponent(songId)}/sheet`;
+}
+
+/** A link to a song's page, for sharing. */
+export function songLink(songId: string): string {
+  return `${SITE_URL}/song/${encodeURIComponent(songId)}`;
+}
 
 /** A link that opens the join screen with the code filled in. */
 export function inviteLink(code: string): string {

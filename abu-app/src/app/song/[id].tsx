@@ -1,34 +1,37 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { api } from '@/api/client';
+import { api, type Song } from '@/api/client';
 import { partLevel } from '@/audio/engine';
 import { useSongPlayer } from '@/audio/use-song-player';
 import { PartMixer, PlayButton, Stepper, ToggleRow } from '@/components/player-controls';
 import { Score } from '@/components/score';
+import { SongActions } from '@/components/song-actions';
 import { DEMO_SONGS, type DemoSong } from '@/data/demo-songs';
 import { KEY_NAMES, mod12, parseSolfa } from '@/solfa';
+import { useSession } from '@/state/session';
 import { colors, fonts } from '@/theme/tokens';
 
 export default function SongScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const demo = DEMO_SONGS.find((s) => s.id === id);
-  // Songs shared on Abụ come from the API; the demo songs are built in.
-  const shared = useQuery({ queryKey: ['song', id], queryFn: () => api.song(id), enabled: !demo && !!id, retry: false });
-  const song: DemoSong | undefined =
-    demo ??
-    (shared.data && {
-      id: shared.data.id,
-      title: shared.data.title,
-      composer: shared.data.composer,
-      key: shared.data.doh,
-      time: shared.data.time_signature,
-      tags: shared.data.tags,
-      solfa: shared.data.solfa,
-    });
+  // Every song comes from the library; the demo songs are also built in, so they
+  // open instantly and still play with no connection.
+  const shared = useQuery({ queryKey: ['song', id], queryFn: () => api.song(id), enabled: !!id, retry: demo ? 0 : 1 });
+  const song: DemoSong | undefined = shared.data
+    ? {
+        id: shared.data.id,
+        title: shared.data.title,
+        composer: shared.data.composer,
+        key: shared.data.doh,
+        time: shared.data.time_signature,
+        tags: shared.data.tags,
+        solfa: shared.data.solfa,
+      }
+    : demo;
 
   if (!song) {
     return (
@@ -40,17 +43,36 @@ export default function SongScreen() {
   if (!song.solfa.trim()) {
     return (
       <SafeAreaView style={styles.page}>
-        <TopBar title={song.title} subtitle={song.composer} />
-        <Text style={[styles.hint, { padding: 16 }]}>Nobody has typed this song in sol-fa yet, so it can’t play.</Text>
+        <TopBar title={song.title} subtitle={[song.composer, 'sheet only'].filter(Boolean).join(' · ')} />
+        <ScrollView contentContainerStyle={styles.body}>
+          <Text style={[styles.hint, { textAlign: 'left', fontSize: 14 }]}>
+            Nobody has typed this song in sol-fa yet, so it can’t play. Open the original sheet below, or type the sol-fa if you’re in the group that shared it.
+          </Text>
+          <SongActions songId={song.id} song={shared.data} />
+        </ScrollView>
       </SafeAreaView>
     );
   }
-  return <Player key={song.id} song={song} />;
+  return <Player key={`${song.id}-${shared.data?.solfa.length ?? 0}`} song={song} apiSong={shared.data} />;
 }
 
-function Player({ song }: { song: DemoSong }) {
-  const parsed = useMemo(() => parseSolfa(song.solfa, { time: song.time, key: song.key }), [song]);
-  const p = useSongPlayer(parsed, song.key);
+function Player({ song, apiSong }: { song: DemoSong; apiSong?: Song }) {
+  const parsed = useMemo(() => parseSolfa(song.solfa, { time: song.time, key: song.key }), [song.solfa, song.time, song.key]);
+  const { status, group } = useSession();
+  const p = useSongPlayer(parsed, song.key, group?.part ?? null);
+  const queryClient = useQueryClient();
+
+  // Each time you play the song through, count it (privately) when signed in.
+  const counted = useRef(0);
+  useEffect(() => {
+    if (p.timesPlayed <= counted.current) return;
+    counted.current = p.timesPlayed;
+    if (status !== 'signedIn' || !apiSong) return;
+    void api
+      .recordPlay(song.id)
+      .then(() => queryClient.invalidateQueries({ queryKey: ['songForMe', song.id] }))
+      .catch(() => {});
+  }, [p.timesPlayed, status, apiSong, song.id, queryClient]);
   const insets = useSafeAreaInsets();
   const keyName = KEY_NAMES[mod12(song.key + p.transpose)];
   const silent = useMemo(() => Object.fromEntries(parsed.parts.map((part) => [part, partLevel(part, p.mix) === 0])), [parsed, p.mix]);
@@ -69,7 +91,7 @@ function Player({ song }: { song: DemoSong }) {
 
   return (
     <SafeAreaView style={styles.page} edges={['top', 'left', 'right']}>
-      <TopBar title={song.title} subtitle={`${song.composer} · Doh is ${keyName} · ${parsed.meta.time}`} />
+      <TopBar title={song.title} subtitle={[song.composer, `Doh is ${keyName}`, parsed.meta.time].filter(Boolean).join(' · ')} />
       <ScrollView
         ref={scrollRef}
         contentContainerStyle={styles.body}
@@ -97,11 +119,7 @@ function Player({ song }: { song: DemoSong }) {
 
         {p.message ? <Text style={styles.message}>{p.message}</Text> : null}
         {parsed.parts.length > 1 ? <Text style={styles.hint}>Tap a letter to mute that part. “Mine” sets your part.</Text> : null}
-        {p.timesPlayed > 0 ? (
-          <Text style={styles.hint}>
-            Practised {p.timesPlayed} {p.timesPlayed === 1 ? 'time' : 'times'}
-          </Text>
-        ) : null}
+        <SongActions songId={song.id} song={apiSong} />
       </ScrollView>
 
       <View style={[styles.transport, { paddingBottom: 10 + insets.bottom }]}>

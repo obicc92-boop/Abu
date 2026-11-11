@@ -32,11 +32,12 @@ Sound on Android and iOS comes from `react-native-audio-api`, a native module, s
 - `src/app/`: screens (Expo Router).
   - `(tabs)/`: the five tabs: Home (`index.tsx`), Songs, Schedule, Group, Me. Anyone neither signed in nor looking around is sent to `welcome`.
   - `welcome.tsx`, `auth.tsx`, `join.tsx`, `create-group.tsx`, `just-me.tsx`: onboarding.
-  - `song/[id].tsx`: the player, for demo songs and songs from the API.
+  - `song/[id].tsx`: the player, with the song's actions and your practice (`components/song-actions.tsx`). Sheet-only songs show their sheet and a "Type the sol-fa" button.
+  - `song-editor.tsx`: add a song, or edit one (`?id=`). It checks the sol-fa as you type (`components/solfa-check.tsx`), previews and plays it, takes tags, and attaches the original sheet.
 - `src/api/`: the API client and types (`client.ts`), and where the API lives (`config.ts`, `config.web.ts`).
 - `src/auth/`: the Better Auth client: secure storage on phones, cookies on the web.
 - `src/state/session.tsx`: who is signed in, their groups, the current group (remembered on the device), and "looking around".
-- `src/lib/`: device settings storage and group type names.
+- `src/lib/`: device settings storage, group type names, and suggested song tags.
 - `src/solfa/`: the sol-fa reader and pitch helpers, ported from the prototype. Read its README first.
 - `src/score/layout.ts`: splits a song into lines of beat columns (port of `scoreHTML`).
 - `src/audio/`: the synth and scheduler (`engine.ts`), the audio context for web (`context.web.ts`) and phones (`context.ts`), and the `useSongPlayer` hook.
