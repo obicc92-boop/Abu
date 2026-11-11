@@ -12,7 +12,16 @@ npm run typecheck
 npx expo lint
 ```
 
-`app.json` sets web output to `static`, so `npx expo export -p web` gives plain files any static host can serve. Each demo song gets its own pre-rendered page (`generateStaticParams` in `src/app/song/[id].tsx`).
+`app.json` sets web output to `static`, so `npm run build:web` gives plain files in `dist/` that any static host can serve. Each demo song gets its own pre-rendered page (`generateStaticParams` in `src/app/song/[id].tsx`).
+
+### Deploy (Cloudflare)
+
+```sh
+npx wrangler login   # once, to the Cloudflare account
+npm run deploy:web   # build dist/ and upload it
+```
+
+It deploys as the `abu` Worker with static assets only (`wrangler.jsonc`), live at https://abu.adalingo.workers.dev. Clean URLs (`/song/old100`) serve the pre-rendered pages, and unknown paths get the not-found page with a 404. `public/_headers` lets phones keep the hashed scripts, fonts and images for a year, while pages are re-checked on every visit, so a new deploy shows at once.
 
 ### Phones
 

@@ -40,6 +40,8 @@ The product owner has a pilot choir ready to test. Nothing has been built yet be
 
 The live prototype the owner shares with colleagues is published from `prototype/index.html`.
 
+The real app's web build is live at https://abu.adalingo.workers.dev (Cloudflare Workers, deployed with `npm run deploy:web` in `abu-app/`).
+
 ## MVP scope
 
 1. **Accounts and spaces**

@@ -1,0 +1,7 @@
+# Cloudflare headers. Scripts, fonts and images have content hashes in their
+# names, so phones can keep them: less data on every visit.
+/_expo/static/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
