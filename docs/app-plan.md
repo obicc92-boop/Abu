@@ -19,7 +19,7 @@ Research behind this (November 2026): no app was found that teaches choir parts 
 | Topic | Decision |
 |---|---|
 | Tabs | **Home · Songs · Schedule · Group · Me.** Learning lives on Home. |
-| Sign-in | **Google and email** at launch. Phone number with an SMS code comes later. |
+| Sign-in | **Email and password for now**, so no domain or Google setup is needed yet. Email codes and Google come later (they attach to the same accounts), then phone number with an SMS code. |
 | Joining with a code | **Instant by default**, with a switch for the leader to approve new members. |
 | Practice privacy | Leaders see **totals per part** (practice, and how many marked "I know my part"). Each member's own practice history is visible only to them. |
 | Roles | **Leader, part leader and member** only, for now. |
@@ -180,9 +180,9 @@ Drafts: `design/brand-draft.html` (sources in `design/brand/`).
 Each milestone ends merged, pushed and deployed. Home grows with them: each milestone adds its cards to Home.
 
 1. **Database.** *Done.* The D1 schema (groups, members, songs, repertoire, services and song orders, replies, attendance, notices, practice) and the Worker's access rules for who can see and change what (for example, part leaders mark only their own part, and practice is private). Tests cover both.
-2. **Sign-in and onboarding.**
-   - Email sign-in with a code, then Google.
-   - The welcome screen; joining by code or link (instant, or waiting for approval); starting a group with the invite step; "Just me"; "Look around first".
+2. **Sign-in and onboarding.** *Done.*
+   - Email and password sign-in (codes and Google later).
+   - The welcome screen; joining by code or invite link (instant, or waiting for approval); starting a group with the WhatsApp invite step; "Just me"; "Look around first".
    - The five-tab shell.
 3. **Songs.**
    - The library from the database, with search and filters.

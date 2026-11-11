@@ -22,7 +22,7 @@ The product owner has a pilot choir ready to test. The real app is started: `abu
 | Pen input | **Version 1.5, after the MVP.** Composers write sol-fa by hand on a tablet in a guided grid (one lane per part plus words, beat boxes, bar lines pre-drawn). Each box is converted to text with uncertain boxes flagged, the result plays back, and the handwriting is kept as the original manuscript. A phone sol-fa keypad covers quick entry without a pen. |
 | Copyright | The owner's sample sheets (PDFs) are copyrighted. **Never commit them.** `docs/solfa-format.md` records what was learned from them. |
 | Tabs | **Home · Songs · Schedule · Group · Me.** Learning lives on Home. Without a group, Schedule is "Setlists" and Group is "Groups". Full plan: `docs/app-plan.md`. |
-| Sign-in | **Google and email** at launch, through Better Auth on the Worker. Phone number with an SMS code comes later. |
+| Sign-in | Better Auth on the Worker. **For now: email and password**, so people get in with no domain or Google setup (owner's call, 11 November 2026). **Later:** email codes (needs a sending domain on Cloudflare), Google, then phone number with an SMS code. The temporary address is abu.adalingo.workers.dev. |
 | Joining | A code or invite link joins **instantly by default**; the leader can switch on approval for new members. |
 | Practice privacy | Leaders see **totals per part** (practice, and how many marked "I know my part"). A member's own practice history is visible only to them. |
 | Roles | **Leader, part leader and member** only, for now. |
@@ -85,7 +85,12 @@ The real app is live at https://abu.adalingo.workers.dev: one Cloudflare Worker 
    - `abu-api/migrations/` has the D1 schema.
    - `abu-api/src/domain/` has every action with its access rules: D1 has no row-level security, so the Worker checks every request.
    - `npm test` in `abu-api/` runs the rules as the prototype's personas inside the Workers runtime (see `abu-api/README.md`).
-   - Next is milestone 2, sign-in and onboarding.
+   - Milestone 2 (sign-in and onboarding) is done:
+     - **Sign-in:** email and password through Better Auth on the Worker (`abu-api/src/auth.ts`, migration `0002`).
+     - **Onboarding:** welcome, sign up or in, join by code or invite link (instant, or waiting for approval), start a group with the WhatsApp invite step, "Just me", and "Look around first".
+     - **The five tabs:** Home, Songs, Schedule (a placeholder), Group (members by part, approvals, roles, settings) and Me.
+     - **Checked end to end** in headless Chrome on the live site, with the test data deleted afterwards.
+   - Next is milestone 3, songs.
 
    The schema covers the entities the prototype uses:
    - `users`
