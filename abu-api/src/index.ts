@@ -27,8 +27,23 @@ import {
   type GroupSettings,
   type GroupType,
 } from './domain/groups';
-import { getSong, listSongs } from './domain/songs';
-import { AppError, badRequest } from './errors';
+import { myPractice, recordPlay, setKnowsPart } from './domain/practice';
+import {
+  addToRepertoire,
+  deleteSong,
+  editSong,
+  getSong,
+  listRepertoire,
+  listSongs,
+  prepareSheet,
+  removeFromRepertoire,
+  setSheet,
+  shareSong,
+  songForMe,
+  type SongInput,
+} from './domain/songs';
+import { newId } from './domain/access';
+import { AppError, badRequest, notFound } from './errors';
 
 type App = { Bindings: Env; Variables: { userId: string } };
 
@@ -44,8 +59,32 @@ app.get('/health', async (c) => {
 // Sign up, sign in, sign out, session: handled by Better Auth.
 app.on(['GET', 'POST'], '/auth/*', (c) => getAuth(c.env).handler(c.req.raw));
 
-app.get('/songs', async (c) => c.json(await listSongs(c.env.DB, { query: c.req.query('q') })));
+app.get('/songs', async (c) =>
+  c.json(
+    await listSongs(c.env.DB, {
+      query: c.req.query('q'),
+      tag: c.req.query('tag'),
+      playable: c.req.query('playable') === '1',
+    }),
+  ),
+);
 app.get('/songs/:id', async (c) => c.json(await getSong(c.env.DB, c.req.param('id'))));
+
+/** The original sheet (PDF or photo). Public, like the song. */
+app.get('/songs/:id/sheet', async (c) => {
+  const song = await getSong(c.env.DB, c.req.param('id'));
+  const file = song.sheet_key ? await c.env.SHEETS.get(song.sheet_key) : null;
+  if (!file) throw notFound('This song has no original sheet attached.');
+  const ext = song.sheet_key!.split('.').pop();
+  const name = song.title.replace(/[^\w .-]+/g, '').trim() || 'sheet';
+  return new Response(file.body, {
+    headers: {
+      'content-type': song.sheet_type ?? 'application/octet-stream',
+      'content-disposition': `inline; filename="${name}.${ext}"`,
+      'cache-control': 'public, max-age=86400',
+    },
+  });
+});
 
 /* ---------- Signed in ---------- */
 
@@ -65,6 +104,80 @@ const text = (b: Record<string, unknown>, key: string): string | undefined => (t
 const flag = (b: Record<string, unknown>, key: string): boolean | undefined => (typeof b[key] === 'boolean' ? (b[key] as boolean) : undefined);
 /** A voice part, or null for "not set" / "I don't sing". */
 const part = (b: Record<string, unknown>): string | null => text(b, 'part')?.trim() || null;
+
+/* ---------- Songs (signed in) ---------- */
+
+function songInput(b: Record<string, unknown>): SongInput {
+  return {
+    title: text(b, 'title'),
+    composer: text(b, 'composer'),
+    doh: typeof b.doh === 'number' ? b.doh : undefined,
+    time_signature: text(b, 'time_signature'),
+    tags: Array.isArray(b.tags) ? b.tags.filter((t): t is string => typeof t === 'string') : undefined,
+    solfa: text(b, 'solfa'),
+  };
+}
+
+app.post('/songs', signedIn, async (c) => {
+  const b = await body(c);
+  const song = await shareSong(c.env.DB, c.get('userId'), {
+    ...songInput(b),
+    title: text(b, 'title') ?? '',
+    shared_from_group: text(b, 'shared_from_group') ?? null,
+  });
+  return c.json(song, 201);
+});
+
+app.patch('/songs/:id', signedIn, async (c) => c.json(await editSong(c.env.DB, c.get('userId'), c.req.param('id'), songInput(await body(c)))));
+
+app.delete('/songs/:id', signedIn, async (c) => {
+  const sheet = await deleteSong(c.env.DB, c.get('userId'), c.req.param('id'));
+  if (sheet) await c.env.SHEETS.delete(sheet);
+  return c.json({ ok: true });
+});
+
+/** What you can do with a song, and your own practice of it. */
+app.get('/songs/:id/me', signedIn, async (c) => c.json(await songForMe(c.env.DB, c.get('userId'), c.req.param('id'))));
+
+const SHEET_TYPES: Record<string, string> = { 'application/pdf': 'pdf', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+const MAX_SHEET_BYTES = 10 * 1024 * 1024;
+
+/** Attach or replace the original sheet. The body is the file; Content-Type says what it is. */
+app.put('/songs/:id/sheet', signedIn, async (c) => {
+  const songId = c.req.param('id');
+  const type = (c.req.header('content-type') ?? '').split(';')[0].trim().toLowerCase();
+  const ext = SHEET_TYPES[type];
+  if (!ext) throw badRequest('Attach a PDF, or a photo (JPEG, PNG or WebP).');
+  if (Number(c.req.header('content-length') ?? 0) > MAX_SHEET_BYTES) throw badRequest('That file is over 10 MB. Try a smaller photo or PDF.');
+  await prepareSheet(c.env.DB, c.get('userId'), songId);
+  const file = await c.req.arrayBuffer();
+  if (!file.byteLength) throw badRequest('That file is empty.');
+  if (file.byteLength > MAX_SHEET_BYTES) throw badRequest('That file is over 10 MB. Try a smaller photo or PDF.');
+  const key = `sheets/${songId}/${newId()}.${ext}`;
+  await c.env.SHEETS.put(key, file, { httpMetadata: { contentType: type } });
+  const old = await setSheet(c.env.DB, songId, key, type);
+  if (old) await c.env.SHEETS.delete(old);
+  return c.json(await getSong(c.env.DB, songId));
+});
+
+app.delete('/songs/:id/sheet', signedIn, async (c) => {
+  const songId = c.req.param('id');
+  await prepareSheet(c.env.DB, c.get('userId'), songId);
+  const old = await setSheet(c.env.DB, songId, null, null);
+  if (old) await c.env.SHEETS.delete(old);
+  return c.json(await getSong(c.env.DB, songId));
+});
+
+/** Count a play-through (the player calls this at the end of a song). */
+app.post('/songs/:id/plays', signedIn, async (c) => c.json(await recordPlay(c.env.DB, c.get('userId'), c.req.param('id'))));
+
+/** "I know my part", on or off. */
+app.put('/songs/:id/knows', signedIn, async (c) => {
+  const knows = flag(await body(c), 'knows');
+  if (knows === undefined) throw badRequest('Say whether you know your part.');
+  await setKnowsPart(c.env.DB, c.get('userId'), c.req.param('id'), knows);
+  return c.json({ ok: true });
+});
 
 app.use('/me', signedIn);
 app.use('/me/*', signedIn);
@@ -143,6 +256,21 @@ app.delete('/groups/:id/members/:userId', async (c) => {
   const [me, groupId, userId] = [c.get('userId'), c.req.param('id'), c.req.param('userId')];
   if (userId === me) await leaveGroup(c.env.DB, me, groupId);
   else await removeMember(c.env.DB, me, groupId, userId);
+  return c.json({ ok: true });
+});
+
+app.get('/me/practice', async (c) => c.json(await myPractice(c.env.DB, c.get('userId'))));
+
+/** "Our repertoire" (or "My songs" in your own space). */
+app.get('/groups/:id/repertoire', async (c) => c.json(await listRepertoire(c.env.DB, c.get('userId'), c.req.param('id'))));
+app.post('/groups/:id/repertoire', async (c) => {
+  const songId = text(await body(c), 'song_id');
+  if (!songId) throw badRequest('Choose a song.');
+  await addToRepertoire(c.env.DB, c.get('userId'), c.req.param('id'), songId);
+  return c.json({ ok: true });
+});
+app.delete('/groups/:id/repertoire/:songId', async (c) => {
+  await removeFromRepertoire(c.env.DB, c.get('userId'), c.req.param('id'), c.req.param('songId'));
   return c.json({ ok: true });
 });
 

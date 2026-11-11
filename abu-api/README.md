@@ -47,9 +47,18 @@ The database itself guarantees what must never break: a group always keeps a lea
 - `src/index.ts`: the Hono app.
   - Open to everyone: `/api/health`, `/api/songs`, `/api/songs/:id`, and sign-in at `/api/auth/*`.
   - Signed in: `/api/me`, `/api/groups` (create), `/api/groups/preview/:code`, `/api/groups/join`, `/api/groups/:id` (read and settings), and `/api/groups/:id/members` (list, approve, role and part, remove or leave).
+  - Songs, open to everyone: `GET /api/songs` (filters `q`, `tag`, `playable=1`), `GET /api/songs/:id`, and `GET /api/songs/:id/sheet` (the original sheet).
+  - Songs, signed in:
+    - sharing, editing and deleting: `POST /api/songs`, `PATCH` and `DELETE /api/songs/:id`
+    - the sheet: `PUT` (body = the file; PDF, JPEG, PNG or WebP up to 10 MB) and `DELETE /api/songs/:id/sheet`
+    - what you can do with a song: `GET /api/songs/:id/me`
+    - practice: `POST /api/songs/:id/plays`, `PUT /api/songs/:id/knows`, `GET /api/me/practice`
+  - Repertoire: `GET`, `POST /api/groups/:id/repertoire` and `DELETE /api/groups/:id/repertoire/:songId`. Your own space's repertoire is "My songs".
   - Everything else in `src/domain` gets routes with its milestone.
 - `src/domain/`: groups and people, songs and repertoire, events and replies, attendance and check-in, practice, notices.
 - `src/errors.ts`: errors with an HTTP status and a message safe to show people.
 - `src/auth.ts`: sign-in.
+- Sol-fa: `src/domain/songs.ts` imports the app's reader from `../abu-app/src/solfa`, so a song is checked by the same code on both sides. Keep that module free of app-only imports.
+- Original sheets: R2 bucket `abu-sheets` (binding `SHEETS`), under `sheets/<song id>/`.
 - `migrations/`: D1 migrations, applied by `npm run deploy` (or `npm run db:migrate`).
 - `test/`: access rules (`rules.test.ts`), sign-in and onboarding over HTTP (`auth.test.ts`), and the public endpoints (`http.test.ts`).

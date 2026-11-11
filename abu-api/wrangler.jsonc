@@ -24,6 +24,8 @@
       "migrations_dir": "migrations",
     },
   ],
+  // Original sheets (PDFs and photos), keyed by song.
+  "r2_buckets": [{ "binding": "SHEETS", "bucket_name": "abu-sheets" }],
   // Where sign-in lives. Change when Abụ gets its own domain.
   "vars": { "BETTER_AUTH_URL": "https://abu.adalingo.workers.dev" },
   "observability": { "enabled": true },

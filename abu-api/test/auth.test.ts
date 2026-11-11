@@ -3,33 +3,10 @@
  * Emeka starts a choir, Adaeze joins with the code, then (with approval on)
  * Kelechi waits until Emeka lets him in.
  */
-import { env, SELF } from 'cloudflare:test';
+import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 
-const ORIGIN = 'https://abu.test';
-const PASSWORD = 'choir-practice-2026';
-
-/** Sends a request as the app would, with the session cookie if there is one. */
-function call(path: string, init: RequestInit & { cookie?: string } = {}) {
-  const headers = new Headers(init.headers);
-  headers.set('origin', ORIGIN);
-  if (init.body) headers.set('content-type', 'application/json');
-  if (init.cookie) headers.set('cookie', init.cookie);
-  return SELF.fetch(`${ORIGIN}/api${path}`, { ...init, headers });
-}
-
-const cookieFrom = (res: Response) =>
-  res.headers
-    .getSetCookie()
-    .map((c) => c.split(';')[0])
-    .join('; ');
-
-async function signUp(name: string) {
-  const email = `${name.split(' ')[0].toLowerCase()}-${crypto.randomUUID().slice(0, 6)}@example.com`;
-  const res = await call('/auth/sign-up/email', { method: 'POST', body: JSON.stringify({ name, email, password: PASSWORD }) });
-  expect(res.status).toBe(200);
-  return { email, cookie: cookieFrom(res) };
-}
+import { call, cookieFrom, PASSWORD, signUp } from './helpers';
 
 describe('Signing up and in', () => {
   it('signing up gives you a profile and your own space, and keeps you signed in', async () => {
