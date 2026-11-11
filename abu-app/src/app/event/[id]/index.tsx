@@ -7,10 +7,11 @@ import { Link, Redirect, router, useLocalSearchParams } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { api, type EventDetails, type OrderItem, type Reply } from '@/api/client';
+import { CheckedIn, CheckIn } from '@/components/check-in';
 import { Readiness } from '@/components/readiness';
 import { ReplyButtons } from '@/components/reply-buttons';
 import { Body, Button, Card, ErrorText, Kicker, Loading, Page, TopBar } from '@/components/ui';
-import { fmtDate, fmtTime, isOver, relDay } from '@/lib/dates';
+import { checkInOpen, fmtDate, fmtTime, hasStarted, isOver, relDay } from '@/lib/dates';
 import { kindLabel, kindNoun } from '@/lib/group-types';
 import { bySection } from '@/lib/order';
 import { KEY_NAMES } from '@/solfa';
@@ -67,6 +68,7 @@ function EventView({ details }: { details: EventDetails }) {
       ) : null}
 
       {!personal && !past ? <ReplyCard details={details} /> : null}
+      {!personal ? <AttendanceSection details={details} /> : null}
 
       <View style={styles.sectHead}>
         <Kicker>{rehearsal ? 'Songs to prepare' : 'Song order'}</Kicker>
@@ -161,6 +163,50 @@ function ReplyCard({ details }: { details: EventDetails }) {
   );
 }
 
+const MARK_LABEL = { present: 'Present', absent: 'Absent', excused: 'Excused' } as const;
+
+/**
+ * Members: check in with the code while it's open, then see their own mark.
+ * Leaders and part leaders: how many are present, Mark, and the code to show.
+ */
+function AttendanceSection({ details }: { details: EventDetails }) {
+  const e = details.event;
+  const leaderish = details.my_role === 'leader' || details.my_role === 'part_leader';
+  const open = checkInOpen(e.starts_at);
+  const started = hasStarted(e.starts_at);
+  const sheet = useQuery({ queryKey: ['attendance', e.id], queryFn: () => api.attendance(e.id), enabled: leaderish && (open || started) });
+
+  if (leaderish) {
+    if (!open && !started) return null;
+    const rows = sheet.data ?? [];
+    const present = rows.filter((r) => r.status === 'present').length;
+    const excused = rows.filter((r) => r.status === 'excused' || (!r.status && r.reply === 'cant')).length;
+    return (
+      <Card>
+        <View style={styles.attHead}>
+          <View style={{ flex: 1 }}>
+            <Kicker>Attendance</Kicker>
+            <Text style={styles.title}>{sheet.data ? `${present} present of ${rows.length}${excused ? ` · ${excused} excused` : ''}` : 'Loading…'}</Text>
+          </View>
+          <Button small label="Mark" accessibilityLabel="Mark attendance" onPress={() => router.push({ pathname: '/event/[id]/attendance', params: { id: e.id } })} />
+        </View>
+        {details.self_check_in && open ? (
+          <Button small kind="ghost" label="Show the check-in code" onPress={() => router.push({ pathname: '/event/[id]/code', params: { id: e.id } })} style={{ alignSelf: 'flex-start' }} />
+        ) : null}
+      </Card>
+    );
+  }
+  if (details.my_attendance === 'present' && open) return <CheckedIn />;
+  if (details.self_check_in && open) return <CheckIn eventId={e.id} />;
+  if (!started) return null;
+  return (
+    <Card>
+      <Kicker>Your attendance</Kicker>
+      <Text style={styles.title}>{details.my_attendance ? MARK_LABEL[details.my_attendance] : details.my_reply === 'cant' ? 'Excused (you said you can’t come)' : 'Not marked yet'}</Text>
+    </Card>
+  );
+}
+
 /** For an empty order: start from an earlier service's songs. */
 function CopyEarlier({ eventId, groupId }: { eventId: string; groupId: string }) {
   const queryClient = useQueryClient();
@@ -219,5 +265,6 @@ const styles = StyleSheet.create({
   title: { fontFamily: fonts.bold, fontSize: 15, color: colors.ink },
   small: { fontFamily: fonts.body, fontSize: 12.5, color: colors.muted },
   key: { fontFamily: fonts.monoBold, fontSize: 13, color: colors.redDeep },
+  attHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   copyRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6, borderTopWidth: 1, borderTopColor: colors.line },
 });
