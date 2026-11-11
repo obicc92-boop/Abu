@@ -16,12 +16,7 @@ npx expo lint
 
 ### Deploy (Cloudflare)
 
-```sh
-npx wrangler login   # once, to the Cloudflare account
-npm run deploy:web   # build dist/ and upload it
-```
-
-It deploys as the `abu` Worker with static assets only (`wrangler.jsonc`), live at https://abu.adalingo.workers.dev. Clean URLs (`/song/old100`) serve the pre-rendered pages, and unknown paths get the not-found page with a 404. `public/_headers` lets phones keep the hashed scripts, fonts and images for a year, while pages are re-checked on every visit, so a new deploy shows at once.
+The website is served by the `abu` Cloudflare Worker in `../abu-api`, together with the API. Deploy from there with `npm run deploy`: it runs this package's `build:web`, applies database migrations, and deploys. `public/_headers` lets phones keep the hashed scripts, fonts and images for a year, while pages are re-checked on every visit.
 
 ### Phones
 
@@ -29,12 +24,6 @@ Sound on Android and iOS comes from `react-native-audio-api`, a native module, s
 
 - Local: install Android Studio (it brings the JDK), then `npx expo run:android` with a phone plugged in or an emulator running.
 - Cloud: `npx eas-cli@latest build --profile development --platform android`, then install the APK on the phone.
-
-## Database (Supabase)
-
-- **Schema and security rules:** `supabase/migrations/`. Who can see and change what (leaders, part leaders, members, pending members, outsiders, signed-out visitors) is enforced in the database with row-level security, not just in the app.
-- **Tests:** `npm run test:db` runs the rules as the prototype's personas, in an in-process Postgres (PGlite), so it needs no Docker and no Supabase account. `npm test` runs these and the app's unit tests.
-- **Going live:** once the owner has run `npx supabase login` on this Mac, the project is created and linked with `npx supabase projects create` and `npx supabase link`, and `npx supabase db push` applies the migrations.
 
 ## Layout
 

@@ -179,7 +179,7 @@ Drafts: `design/brand-draft.html` (sources in `design/brand/`).
 
 Each milestone ends merged, pushed and deployed. Home grows with them: each milestone adds its cards to Home.
 
-1. **Database.** The Supabase schema: groups, members, songs, repertoire, services and song orders, replies, attendance, notices, practice. Security rules decide who can see and change what (for example, part leaders mark only their own part, and practice is private). Tests cover both. Needs nothing from the owner.
+1. **Database.** *Done.* The D1 schema (groups, members, songs, repertoire, services and song orders, replies, attendance, notices, practice) and the Worker's access rules for who can see and change what (for example, part leaders mark only their own part, and practice is private). Tests cover both.
 2. **Sign-in and onboarding.**
    - Email sign-in with a code, then Google.
    - The welcome screen; joining by code or link (instant, or waiting for approval); starting a group with the invite step; "Just me"; "Look around first".
@@ -202,11 +202,12 @@ Each milestone ends merged, pushed and deployed. Home grows with them: each mile
 
 ### What the owner needs to do
 
-- **Before milestone 2:** create a free Supabase account, then run `npx supabase login` once on the development Mac. That lets the project be created and managed from there without pasting keys into chat. The project will be called "abu", on the free plan, in the region closest to Nigeria.
-- **During milestone 2:** Google sign-in needs an OAuth client in Google Cloud. Step-by-step instructions will come at that point; email sign-in works without it.
-- **Before the pilot:**
-  - An email sender for sign-in codes, such as Resend's free plan, because Supabase's built-in sender only allows a few emails an hour.
-  - Optionally, an Abụ domain to use instead of abu.adalingo.workers.dev.
+Everything runs on the owner's Cloudflare account, which Wrangler on the development Mac is already signed in to, so most milestones need nothing from the owner.
+
+- **During milestone 2:**
+  - Google sign-in needs an OAuth client in Google Cloud; Google's side can't live on Cloudflare. Step-by-step instructions will come at that point.
+  - Email sign-in codes go out through Cloudflare's email service, which needs a domain on Cloudflare to send from.
+- **Before the pilot:** optionally, an Abụ domain on Cloudflare to use instead of abu.adalingo.workers.dev. The same domain can send the sign-in emails.
 
 ## Order of work after the MVP
 

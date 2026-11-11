@@ -2,7 +2,7 @@
 
 Abụ (Igbo for "song") is an app for choirs and music groups that read **tonic sol-fa**. Members learn their part by hearing it played, and leaders organise songs, services and rehearsals in one place. The first users are church choirs in Nigeria (Catholic, Anglican, Pentecostal), plus non-church groups such as bands and orchestras. It will go international later.
 
-The product owner has a pilot choir ready to test. The real app is started in `abu-app/`: the sol-fa reader, the score and the player work on the web, and the web build is live. **Next: the Supabase schema, then the screens in `docs/app-plan.md`.**
+The product owner has a pilot choir ready to test. The real app is started: `abu-app/` (the Expo app: sol-fa reader, score and player, live on the web) and `abu-api/` (the Cloudflare Worker: website hosting, API and D1 database). **Next: milestone 2, sign-in and onboarding (see `docs/app-plan.md`).**
 
 ## Decisions already made (don't re-ask)
 
@@ -11,7 +11,7 @@ The product owner has a pilot choir ready to test. The real app is started in `a
 | Name | **Abụ**. Don't show any company name yet; the owner will provide it later. |
 | Notation | **Tonic sol-fa** for every group type at launch, including bands and orchestras. Staff notation comes later. |
 | Platform | **Phone-friendly web app first**, then Android and iOS from the same code. |
-| Stack | **React Native + Expo (TypeScript)**, with Expo's web output for the first release. **Supabase** for sign-in, Postgres and file storage. Expo is scaffolded in `abu-app/`; Supabase is not set up yet. |
+| Stack | **React Native + Expo (TypeScript)** in `abu-app/`, with Expo's web output for the first release. **Cloudflare for everything it can do** (the owner's rule): one Worker (`abu-api/`) serves the website and the API (Hono), **D1** holds the data, **R2** will hold sheets, **Better Auth** on the Worker handles sign-in (Cloudflare has no sign-in service of its own), and Cloudflare's email service sends sign-in codes. Other vendors only where Cloudflare can't do the job (for example Google sign-in itself, push notifications). |
 | Brand colours | Red `#D93A1E` (main), deep red `#A3261A`, white, gold `#E6A325` (secondary), ink `#22160F`, sand `#F7F1ED`. Each voice part has a fixed colour: Soprano `#D93A1E`, Alto `#C98410`, Tenor `#1C8173`, Bass `#3A4AA6`. |
 | Fonts | Marcellus (app name and big headings only), Figtree (UI text), JetBrains Mono (sol-fa, so beats line up in columns). |
 | Tenor | Written **an octave above** where it sounds, as on printed sheets. Display it as written and play it an octave lower. Bass is read relative to the same lower doh. |
@@ -22,7 +22,7 @@ The product owner has a pilot choir ready to test. The real app is started in `a
 | Pen input | **Version 1.5, after the MVP.** Composers write sol-fa by hand on a tablet in a guided grid (one lane per part plus words, beat boxes, bar lines pre-drawn). Each box is converted to text with uncertain boxes flagged, the result plays back, and the handwriting is kept as the original manuscript. A phone sol-fa keypad covers quick entry without a pen. |
 | Copyright | The owner's sample sheets (PDFs) are copyrighted. **Never commit them.** `docs/solfa-format.md` records what was learned from them. |
 | Tabs | **Home · Songs · Schedule · Group · Me.** Learning lives on Home. Without a group, Schedule is "Setlists" and Group is "Groups". Full plan: `docs/app-plan.md`. |
-| Sign-in | **Google and email** at launch. Phone number with an SMS code comes later. |
+| Sign-in | **Google and email** at launch, through Better Auth on the Worker. Phone number with an SMS code comes later. |
 | Joining | A code or invite link joins **instantly by default**; the leader can switch on approval for new members. |
 | Practice privacy | Leaders see **totals per part** (practice, and how many marked "I know my part"). A member's own practice history is visible only to them. |
 | Roles | **Leader, part leader and member** only, for now. |
@@ -48,7 +48,7 @@ The product owner has a pilot choir ready to test. The real app is started in `a
 
 The live prototype the owner shares with colleagues is published from `prototype/index.html`.
 
-The real app's web build is live at https://abu.adalingo.workers.dev (Cloudflare Workers, deployed with `npm run deploy:web` in `abu-app/`).
+The real app is live at https://abu.adalingo.workers.dev: one Cloudflare Worker serving the web build and `/api`. Deploy with `npm run deploy` in `abu-api/`; it builds the web app, applies database migrations and deploys.
 
 ## MVP scope
 
@@ -81,7 +81,13 @@ The real app's web build is live at https://abu.adalingo.workers.dev (Cloudflare
 1. **Done.** Expo SDK 58 (TypeScript, Expo Router) is scaffolded in `abu-app/`, with routes in `abu-app/src/app/`. See `abu-app/README.md`.
 2. **Done.** `parseSolfa` is ported to `abu-app/src/solfa/` with tests covering every row of the format table, the spec example and the demo songs. `abu-app/src/solfa/README.md` lists where it differs from the prototype and the assumptions the owner should confirm.
 3. **Done on web; Android not yet checked.** The score (`abu-app/src/components/score.tsx`, laid out by `abu-app/src/score/layout.ts`) and the player (`abu-app/src/app/song/[id].tsx`, engine in `abu-app/src/audio/`) are built. On web, all four parts were checked in headless Chrome to play the right pitches on the right beats. Phones use `react-native-audio-api`, which needs a development build; nobody has heard it on an Android phone yet (see `abu-app/README.md`). Practice counts are kept for the session only until accounts exist.
-4. **Building the MVP in the milestones under "Building the MVP" in `docs/app-plan.md`.** Milestone 1 (database) is done: `abu-app/supabase/migrations/` has the schema and its row-level security, tested by `npm run test:db` (see `abu-app/README.md`). Next is milestone 2, sign-in and onboarding, which needs the owner to run `npx supabase login` first. The schema covers the entities the prototype uses:
+4. **Building the MVP in the milestones under "Building the MVP" in `docs/app-plan.md`.** Milestone 1 (database) is done:
+   - `abu-api/migrations/` has the D1 schema.
+   - `abu-api/src/domain/` has every action with its access rules: D1 has no row-level security, so the Worker checks every request.
+   - `npm test` in `abu-api/` runs the rules as the prototype's personas inside the Workers runtime (see `abu-api/README.md`).
+   - Next is milestone 2, sign-in and onboarding.
+
+   The schema covers the entities the prototype uses:
    - `users`
    - `groups` (type, invite code, self check-in on/off, approval on/off, personal flag)
    - `memberships` (part, role, pending or active)
