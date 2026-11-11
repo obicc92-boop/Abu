@@ -57,7 +57,7 @@ function GroupDetails({ group, me }: { group: MyGroup; me: string }) {
     await refresh();
   };
   const settings = useMutation({
-    mutationFn: (patch: { requires_approval?: boolean; self_check_in?: boolean }) => api.updateGroup(group.id, patch),
+    mutationFn: (patch: { requires_approval?: boolean; self_check_in?: boolean; part_leaders_edit_orders?: boolean }) => api.updateGroup(group.id, patch),
     onSuccess: refresh,
   });
   const leave = useMutation({
@@ -95,6 +95,12 @@ function GroupDetails({ group, me }: { group: MyGroup; me: string }) {
             value={group.self_check_in}
             onChange={(v) => settings.mutate({ self_check_in: v })}
           />
+          <Toggle
+            label="Part leaders can edit song orders"
+            hint="They can add, move and remove songs in any song order. Planning services and rehearsals stays with leaders."
+            value={group.part_leaders_edit_orders}
+            onChange={(v) => settings.mutate({ part_leaders_edit_orders: v })}
+          />
           {settings.error ? <ErrorText message={settings.error.message} /> : null}
         </Card>
       ) : null}
@@ -104,9 +110,11 @@ function GroupDetails({ group, me }: { group: MyGroup; me: string }) {
           <View style={styles.toggle}>
             <View style={{ flex: 1 }}>
               <Kicker>Attendance · last 3 months</Kicker>
-              <Text style={[styles.rateBig, { color: rateColor(report.data?.overall.rate ?? null) }]}>
-                {report.data ? (report.data.overall.rate === null ? 'Nothing marked yet' : `${report.data.overall.rate}%`) : '…'}
-              </Text>
+              {report.data && report.data.overall.rate === null ? (
+                <Text style={styles.hint}>Nothing marked yet. Mark attendance from a rehearsal’s page.</Text>
+              ) : (
+                <Text style={[styles.rateBig, { color: rateColor(report.data?.overall.rate ?? null) }]}>{report.data ? `${report.data.overall.rate}%` : '…'}</Text>
+              )}
             </View>
             <Button small kind="ghost" label="Reports" accessibilityLabel="Attendance reports" onPress={() => router.push('/attendance-report')} />
           </View>

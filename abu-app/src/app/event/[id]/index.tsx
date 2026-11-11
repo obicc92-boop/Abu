@@ -42,6 +42,7 @@ function EventView({ details }: { details: EventDetails }) {
   const type = group?.type ?? 'catholic';
   const personal = type === 'personal';
   const leader = my_role === 'leader';
+  const canEditOrder = details.can_edit_order;
   const past = isOver(e.starts_at);
   const rehearsal = e.kind === 'rehearsal';
   const when = relDay(e.starts_at);
@@ -72,7 +73,7 @@ function EventView({ details }: { details: EventDetails }) {
 
       <View style={styles.sectHead}>
         <Kicker>{rehearsal ? 'Songs to prepare' : 'Song order'}</Kicker>
-        {leader ? (
+        {canEditOrder ? (
           <Pressable onPress={() => router.push({ pathname: '/event/[id]/order', params: { id: e.id } })} accessibilityRole="button" hitSlop={8}>
             <Text style={styles.link}>Edit order</Text>
           </Pressable>
@@ -93,10 +94,10 @@ function EventView({ details }: { details: EventDetails }) {
       ) : (
         <Card style={{ alignItems: 'center' }}>
           <Body>No songs yet.</Body>
-          {leader ? <Body muted>Tap “Edit order”, then add songs from the library.</Body> : <Body muted>Your leader will add the songs.</Body>}
+          {canEditOrder ? <Body muted>Tap “Edit order”, then add songs from the library.</Body> : <Body muted>Your leader will add the songs.</Body>}
         </Card>
       )}
-      {leader && !items.length ? <CopyEarlier eventId={e.id} groupId={e.group_id} /> : null}
+      {canEditOrder && !items.length ? <CopyEarlier eventId={e.id} groupId={e.group_id} /> : null}
 
       {items.length ? (
         <Card tone="sand">

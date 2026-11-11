@@ -132,7 +132,13 @@ export default function Home() {
           </View>
         </Card>
       ) : upcoming.service ? (
-        <NextService group={g} event={upcoming.service} myReply={upcoming.serviceDetails?.my_reply ?? null} songs={upcoming.serviceDetails?.items.length} />
+        <NextService
+          group={g}
+          event={upcoming.service}
+          myReply={upcoming.serviceDetails?.my_reply ?? null}
+          songs={upcoming.serviceDetails?.items.length}
+          canEditOrder={!!upcoming.serviceDetails?.can_edit_order}
+        />
       ) : (
         <Card tone="red">
           <Motif color={colors.white} opacity={0.16} fade />
@@ -218,7 +224,19 @@ function HappeningNow({ group, event, details }: { group: MyGroup; event: GroupE
 }
 
 /** The red card: the next service, when and where, and your reply. */
-function NextService({ group, event, myReply, songs }: { group: MyGroup; event: GroupEvent; myReply: Reply | null; songs?: number }) {
+function NextService({
+  group,
+  event,
+  myReply,
+  songs,
+  canEditOrder,
+}: {
+  group: MyGroup;
+  event: GroupEvent;
+  myReply: Reply | null;
+  songs?: number;
+  canEditOrder: boolean;
+}) {
   const queryClient = useQueryClient();
   const send = useMutation({
     mutationFn: (status: Reply) => api.reply(event.id, status),
@@ -245,8 +263,8 @@ function NextService({ group, event, myReply, songs }: { group: MyGroup; event: 
         <Button
           kind="light"
           small
-          label={songs === 0 ? (group.role === 'leader' ? 'Add songs' : 'No songs yet') : songs === undefined ? 'Song order' : `Song order · ${songs} ${songs === 1 ? 'song' : 'songs'}`}
-          onPress={() => (songs === 0 && group.role === 'leader' ? router.push({ pathname: '/event/[id]/order', params: { id: event.id } }) : open())}
+          label={songs === 0 ? (canEditOrder ? 'Add songs' : 'No songs yet') : songs === undefined ? 'Song order' : `Song order · ${songs} ${songs === 1 ? 'song' : 'songs'}`}
+          onPress={() => (songs === 0 && canEditOrder ? router.push({ pathname: '/event/[id]/order', params: { id: event.id } }) : open())}
         />
         {songs ? <Button kind="outlineLight" small label="Perform" onPress={() => router.push({ pathname: '/event/[id]/perform', params: { id: event.id, i: '0' } })} /> : null}
       </View>

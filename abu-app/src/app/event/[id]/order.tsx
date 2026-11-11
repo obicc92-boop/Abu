@@ -34,12 +34,16 @@ export default function OrderScreen() {
       </Page>
     );
   }
-  if (details.data.my_role !== 'leader') {
+  if (!details.data.can_edit_order) {
     return (
       <Page>
         <TopBar back title="Song order" />
         <Card>
-          <Body>Only a leader can change the song order.</Body>
+          <Body>
+            {details.data.my_role === 'part_leader'
+              ? 'Only a leader can change the song order, unless the leader lets part leaders edit song orders (in the Group tab’s settings).'
+              : 'Only a leader can change the song order.'}
+          </Body>
         </Card>
       </Page>
     );

@@ -25,6 +25,8 @@ export interface Group {
   invite_code: string | null;
   requires_approval: boolean;
   self_check_in: boolean;
+  /** Part leaders may edit song orders (leaders always can). */
+  part_leaders_edit_orders: boolean;
   leader_title: string;
   sections: string[];
   parts: string[];
@@ -149,6 +151,8 @@ export interface EventDetails {
   my_attendance: AttendanceStatus | null;
   /** Whether members check themselves in with a code in this group. */
   self_check_in: boolean;
+  /** You may change the song order: leaders, and part leaders when the leader allows it. */
+  can_edit_order: boolean;
 }
 
 export type AttendanceStatus = 'present' | 'absent' | 'excused';
@@ -245,7 +249,7 @@ export const api = {
     request<Group>('/groups', json('POST', input)),
   preview: (code: string) => request<GroupPreview>(`/groups/preview/${encodeURIComponent(code.trim())}`),
   join: (code: string, part: string | null) => request<Membership>('/groups/join', json('POST', { code, part })),
-  updateGroup: (groupId: string, patch: Partial<Pick<Group, 'name' | 'church' | 'town' | 'requires_approval' | 'self_check_in' | 'leader_title' | 'sections'>>) =>
+  updateGroup: (groupId: string, patch: Partial<Pick<Group, 'name' | 'church' | 'town' | 'requires_approval' | 'self_check_in' | 'part_leaders_edit_orders' | 'leader_title' | 'sections'>>) =>
     request<Group>(`/groups/${groupId}`, json('PATCH', patch)),
   members: (groupId: string) => request<Member[]>(`/groups/${groupId}/members`),
   approve: (groupId: string, userId: string) => request<{ ok: true }>(`/groups/${groupId}/members/${userId}/approve`, { method: 'POST' }),
