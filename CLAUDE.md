@@ -11,7 +11,7 @@ The product owner has a pilot choir ready to test. Nothing has been built yet be
 | Name | **Abụ**. Don't show any company name yet; the owner will provide it later. |
 | Notation | **Tonic sol-fa** for every group type at launch, including bands and orchestras. Staff notation comes later. |
 | Platform | **Phone-friendly web app first**, then Android and iOS from the same code. |
-| Stack | **React Native + Expo (TypeScript)**, with Expo's web output for the first release. **Supabase** for sign-in, Postgres and file storage. Recommended, not yet scaffolded: the owner asked for this handoff only. |
+| Stack | **React Native + Expo (TypeScript)**, with Expo's web output for the first release. **Supabase** for sign-in, Postgres and file storage. Expo is scaffolded in `abu-app/`; Supabase is not set up yet. |
 | Brand colours | Red `#D93A1E` (main), deep red `#A3261A`, white, gold `#E6A325` (secondary), ink `#22160F`, sand `#F7F1ED`. Each voice part has a fixed colour: Soprano `#D93A1E`, Alto `#C98410`, Tenor `#1C8173`, Bass `#3A4AA6`. |
 | Fonts | Marcellus (app name and big headings only), Figtree (UI text), JetBrains Mono (sol-fa, so beats line up in columns). |
 | Tenor | Written **an octave above** where it sounds, as on printed sheets. Display it as written and play it an octave lower. Bass is read relative to the same lower doh. |
@@ -68,9 +68,9 @@ The live prototype the owner shares with colleagues is published from `prototype
 
 ## Suggested first steps
 
-1. Scaffold Expo (TypeScript, Expo Router) in a subfolder such as `abu-app/`. Note that Expo Router's own `app/` folder makes a top-level `app/` name confusing.
-2. Port `parseSolfa` to `src/solfa/` with unit tests. Cover every row of the table in `docs/solfa-format.md`, plus the prototype's demo songs (`OLD100`, `EKELE`, `GRACE`).
-3. Build the score component and the player against that module, and check it plays four parts on Expo web and on an Android phone.
+1. **Done.** Expo SDK 58 (TypeScript, Expo Router) is scaffolded in `abu-app/`, with routes in `abu-app/src/app/`. See `abu-app/README.md`.
+2. **Done.** `parseSolfa` is ported to `abu-app/src/solfa/` with tests covering every row of the format table, the spec example and the demo songs. `abu-app/src/solfa/README.md` lists where it differs from the prototype and the assumptions the owner should confirm.
+3. **Done on web; Android not yet checked.** The score (`abu-app/src/components/score.tsx`, laid out by `abu-app/src/score/layout.ts`) and the player (`abu-app/src/app/song/[id].tsx`, engine in `abu-app/src/audio/`) are built. On web, all four parts were checked in headless Chrome to play the right pitches on the right beats. Phones use `react-native-audio-api`, which needs a development build; nobody has heard it on an Android phone yet (see `abu-app/README.md`). Practice counts are kept for the session only until accounts exist.
 4. Design the Supabase schema. Entities used by the prototype:
    - `users`
    - `groups` (type, invite code, self check-in on/off, personal flag)
