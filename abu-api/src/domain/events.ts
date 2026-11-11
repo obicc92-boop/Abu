@@ -3,7 +3,7 @@
  * orders; and replies ("Going" / "Can't come"). Leaders plan; members read and reply.
  */
 import { badRequest, conflict, friendly, notFound } from '../errors';
-import { groupOfEvent, newId, nowIso, requireLeader, requireMember, type Role } from './access';
+import { canEditOrders, groupOfEvent, newId, nowIso, requireLeader, requireMember, requireOrderEditor, type Role } from './access';
 import { getSong } from './songs';
 
 export type EventKind = 'service' | 'rehearsal' | 'concert';
@@ -50,6 +50,8 @@ export interface EventDetails {
   my_attendance: 'present' | 'absent' | 'excused' | null;
   /** Whether members check themselves in with a code in this group. */
   self_check_in: boolean;
+  /** You may change the song order (leaders, and part leaders when allowed). */
+  can_edit_order: boolean;
 }
 
 const KINDS: EventKind[] = ['service', 'rehearsal', 'concert'];
@@ -147,7 +149,7 @@ export async function listEvents(db: D1Database, me: string, groupId: string, op
 export async function eventDetails(db: D1Database, me: string, eventId: string): Promise<EventDetails> {
   const groupId = await groupOfEvent(db, eventId);
   const m = await requireMember(db, groupId, me);
-  const [event, items, mine, counts, att, group] = await Promise.all([
+  const [event, items, mine, counts, att, group, canEdit] = await Promise.all([
     getEvent(db, me, eventId),
     listOrder(db, me, eventId),
     db.prepare('select status from rsvps where event_id = ? and user_id = ?').bind(eventId, me).first<{ status: Reply }>(),
@@ -160,6 +162,7 @@ export async function eventDetails(db: D1Database, me: string, eventId: string):
       .bind(eventId, me)
       .first<{ status: EventDetails['my_attendance'] }>(),
     db.prepare('select self_check_in from groups where id = ?').bind(groupId).first<{ self_check_in: number }>(),
+    canEditOrders(db, groupId, m),
   ]);
   return {
     event,
@@ -170,6 +173,7 @@ export async function eventDetails(db: D1Database, me: string, eventId: string):
     my_part: m.part,
     my_attendance: att?.status ?? null,
     self_check_in: group?.self_check_in === 1,
+    can_edit_order: canEdit,
   };
 }
 
@@ -195,7 +199,7 @@ export async function addToOrder(
   eventId: string,
   input: { songId: string; section?: string; position?: number; note?: string },
 ): Promise<OrderItem> {
-  await requireLeader(db, await groupOfEvent(db, eventId), me, 'Only a leader can change the song order.');
+  await requireOrderEditor(db, await groupOfEvent(db, eventId), me);
   await getSong(db, input.songId);
   const last = await db.prepare('select max(position) as p from event_items where event_id = ?').bind(eventId).first<{ p: number | null }>();
   const id = newId();
@@ -213,7 +217,7 @@ export async function addToOrder(
 export async function removeFromOrder(db: D1Database, me: string, itemId: string): Promise<void> {
   const item = await db.prepare('select event_id from event_items where id = ?').bind(itemId).first<{ event_id: string }>();
   if (!item) throw notFound('That song isn’t in the order.');
-  await requireLeader(db, await groupOfEvent(db, item.event_id), me, 'Only a leader can change the song order.');
+  await requireOrderEditor(db, await groupOfEvent(db, item.event_id), me);
   await db.prepare('delete from event_items where id = ?').bind(itemId).run();
 }
 
@@ -222,7 +226,7 @@ export async function removeFromOrder(db: D1Database, me: string, itemId: string
  * is the whole order, top to bottom, each with its section.
  */
 export async function setOrder(db: D1Database, me: string, eventId: string, items: { id: string; section: string }[]): Promise<OrderItem[]> {
-  await requireLeader(db, await groupOfEvent(db, eventId), me, 'Only a leader can change the song order.');
+  await requireOrderEditor(db, await groupOfEvent(db, eventId), me);
   const current = await listOrder(db, me, eventId);
   const same = items.length === current.length && new Set(items.map((i) => i.id)).size === items.length && items.every((i) => current.some((c) => c.id === i.id));
   if (!same) throw conflict('The song order changed while you were editing. Reload and try again.');
@@ -239,7 +243,7 @@ export async function setOrder(db: D1Database, me: string, eventId: string, item
 /** Leaders copy another event's songs (e.g. last week's) onto the end of this order. */
 export async function copyOrder(db: D1Database, me: string, eventId: string, fromEventId: string): Promise<OrderItem[]> {
   const groupId = await groupOfEvent(db, eventId);
-  await requireLeader(db, groupId, me, 'Only a leader can change the song order.');
+  await requireOrderEditor(db, groupId, me);
   if ((await groupOfEvent(db, fromEventId)) !== groupId) throw badRequest('You can only copy from your own group’s services.');
   const source = await listOrder(db, me, fromEventId);
   const last = await db.prepare('select max(position) as p from event_items where event_id = ?').bind(eventId).first<{ p: number | null }>();

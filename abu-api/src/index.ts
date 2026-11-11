@@ -254,6 +254,7 @@ app.patch('/groups/:id', async (c) => {
     leader_title: text(b, 'leader_title'),
     requires_approval: flag(b, 'requires_approval'),
     self_check_in: flag(b, 'self_check_in'),
+    part_leaders_edit_orders: flag(b, 'part_leaders_edit_orders'),
     sections: Array.isArray(b.sections) ? b.sections.filter((s): s is string => typeof s === 'string') : undefined,
   };
   return c.json(await updateGroup(c.env.DB, c.get('userId'), c.req.param('id'), patch));

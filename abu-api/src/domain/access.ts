@@ -41,6 +41,28 @@ export async function requireRole(db: D1Database, groupId: string, me: string, r
 export const requireLeader = (db: D1Database, groupId: string, me: string, message = 'Only a leader can do that.') =>
   requireRole(db, groupId, me, ['leader'], message);
 
+/**
+ * Who may change a song order: leaders, and part leaders when a leader has
+ * switched on "Part leaders can edit song orders". Planning stays with leaders.
+ */
+export async function canEditOrders(db: D1Database, groupId: string, m: Membership): Promise<boolean> {
+  if (m.status !== 'active') return false;
+  if (m.role === 'leader') return true;
+  if (m.role !== 'part_leader') return false;
+  const g = await db.prepare('select part_leaders_edit_orders as allowed from groups where id = ?').bind(groupId).first<{ allowed: number }>();
+  return g?.allowed === 1;
+}
+
+export async function requireOrderEditor(db: D1Database, groupId: string, me: string): Promise<Membership> {
+  const m = await requireMember(db, groupId, me);
+  if (await canEditOrders(db, groupId, m)) return m;
+  throw forbidden(
+    m.role === 'part_leader'
+      ? 'Only a leader can change the song order, unless the leader lets part leaders edit song orders.'
+      : 'Only a leader can change the song order.',
+  );
+}
+
 export async function groupOfEvent(db: D1Database, eventId: string): Promise<string> {
   const row = await db.prepare('select group_id from events where id = ?').bind(eventId).first<{ group_id: string }>();
   if (!row) throw notFound('That service or rehearsal doesn’t exist.');

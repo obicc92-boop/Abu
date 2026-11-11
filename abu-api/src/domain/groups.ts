@@ -19,6 +19,8 @@ export interface Group {
   invite_code: string | null;
   requires_approval: boolean;
   self_check_in: boolean;
+  /** Part leaders may edit song orders (leaders always can). */
+  part_leaders_edit_orders: boolean;
   leader_title: string;
   sections: string[];
   parts: string[];
@@ -30,9 +32,10 @@ export interface Member extends Membership {
   display_name: string;
 }
 
-interface GroupRow extends Omit<Group, 'requires_approval' | 'self_check_in' | 'sections' | 'parts'> {
+interface GroupRow extends Omit<Group, 'requires_approval' | 'self_check_in' | 'part_leaders_edit_orders' | 'sections' | 'parts'> {
   requires_approval: number;
   self_check_in: number;
+  part_leaders_edit_orders: number;
   sections: string;
   parts: string;
 }
@@ -41,6 +44,7 @@ const toGroup = (r: GroupRow): Group => ({
   ...r,
   requires_approval: r.requires_approval === 1,
   self_check_in: r.self_check_in === 1,
+  part_leaders_edit_orders: r.part_leaders_edit_orders === 1,
   sections: JSON.parse(r.sections),
   parts: JSON.parse(r.parts),
 });
@@ -228,6 +232,7 @@ export interface GroupSettings {
   town?: string;
   requires_approval?: boolean;
   self_check_in?: boolean;
+  part_leaders_edit_orders?: boolean;
   leader_title?: string;
   sections?: string[];
 }
@@ -247,6 +252,7 @@ export async function updateGroup(db: D1Database, me: string, groupId: string, p
   if (patch.leader_title !== undefined) put('leader_title', patch.leader_title.trim());
   if (patch.requires_approval !== undefined) put('requires_approval', patch.requires_approval ? 1 : 0);
   if (patch.self_check_in !== undefined) put('self_check_in', patch.self_check_in ? 1 : 0);
+  if (patch.part_leaders_edit_orders !== undefined) put('part_leaders_edit_orders', patch.part_leaders_edit_orders ? 1 : 0);
   if (patch.sections !== undefined) put('sections', JSON.stringify(patch.sections.map((s) => s.trim()).filter(Boolean)));
   if (sets.length) {
     try {

@@ -158,3 +158,58 @@ describe('Replies and readiness', () => {
     ]);
   });
 });
+
+describe('Part leaders and song orders', () => {
+  it('part leaders edit song orders only when a leader allows it; planning stays with leaders', async () => {
+    const { emeka, adaeze, group } = await choir();
+    const chiamaka = await signUp('Chiamaka Eze');
+    await send('/groups/join', 'POST', chiamaka.cookie, { code: group.invite_code, part: 'S' });
+    const chiamakaId = (await send<{ profile: { id: string } }>('/me', 'GET', chiamaka.cookie)).body.profile.id;
+    await send(`/groups/${group.id}/members/${chiamakaId}`, 'PATCH', emeka.cookie, { role: 'part_leader' });
+
+    const mass = (await send<{ id: string }>(`/groups/${group.id}/events`, 'POST', emeka.cookie, { kind: 'service', title: 'Sunday Mass', starts_at: days(3) })).body;
+    const lastWeek = (await send<{ id: string }>(`/groups/${group.id}/events`, 'POST', emeka.cookie, { kind: 'service', title: 'Last Sunday', starts_at: days(-4) })).body;
+    await send(`/events/${lastWeek.id}/items`, 'POST', emeka.cookie, { song_id: 'old100', section: 'Entrance' });
+
+    // Off by default.
+    expect((await send<Details & { can_edit_order: boolean }>(`/events/${mass.id}`, 'GET', chiamaka.cookie)).body.can_edit_order).toBe(false);
+    const refused = await send<{ error: string }>(`/events/${mass.id}/items`, 'POST', chiamaka.cookie, { song_id: 'grace', section: 'Entrance' });
+    expect(refused.status).toBe(403);
+    expect(refused.body.error).toMatch(/unless the leader lets part leaders/);
+
+    // Only a leader can switch it on.
+    expect((await send(`/groups/${group.id}`, 'PATCH', chiamaka.cookie, { part_leaders_edit_orders: true })).status).toBe(403);
+    const on = await send<{ part_leaders_edit_orders: boolean }>(`/groups/${group.id}`, 'PATCH', emeka.cookie, { part_leaders_edit_orders: true });
+    expect(on.body.part_leaders_edit_orders).toBe(true);
+
+    // Now Chiamaka can add, reorder, change sections, remove and copy.
+    expect((await send<Details & { can_edit_order: boolean }>(`/events/${mass.id}`, 'GET', chiamaka.cookie)).body.can_edit_order).toBe(true);
+    const grace = await send<Item>(`/events/${mass.id}/items`, 'POST', chiamaka.cookie, { song_id: 'grace', section: 'Entrance' });
+    expect(grace.status).toBe(201);
+    const ekele = (await send<Item>(`/events/${mass.id}/items`, 'POST', chiamaka.cookie, { song_id: 'ekele', section: 'Kyrie' })).body;
+    const reordered = await send<Item[]>(`/events/${mass.id}/order`, 'PUT', chiamaka.cookie, {
+      items: [
+        { id: ekele.id, section: 'Entrance' },
+        { id: grace.body.id, section: 'Communion' },
+      ],
+    });
+    expect(reordered.body.map((i) => `${i.song_id}:${i.section}`)).toEqual(['ekele:Entrance', 'grace:Communion']);
+    expect((await send(`/events/${mass.id}/items/${ekele.id}`, 'DELETE', chiamaka.cookie)).status).toBe(200);
+    expect((await send<Item[]>(`/events/${mass.id}/copy-order`, 'POST', chiamaka.cookie, { from_event_id: lastWeek.id })).body.map((i) => i.song_id)).toEqual([
+      'grace',
+      'old100',
+    ]);
+
+    // Planning stays with leaders, and members still can't touch the order.
+    expect((await send(`/groups/${group.id}/events`, 'POST', chiamaka.cookie, { kind: 'rehearsal', title: 'Rehearsal', starts_at: days(2) })).status).toBe(403);
+    expect((await send(`/events/${mass.id}`, 'PATCH', chiamaka.cookie, { title: 'Renamed' })).status).toBe(403);
+    expect((await send(`/events/${mass.id}`, 'DELETE', chiamaka.cookie)).status).toBe(403);
+    expect((await send(`/events/${mass.id}/items`, 'POST', adaeze.cookie, { song_id: 'ekele' })).status).toBe(403);
+    expect((await send<Details & { can_edit_order: boolean }>(`/events/${mass.id}`, 'GET', adaeze.cookie)).body.can_edit_order).toBe(false);
+
+    // Switched off again: back to leaders only.
+    await send(`/groups/${group.id}`, 'PATCH', emeka.cookie, { part_leaders_edit_orders: false });
+    expect((await send(`/events/${mass.id}/items`, 'POST', chiamaka.cookie, { song_id: 'ekele' })).status).toBe(403);
+    expect((await send(`/events/${mass.id}/items`, 'POST', emeka.cookie, { song_id: 'ekele' })).status).toBe(201);
+  });
+});
