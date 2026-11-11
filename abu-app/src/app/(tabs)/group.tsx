@@ -10,6 +10,7 @@ import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { api, type Member, type MyGroup, type Role } from '@/api/client';
 import { InviteCard } from '@/components/invite';
 import { Avatar, Body, Button, Card, ErrorText, Kicker, Loading, Page, PartPicker, TopBar } from '@/components/ui';
+import { rangeFrom, rateColor } from '@/lib/attendance';
 import { GROUP_TYPES } from '@/lib/group-types';
 import { partName } from '@/solfa';
 import { useSession } from '@/state/session';
@@ -41,6 +42,15 @@ function GroupDetails({ group, me }: { group: MyGroup; me: string }) {
   const { refresh } = useSession();
   const members = useQuery({ queryKey: ['members', group.id], queryFn: () => api.members(group.id) });
   const leader = group.role === 'leader';
+  const leaderish = leader || group.role === 'part_leader';
+  // Attendance rates over the last 3 months, for leaders and part leaders only (the same report as the reports screen).
+  const report = useQuery({
+    queryKey: ['attendanceReport', group.id, '3m'],
+    queryFn: () => api.attendanceReport(group.id, { from: rangeFrom('3m') }),
+    enabled: leaderish,
+  });
+  const rates = new Map((report.data?.members ?? []).map((m) => [m.user_id, m.rate]));
+  const rateOf = (userId: string) => (leaderish ? rates.get(userId) : undefined);
 
   const invalidate = async () => {
     await queryClient.invalidateQueries({ queryKey: ['members', group.id] });
@@ -89,6 +99,20 @@ function GroupDetails({ group, me }: { group: MyGroup; me: string }) {
         </Card>
       ) : null}
 
+      {leaderish ? (
+        <Card>
+          <View style={styles.toggle}>
+            <View style={{ flex: 1 }}>
+              <Kicker>Attendance · last 3 months</Kicker>
+              <Text style={[styles.rateBig, { color: rateColor(report.data?.overall.rate ?? null) }]}>
+                {report.data ? (report.data.overall.rate === null ? 'Nothing marked yet' : `${report.data.overall.rate}%`) : '…'}
+              </Text>
+            </View>
+            <Button small kind="ghost" label="Reports" accessibilityLabel="Attendance reports" onPress={() => router.push('/attendance-report')} />
+          </View>
+        </Card>
+      ) : null}
+
       {leader && waiting.length ? (
         <Card>
           <Kicker color={colors.redDeep}>Waiting to join · {waiting.length}</Kicker>
@@ -106,14 +130,14 @@ function GroupDetails({ group, me }: { group: MyGroup; me: string }) {
           {active
             .filter((m) => m.part === p)
             .map((m) => (
-              <MemberRow key={m.user_id} group={group} member={m} me={me} onChanged={invalidate} />
+              <MemberRow key={m.user_id} group={group} member={m} me={me} rate={rateOf(m.user_id)} onChanged={invalidate} />
             ))}
         </PartSection>
       ))}
       {noPart.length ? (
         <PartSection title={`No part yet · ${noPart.length}`} color={colors.muted}>
           {noPart.map((m) => (
-            <MemberRow key={m.user_id} group={group} member={m} me={me} onChanged={invalidate} />
+            <MemberRow key={m.user_id} group={group} member={m} me={me} rate={rateOf(m.user_id)} onChanged={invalidate} />
           ))}
         </PartSection>
       ) : null}
@@ -175,7 +199,20 @@ function WaitingRow({ groupId, member, onDone }: { groupId: string; member: Memb
   );
 }
 
-function MemberRow({ group, member, me, onChanged }: { group: MyGroup; member: Member; me: string; onChanged: () => Promise<void> }) {
+function MemberRow({
+  group,
+  member,
+  me,
+  rate,
+  onChanged,
+}: {
+  group: MyGroup;
+  member: Member;
+  me: string;
+  /** Attendance rate (leaders and part leaders only): a number, null before any marks, undefined when not shown. */
+  rate?: number | null;
+  onChanged: () => Promise<void>;
+}) {
   const [open, setOpen] = useState(false);
   const isMe = member.user_id === me;
   const leader = group.role === 'leader';
@@ -202,7 +239,13 @@ function MemberRow({ group, member, me, onChanged }: { group: MyGroup; member: M
             {member.display_name}
             {isMe ? <Text style={styles.you}> (you)</Text> : null}
           </Text>
-          {role ? <Text style={styles.role}>{role}</Text> : null}
+          {role || typeof rate === 'number' ? (
+            <Text style={styles.role}>
+              {role}
+              {role && typeof rate === 'number' ? ' · ' : ''}
+              {typeof rate === 'number' ? <Text style={{ color: rateColor(rate) }}>attendance {rate}%</Text> : null}
+            </Text>
+          ) : null}
         </View>
         {canOpen ? <Text style={styles.more}>{open ? 'Close' : isMe ? 'Change' : 'Manage'}</Text> : null}
       </Pressable>
@@ -276,6 +319,7 @@ function NoGroup({ signedIn, others = [] }: { signedIn: boolean; others?: MyGrou
 
 const styles = StyleSheet.create({
   toggle: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 4 },
+  rateBig: { fontFamily: fonts.monoBold, fontSize: 24, marginTop: 2 },
   toggleLabel: { fontFamily: fonts.bold, fontSize: 15, color: colors.ink },
   hint: { fontFamily: fonts.body, fontSize: 12.5, color: colors.muted },
   list: { backgroundColor: colors.white, borderRadius: 14, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 12, paddingVertical: 4 },

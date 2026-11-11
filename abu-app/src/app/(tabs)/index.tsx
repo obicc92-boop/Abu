@@ -7,8 +7,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { api, type GroupEvent, type MyGroup, type OrderItem, type Practice, type Reply } from '@/api/client';
+import { api, type EventDetails, type GroupEvent, type MyGroup, type OrderItem, type Practice, type Reply } from '@/api/client';
 import { BrandMark, Motif } from '@/components/brand';
+import { CheckedIn, CheckIn } from '@/components/check-in';
 import { EventCard } from '@/components/event-card';
 import { InviteCard } from '@/components/invite';
 import { Readiness } from '@/components/readiness';
@@ -16,8 +17,9 @@ import { ReplyButtons } from '@/components/reply-buttons';
 import { SongRow } from '@/components/song-row';
 import { Avatar, Body, Button, Card, ErrorText, Kicker, Loading, Page, PartTag } from '@/components/ui';
 import { DEMO_SONGS } from '@/data/demo-songs';
-import { fmtDate, fmtTime, isOver, relDay, startOfDay } from '@/lib/dates';
-import { kindNoun } from '@/lib/group-types';
+import { rateColor } from '@/lib/attendance';
+import { checkInOpen, fmtDate, fmtTime, hasStarted, isOver, relDay, startOfDay } from '@/lib/dates';
+import { kindLabel, kindNoun } from '@/lib/group-types';
 import { partName } from '@/solfa';
 import { useSession } from '@/state/session';
 import { colors, fonts } from '@/theme/tokens';
@@ -40,13 +42,26 @@ function useUpcoming(g: MyGroup | null) {
   const rehearsal = soon.find((e) => e.kind === 'rehearsal');
   const serviceDetails = useQuery({ queryKey: ['event', service?.id], queryFn: () => api.event(service!.id), enabled: !!service });
   const rehearsalDetails = useQuery({ queryKey: ['event', rehearsal?.id], queryFn: () => api.event(rehearsal!.id), enabled: !!rehearsal });
-  return { loading: active && events.isPending, service, rehearsal, serviceDetails: serviceDetails.data, rehearsalDetails: rehearsalDetails.data };
+  // Happening now (check-in is open): for checking in, or for leaders to mark attendance.
+  const live = g?.type !== 'personal' ? (events.data ?? []).find((e) => checkInOpen(e.starts_at)) : undefined;
+  const liveDetails = useQuery({ queryKey: ['event', live?.id], queryFn: () => api.event(live!.id), enabled: !!live });
+  return {
+    loading: active && events.isPending,
+    service,
+    rehearsal,
+    serviceDetails: serviceDetails.data,
+    rehearsalDetails: rehearsalDetails.data,
+    live,
+    liveDetails: liveDetails.data,
+  };
 }
 
 export default function Home() {
   const s = useSession();
   const upcoming = useUpcoming(s.status === 'signedIn' ? s.group : null);
   const practice = useQuery({ queryKey: ['myPractice'], queryFn: api.myPractice, enabled: s.status === 'signedIn' });
+  const choir = s.status === 'signedIn' && s.group && s.group.type !== 'personal' && s.group.status === 'active' ? s.group : null;
+  const attendance = useQuery({ queryKey: ['myAttendance', choir?.id], queryFn: () => api.myAttendance(choir!.id), enabled: !!choir });
 
   if (s.status !== 'signedIn') return <LookingAround />;
   if (s.loadingMe || !s.group || !s.profile) return <Loading />;
@@ -92,6 +107,8 @@ export default function Home() {
           ))}
         </ScrollView>
       ) : null}
+
+      {choir && upcoming.live && upcoming.liveDetails ? <HappeningNow group={choir} event={upcoming.live} details={upcoming.liveDetails} /> : null}
 
       {g.status === 'pending' ? (
         <Card>
@@ -142,7 +159,14 @@ export default function Home() {
       ) : null}
       {g.type !== 'personal' && upcoming.rehearsal ? (
         <>
-          <Kicker>Next rehearsal</Kicker>
+          <View style={styles.learnHead}>
+            <Kicker>Next rehearsal</Kicker>
+            {attendance.data?.rate != null ? (
+              <Text style={styles.small}>
+                Your attendance <Text style={{ fontFamily: fonts.heavy, color: rateColor(attendance.data.rate) }}>{attendance.data.rate}%</Text>
+              </Text>
+            ) : null}
+          </View>
           <EventCard event={upcoming.rehearsal} groupType={g.type} />
         </>
       ) : null}
@@ -164,6 +188,32 @@ export default function Home() {
         </>
       ) : null}
     </Page>
+  );
+}
+
+/**
+ * Happening now (from 3 hours before the start to 6 hours after): members
+ * check in with the code; leaders and part leaders mark attendance or show the code.
+ */
+function HappeningNow({ group, event, details }: { group: MyGroup; event: GroupEvent; details: EventDetails }) {
+  const leaderish = details.my_role === 'leader' || details.my_role === 'part_leader';
+  if (!leaderish) {
+    if (!details.self_check_in) return null;
+    return details.my_attendance === 'present' ? <CheckedIn /> : <CheckIn eventId={event.id} />;
+  }
+  return (
+    <Card>
+      <Kicker color={colors.redDeep}>
+        {kindLabel(group.type, event.kind)} {hasStarted(event.starts_at) ? 'now' : `at ${fmtTime(event.starts_at)}`}
+      </Kicker>
+      <Text style={styles.cardTitle}>{event.title}</Text>
+      <View style={styles.row}>
+        <Button small label="Mark attendance" onPress={() => router.push({ pathname: '/event/[id]/attendance', params: { id: event.id } })} />
+        {details.self_check_in ? (
+          <Button small kind="ghost" label="Show the check-in code" onPress={() => router.push({ pathname: '/event/[id]/code', params: { id: event.id } })} />
+        ) : null}
+      </View>
+    </Card>
   );
 }
 
