@@ -188,7 +188,7 @@ Each milestone ends merged, pushed and deployed. Home grows with them: each mile
    - The library from the database, with search and filters.
    - Adding and editing sol-fa with the live check; attaching the original sheet.
    - Our repertoire and My songs; the player on real songs; private practice counts.
-4. **Schedule.** Services, rehearsals and concerts; song orders by section (reorder, add, remove); replies; Rehearse and Perform; repeating rehearsals.
+4. **Schedule.** *Done.* Services, rehearsals and concerts; song orders by section (reorder, change section, add, remove, copy an earlier order, "last sung" hints); replies; Rehearse and Perform; weekly repeating rehearsals; the next service, "Learn for upcoming" and readiness on Home. Still to come: the month view, and rehearsals on two days a week in one go (for now, plan each day's series).
 5. **Attendance.** Marking (leaders anyone, part leaders their own part), self check-in with the 4-digit code, attendance rates, reports with an export.
 6. **Group and Me.**
    - Group: members by part, changing parts and roles, notices (post and pin), settings (approval, self check-in, section names).

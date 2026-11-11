@@ -54,7 +54,13 @@ The database itself guarantees what must never break: a group always keeps a lea
     - what you can do with a song: `GET /api/songs/:id/me`
     - practice: `POST /api/songs/:id/plays`, `PUT /api/songs/:id/knows`, `GET /api/me/practice`
   - Repertoire: `GET`, `POST /api/groups/:id/repertoire` and `DELETE /api/groups/:id/repertoire/:songId`. Your own space's repertoire is "My songs".
-  - Everything else in `src/domain` gets routes with its milestone.
+  - Schedule (members read and reply; leaders plan):
+    - `GET /api/groups/:id/events` (optional `from` and `to`) and `POST` (with `repeat_weeks` for weekly rehearsals); `GET /api/groups/:id/song-history` (when each song was last sung)
+    - `GET`, `PATCH` and `DELETE /api/events/:id`; the details include the order, your reply and the reply counts
+    - the order: `POST /api/events/:id/items`, `DELETE /api/events/:id/items/:itemId`, `PUT /api/events/:id/order` (the whole order with its sections, in one go; refused if songs were added or removed meanwhile), `POST /api/events/:id/copy-order`
+    - replies: `PUT /api/events/:id/reply`, `GET /api/events/:id/replies`
+    - readiness per part, totals only, for leaders and part leaders: `GET /api/events/:id/readiness`
+  - Attendance, check-in and notices get routes with their milestones.
 - `src/domain/`: groups and people, songs and repertoire, events and replies, attendance and check-in, practice, notices.
 - `src/errors.ts`: errors with an HTTP status and a message safe to show people.
 - `src/auth.ts`: sign-in.

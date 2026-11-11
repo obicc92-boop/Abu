@@ -2,7 +2,7 @@
 
 Abụ (Igbo for "song") is an app for choirs and music groups that read **tonic sol-fa**. Members learn their part by hearing it played, and leaders organise songs, services and rehearsals in one place. The first users are church choirs in Nigeria (Catholic, Anglican, Pentecostal), plus non-church groups such as bands and orchestras. It will go international later.
 
-The product owner has a pilot choir ready to test. The real app is started: `abu-app/` (the Expo app: sol-fa reader, score and player, live on the web) and `abu-api/` (the Cloudflare Worker: website hosting, API and D1 database). **Next: milestone 2, sign-in and onboarding (see `docs/app-plan.md`).**
+The product owner has a pilot choir ready to test. The real app is started: `abu-app/` (the Expo app: sol-fa reader, score and player, live on the web) and `abu-api/` (the Cloudflare Worker: website hosting, API and D1 database). **Next: milestone 5, attendance (see `docs/app-plan.md`).**
 
 ## Decisions already made (don't re-ask)
 
@@ -80,7 +80,7 @@ The real app is live at https://abu.adalingo.workers.dev: one Cloudflare Worker 
 
 1. **Done.** Expo SDK 58 (TypeScript, Expo Router) is scaffolded in `abu-app/`, with routes in `abu-app/src/app/`. See `abu-app/README.md`.
 2. **Done.** `parseSolfa` is ported to `abu-app/src/solfa/` with tests covering every row of the format table, the spec example and the demo songs. `abu-app/src/solfa/README.md` lists where it differs from the prototype and the assumptions the owner should confirm.
-3. **Done on web; Android not yet checked.** The score (`abu-app/src/components/score.tsx`, laid out by `abu-app/src/score/layout.ts`) and the player (`abu-app/src/app/song/[id].tsx`, engine in `abu-app/src/audio/`) are built. On web, all four parts were checked in headless Chrome to play the right pitches on the right beats. Phones use `react-native-audio-api`, which needs a development build; nobody has heard it on an Android phone yet (see `abu-app/README.md`). Practice counts are kept for the session only until accounts exist.
+3. **Done on web; Android not yet checked.** The score (`abu-app/src/components/score.tsx`, laid out by `abu-app/src/score/layout.ts`) and the player (`abu-app/src/app/song/[id].tsx`, engine in `abu-app/src/audio/`) are built. On web, all four parts were checked in headless Chrome to play the right pitches on the right beats. Phones use `react-native-audio-api`, which needs a development build; nobody has heard it on an Android phone yet (see `abu-app/README.md`). Practice counts are saved to each person's account (milestone 3).
 4. **Building the MVP in the milestones under "Building the MVP" in `docs/app-plan.md`.** Milestone 1 (database) is done:
    - `abu-api/migrations/` has the D1 schema.
    - `abu-api/src/domain/` has every action with its access rules: D1 has no row-level security, so the Worker checks every request.
@@ -96,7 +96,14 @@ The real app is live at https://abu.adalingo.workers.dev: one Cloudflare Worker 
      - **The library:** search by title, composer or words, with filters (Our repertoire, My songs, has sol-fa, tags).
      - **On each song:** save to My songs, add to the repertoire (leaders), edit (whoever shared it, or their group), share on WhatsApp, and private practice (plays and "I know my part").
      - **Demo songs** are in the database (migration `0003`).
-   - Next is milestone 4, schedule: services, song orders, Rehearse and Perform.
+   - Milestone 4 (schedule) is done:
+     - **Planning (leaders):** services (named for the group type: Mass, Service, Performance), rehearsals and concerts. The date and time are picked by tapping, and rehearsals can repeat weekly for up to 12 more weeks. In your own space they're setlists.
+     - **Song orders:** songs by section (the group type's sections, plus "To prepare" for rehearsals). Leaders move songs up and down, change their section, remove them, add from the repertoire or the library with "last sung 3 weeks ago" hints, or copy an earlier order. Every change saves straight away. Only leaders change orders, until the owner answers the open question about part leaders.
+     - **Replies:** "Going" or "Can't come", from Home or the service's page.
+     - **Rehearse** steps through the order with the full player. **Perform** has no audio code at all, with large type (A−/A+), all parts or my part only, dark or light (remembered on the device), and the screen kept on.
+     - **Home:** the next service with your reply, the next rehearsal, "Learn for upcoming" with your own practice, and readiness per part for leaders and part leaders.
+     - **Checked end to end** on the live site (33 checks, including that Perform never creates an audio context), with the test data deleted afterwards.
+   - Next is milestone 5, attendance: marking, self check-in with the code, attendance rates and reports.
 
    The schema covers the entities the prototype uses:
    - `users`
