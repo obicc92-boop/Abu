@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { DEMO_SONGS, EKELE, GRACE, OLD100 } from '../../data/demo-songs';
-import { parseKey, parseSolfa, partName, type ParseOptions, type ParsedSong } from '..';
+import { parseKey, parseSolfa, partName, partPlural, type ParseOptions, type ParsedSong } from '..';
 
 const parse = (lines: string[], opts: ParseOptions = { time: '4/4' }): ParsedSong => parseSolfa(lines.join('\n'), opts);
 const messages = (issues: { message: string }[]) => issues.map((i) => i.message);
@@ -305,6 +305,7 @@ describe('format table: parts', () => {
     expect(song.errors).toEqual([]);
     expect(song.parts).toEqual(['Solo', 'S', 'A', 'T', 'B']);
     expect(song.parts.map(partName)).toEqual(['Solo', 'Soprano', 'Alto', 'Tenor', 'Bass']);
+    expect(['S', 'A', 'T', 'B'].map(partPlural)).toEqual(['Sopranos', 'Altos', 'Tenors', 'Basses']);
   });
 
   it('keeps tenor as written; the octave drop happens at playback', () => {

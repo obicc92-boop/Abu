@@ -14,7 +14,7 @@ import { Avatar, Body, Button, Card, Chip, ErrorText, Kicker, Loading, Page, Top
 import { checkInOpen, fmtDate, fmtTime } from '@/lib/dates';
 import { kindLabel } from '@/lib/group-types';
 import { useSerial } from '@/lib/serial';
-import { partName } from '@/solfa';
+import { partName, partPlural } from '@/solfa';
 import { useSession } from '@/state/session';
 import { colors, fonts, partColor } from '@/theme/tokens';
 
@@ -88,7 +88,7 @@ export default function AttendanceScreen() {
     myPart ? Number(b === myPart) - Number(a === myPart) : 0,
   );
   const sections = [
-    ...partsInOrder.map((p) => ({ key: p, title: `${partName(p)}s`, color: partColor(p), rows: visible.filter((r) => r.part === p) })),
+    ...partsInOrder.map((p) => ({ key: p, title: partPlural(p), color: partColor(p), rows: visible.filter((r) => r.part === p) })),
     { key: 'none', title: 'No part yet', color: colors.muted, rows: visible.filter((r) => !r.part) },
   ].filter((x) => x.rows.length);
 
@@ -108,7 +108,7 @@ export default function AttendanceScreen() {
           {PART_ORDER.filter((p) => rows.some((r) => r.part === p)).map((p) => {
             const inPart = rows.filter((r) => r.part === p);
             return (
-              <View key={p} style={styles.part} accessibilityLabel={`${partName(p)}s: ${inPart.filter((r) => status(r) === 'present').length} of ${inPart.length} present`}>
+              <View key={p} style={styles.part} accessibilityLabel={`${partPlural(p)}: ${inPart.filter((r) => status(r) === 'present').length} of ${inPart.length} present`}>
                 <View style={[styles.dot, { backgroundColor: partColor(p) }]}>
                   <Text style={styles.dotText}>{p}</Text>
                 </View>
@@ -127,7 +127,7 @@ export default function AttendanceScreen() {
 
       {myPart ? (
         <Body muted>
-          As {partName(myPart).toLowerCase()} part leader you mark {partName(myPart).toLowerCase()}s. Other parts are view only.
+          As {partName(myPart).toLowerCase()} part leader you mark {partPlural(myPart).toLowerCase()}. Other parts are view only.
         </Body>
       ) : null}
 

@@ -90,6 +90,12 @@ export function partName(part: string): string {
   return ({ S: 'Soprano', A: 'Alto', T: 'Tenor', B: 'Bass' } as Record<string, string>)[part] ?? part;
 }
 
+/** A part's name for a group of singers: "Sopranos", "Altos", "Tenors", "Basses". */
+export function partPlural(part: string): string {
+  const name = partName(part);
+  return /s$/i.test(name) ? `${name}es` : `${name}s`;
+}
+
 /**
  * Tenor and bass lines are read from the lower doh: tenor is written an octave
  * above where it sounds, and bass is written relative to that same lower doh.

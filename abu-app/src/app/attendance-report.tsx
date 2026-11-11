@@ -15,7 +15,7 @@ import { rangeFrom, rateColor, REPORT_RANGES, type ReportRange } from '@/lib/att
 import { fmtDate, monthName } from '@/lib/dates';
 import { download } from '@/lib/download';
 import { kindLabel } from '@/lib/group-types';
-import { partName } from '@/solfa';
+import { partPlural } from '@/solfa';
 import { useSession } from '@/state/session';
 import { colors, fonts, partColor } from '@/theme/tokens';
 
@@ -103,7 +103,7 @@ export default function AttendanceReportScreen() {
               {parts.map((p) => (
                 <TallyRow
                   key={p.part || 'none'}
-                  label={p.part ? `${partName(p.part)}s · ${p.members}` : `No part yet · ${p.members}`}
+                  label={p.part ? `${partPlural(p.part)} · ${p.members}` : `No part yet · ${p.members}`}
                   color={p.part ? partColor(p.part) : colors.muted}
                   dot={p.part || '–'}
                   tally={p}
