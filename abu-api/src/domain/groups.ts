@@ -240,6 +240,16 @@ export interface GroupSettings {
 /** Leaders change the group's details and switches. */
 export async function updateGroup(db: D1Database, me: string, groupId: string, patch: GroupSettings): Promise<Group> {
   await requireLeader(db, groupId, me, 'Only a leader can change the group’s settings.');
+  if (patch.name !== undefined && !patch.name.trim()) throw badRequest('Give the group a name.');
+  if (patch.name !== undefined && patch.name.trim().length > 80) throw badRequest('Keep the name under 80 characters.');
+  if (patch.leader_title !== undefined && !patch.leader_title.trim()) throw badRequest('Give the leader a title, like Choirmaster.');
+  if (patch.leader_title !== undefined && patch.leader_title.trim().length > 40) throw badRequest('Keep the leader’s title under 40 characters.');
+  if (patch.sections !== undefined) {
+    const names = patch.sections.map((s) => s.trim()).filter(Boolean);
+    if (names.length > 30) throw badRequest('Use 30 sections or fewer.');
+    if (names.some((s) => s.length > 60)) throw badRequest('Keep each section name under 60 characters.');
+    if (new Set(names.map((s) => s.toLowerCase())).size !== names.length) throw badRequest('Each section needs a different name.');
+  }
   const sets: string[] = [];
   const values: unknown[] = [];
   const put = (column: string, value: unknown) => {

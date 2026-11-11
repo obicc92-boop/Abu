@@ -54,7 +54,8 @@ import {
   reportCsv,
   type AttendanceStatus,
 } from './domain/attendance';
-import { myPractice, partReadiness, recordPlay, setKnowsPart } from './domain/practice';
+import { deleteNotice, listNotices, pinNotice, postNotice } from './domain/notices';
+import { myPractice, partReadiness, practiceSummary, recordPlay, setKnowsPart } from './domain/practice';
 import {
   addToRepertoire,
   deleteSong,
@@ -196,7 +197,8 @@ app.delete('/songs/:id/sheet', signedIn, async (c) => {
 });
 
 /** Count a play-through (the player calls this at the end of a song). */
-app.post('/songs/:id/plays', signedIn, async (c) => c.json(await recordPlay(c.env.DB, c.get('userId'), c.req.param('id'))));
+/** One play-through, counted on `day` (the phone's date, "2026-11-11") for the week and streak on Me. */
+app.post('/songs/:id/plays', signedIn, async (c) => c.json(await recordPlay(c.env.DB, c.get('userId'), c.req.param('id'), text(await body(c), 'day'))));
 
 /** "I know my part", on or off. */
 app.put('/songs/:id/knows', signedIn, async (c) => {
@@ -211,6 +213,7 @@ app.use('/me/*', signedIn);
 app.use('/groups', signedIn);
 app.use('/groups/*', signedIn);
 app.use('/events/*', signedIn);
+app.use('/notices/*', signedIn);
 
 app.get('/me', async (c) => {
   const me = c.get('userId');
@@ -289,6 +292,8 @@ app.delete('/groups/:id/members/:userId', async (c) => {
 });
 
 app.get('/me/practice', async (c) => c.json(await myPractice(c.env.DB, c.get('userId'))));
+/** Your week, streak and songs you know; `today` is the phone's date. */
+app.get('/me/practice/summary', async (c) => c.json(await practiceSummary(c.env.DB, c.get('userId'), c.req.query('today'))));
 
 /** "Our repertoire" (or "My songs" in your own space). */
 app.get('/groups/:id/repertoire', async (c) => c.json(await listRepertoire(c.env.DB, c.get('userId'), c.req.param('id'))));
@@ -437,6 +442,29 @@ app.get('/groups/:id/attendance.csv', async (c) => {
     'content-disposition': `attachment; filename="${name}"`,
     'cache-control': 'private, no-store',
   });
+});
+
+/* ---------- Notices ---------- */
+
+/** Pinned first, then newest. Everyone in the group reads them all; Home picks yours. */
+app.get('/groups/:id/notices', async (c) => c.json(await listNotices(c.env.DB, c.get('userId'), c.req.param('id'))));
+
+/** Leaders and part leaders post, to everyone or to one part (`part`). */
+app.post('/groups/:id/notices', async (c) => {
+  const b = await body(c);
+  return c.json(await postNotice(c.env.DB, c.get('userId'), c.req.param('id'), text(b, 'body') ?? '', part(b)), 201);
+});
+
+/** Leaders pin or unpin. */
+app.put('/notices/:id/pin', async (c) => {
+  await pinNotice(c.env.DB, c.get('userId'), c.req.param('id'), flag(await body(c), 'pinned') ?? true);
+  return c.json({ ok: true });
+});
+
+/** Whoever posted it, or a leader. */
+app.delete('/notices/:id', async (c) => {
+  await deleteNotice(c.env.DB, c.get('userId'), c.req.param('id'));
+  return c.json({ ok: true });
 });
 
 /* ---------- Errors ---------- */

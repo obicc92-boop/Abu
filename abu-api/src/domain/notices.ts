@@ -1,4 +1,8 @@
-/** Notices: posted by leaders and part leaders, read by the whole group. */
+/**
+ * Notices: posted by leaders and part leaders, read by the whole group. A
+ * notice can be for one part ("Tenors, watch bar 6"): leaders write to any
+ * part, part leaders to everyone or their own part.
+ */
 import { badRequest, notFound, forbidden } from '../errors';
 import { LEADERS, membershipOf, newId, requireMember, requireRole } from './access';
 
@@ -8,15 +12,25 @@ export interface Notice {
   author_id: string | null;
   author_name: string | null;
   body: string;
+  /** The part it's for, or null for everyone. */
+  part: string | null;
   pinned: boolean;
   created_at: string;
 }
 
-export async function postNotice(db: D1Database, me: string, groupId: string, body: string): Promise<Notice> {
-  await requireRole(db, groupId, me, LEADERS, 'Only leaders and part leaders can post notices.');
-  if (!body?.trim()) throw badRequest('Write something first.');
+export async function postNotice(db: D1Database, me: string, groupId: string, body: string, part: string | null = null): Promise<Notice> {
+  const mine = await requireRole(db, groupId, me, LEADERS, 'Only leaders and part leaders can post notices.');
+  const text = body?.trim();
+  if (!text) throw badRequest('Write something first.');
+  if (text.length > 2000) throw badRequest('Keep a notice under 2,000 characters.');
+  const to = part?.trim() || null;
+  if (to) {
+    const g = await db.prepare('select parts from groups where id = ?').bind(groupId).first<{ parts: string }>();
+    if (!(JSON.parse(g?.parts ?? '[]') as string[]).includes(to)) throw badRequest('Choose one of the group’s parts.');
+    if (mine.role === 'part_leader' && to !== mine.part) throw forbidden('Part leaders write to everyone or to their own part.');
+  }
   const id = newId();
-  await db.prepare('insert into notices (id, group_id, author_id, body) values (?, ?, ?, ?)').bind(id, groupId, me, body.trim()).run();
+  await db.prepare('insert into notices (id, group_id, author_id, body, part) values (?, ?, ?, ?, ?)').bind(id, groupId, me, text, to).run();
   return (await listNotices(db, me, groupId)).find((n) => n.id === id)!;
 }
 
