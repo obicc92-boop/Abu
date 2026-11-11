@@ -12,6 +12,8 @@ What sets it apart from the choir apps that exist abroad (cori, Choir Genius, Ch
 - **Parts are played from text, not recordings.** A song is a few kilobytes, so a whole repertoire costs less data than one WhatsApp voice note.
 - **Made for how Nigerian choirs work:** Mass and service sections, WhatsApp as the channel, cheap Android phones, church halls with no data.
 
+Research behind this (November 2026): no app was found that teaches choir parts in tonic sol-fa for Nigerian choirs. [Songs for Worship Pro](https://apps.apple.com/app/id6759032305) shows sol-fa for hymns but doesn't teach parts or organise choirs. Choir apps abroad cover attendance, announcements, setlists and QR check-in, around staff notation and recorded practice tracks: [cori](https://play.google.com/store/apps/details?id=app.cori.android), [Choir Genius](https://www.choirgenius.com/conductor), [Chorus Connection](https://chorusconnection.com/concert-and-rehearsal-management), [Chorilo](https://custom.chorilo.com/en/blog/anwesenheitsliste-probe-mobile-app). See also the University of Nigeria study on [sol-fa and staff notation in Nigerian choral learning](https://njh.com.ng/admin/img/paper/NJH-30-2-2022-48-60.pdf).
+
 ## Decisions (11 November 2026)
 
 | Topic | Decision |
@@ -172,6 +174,39 @@ Drafts: `design/brand-draft.html` (sources in `design/brand/`).
 - **Language:** English first, then Igbo, Yoruba, Hausa and Pidgin. Lyrics must show ẹ, ọ, ṣ, ụ and tone marks correctly.
 - **Church life:** section names per denomination; liturgical seasons as song tags.
 - **Payments, later:** Paystack or Flutterwave, priced in naira.
+
+## Building the MVP
+
+Each milestone ends merged, pushed and deployed. Home grows with them: each milestone adds its cards to Home.
+
+1. **Database.** The Supabase schema: groups, members, songs, repertoire, services and song orders, replies, attendance, notices, practice. Security rules decide who can see and change what (for example, part leaders mark only their own part, and practice is private). Tests cover both. Needs nothing from the owner.
+2. **Sign-in and onboarding.**
+   - Email sign-in with a code, then Google.
+   - The welcome screen; joining by code or link (instant, or waiting for approval); starting a group with the invite step; "Just me"; "Look around first".
+   - The five-tab shell.
+3. **Songs.**
+   - The library from the database, with search and filters.
+   - Adding and editing sol-fa with the live check; attaching the original sheet.
+   - Our repertoire and My songs; the player on real songs; private practice counts.
+4. **Schedule.** Services, rehearsals and concerts; song orders by section (reorder, add, remove); replies; Rehearse and Perform; repeating rehearsals.
+5. **Attendance.** Marking (leaders anyone, part leaders their own part), self check-in with the 4-digit code, attendance rates, reports with an export.
+6. **Group and Me.**
+   - Group: members by part, changing parts and roles, notices (post and pin), settings (approval, self check-in, section names).
+   - Me: profile, switching groups, your practice, downloads, settings.
+7. **Offline and installable.** Songs, song orders and notices for upcoming services kept on the phone; the installable website; the data saver.
+8. **Pilot ready.**
+   - Home complete: the next service, replying, checking in, learning, readiness per part, and the leader's To do.
+   - Invite links shared to WhatsApp.
+   - The Android build tested on Tecno, Infinix and itel phones.
+   - The pilot choir onboarded.
+
+### What the owner needs to do
+
+- **Before milestone 2:** create a free Supabase account, then run `npx supabase login` once on the development Mac. That lets the project be created and managed from there without pasting keys into chat. The project will be called "abu", on the free plan, in the region closest to Nigeria.
+- **During milestone 2:** Google sign-in needs an OAuth client in Google Cloud. Step-by-step instructions will come at that point; email sign-in works without it.
+- **Before the pilot:**
+  - An email sender for sign-in codes, such as Resend's free plan, because Supabase's built-in sender only allows a few emails an hour.
+  - Optionally, an Abụ domain to use instead of abu.adalingo.workers.dev.
 
 ## Order of work after the MVP
 
