@@ -50,6 +50,23 @@ export function isOver(iso: string, now = new Date()): boolean {
   return new Date(iso).getTime() < now.getTime() - 6 * 3600e3;
 }
 
+/** Has it started? (Attendance can be marked from then on.) */
+export function hasStarted(iso: string, now = new Date()): boolean {
+  return new Date(iso).getTime() <= now.getTime();
+}
+
+/** Self check-in is open from 3 hours before the start to 6 hours after (the Worker enforces the same window). */
+export function checkInOpen(iso: string, now = new Date()): boolean {
+  const start = new Date(iso).getTime();
+  return now.getTime() >= start - 3 * 3600e3 && now.getTime() <= start + 6 * 3600e3;
+}
+
+/** "November 2026" from "2026-11". */
+export function monthName(month: string): string {
+  const [y, m] = month.split('-').map(Number);
+  return `${['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][m - 1]} ${y}`;
+}
+
 /** Which list an event goes under on the Schedule tab. */
 export function weekBucket(iso: string, now = new Date()): 'past' | 'this week' | 'next week' | 'later' {
   const d = new Date(iso);

@@ -13,6 +13,7 @@ import { SearchIcon } from '@/components/icons';
 import { Body, Button, Card, Chip, ErrorText, Field, Kicker, Loading, Page, TopBar } from '@/components/ui';
 import { agoText } from '@/lib/dates';
 import { nextSection, sectionChoices } from '@/lib/order';
+import { useSerial } from '@/lib/serial';
 import { KEY_NAMES } from '@/solfa';
 import { useSession } from '@/state/session';
 import { colors, fonts } from '@/theme/tokens';
@@ -70,23 +71,8 @@ function OrderEditor({ details, group, reload }: { details: EventDetails; group:
   };
 
   // One request at a time, in the order the taps happened.
-  const chain = useRef<Promise<unknown>>(Promise.resolve());
+  const { run: queue, idle, busy, error } = useSerial(() => void queryClient.invalidateQueries({ queryKey: ['events'] }));
   const saveSeq = useRef(0);
-  const [busy, setBusy] = useState(0);
-  const [error, setError] = useState<string | null>(null);
-  function queue<T>(job: () => Promise<T>): Promise<T> {
-    setBusy((n) => n + 1);
-    setError(null);
-    const run = chain.current.then(job);
-    chain.current = run.catch(() => {});
-    run
-      .catch((err: Error) => setError(err.message))
-      .finally(() => {
-        setBusy((n) => n - 1);
-        void queryClient.invalidateQueries({ queryKey: ['events'] });
-      });
-    return run;
-  }
   const saveOrder = () => {
     const seq = ++saveSeq.current;
     void queue(async () => {
@@ -123,7 +109,7 @@ function OrderEditor({ details, group, reload }: { details: EventDetails; group:
   const choices = sectionChoices(group.sections, rehearsal, items.map((i) => i.section));
 
   const done = async () => {
-    await chain.current;
+    await idle();
     await queryClient.invalidateQueries({ queryKey: ['event', e.id] });
     if (router.canGoBack()) router.back();
     else router.replace({ pathname: '/event/[id]', params: { id: e.id } });

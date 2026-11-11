@@ -2,7 +2,7 @@ import { describe, expect, it } from '@jest/globals';
 
 import type { OrderItem } from '@/api/client';
 
-import { agoText, isOver, relDay, weekBucket } from '../dates';
+import { agoText, checkInOpen, hasStarted, isOver, monthName, relDay, weekBucket } from '../dates';
 import { bySection, nextSection, sectionChoices } from '../order';
 
 // Wednesday 11 November 2026, 10:00 local time.
@@ -29,6 +29,16 @@ describe('dates', () => {
     expect(weekBucket(at(22), NOW)).toBe('next week');
     expect(weekBucket(at(23), NOW)).toBe('later');
     expect(weekBucket(at(10), NOW)).toBe('past');
+  });
+
+  it('opens check-in 3 hours before the start and closes it 6 hours after', () => {
+    expect(checkInOpen(at(11, 13), NOW)).toBe(true);
+    expect(checkInOpen(at(11, 14), NOW)).toBe(false);
+    expect(checkInOpen(at(11, 4), NOW)).toBe(true);
+    expect(checkInOpen(at(11, 3), NOW)).toBe(false);
+    expect(hasStarted(at(11, 9), NOW)).toBe(true);
+    expect(hasStarted(at(11, 11), NOW)).toBe(false);
+    expect(monthName('2026-11')).toBe('November 2026');
   });
 
   it('says how long ago a song was sung', () => {

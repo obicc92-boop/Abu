@@ -145,7 +145,48 @@ export interface EventDetails {
   replies: { going: number; cant: number };
   my_role: Role;
   my_part: string | null;
+  /** Your own attendance mark, once you're marked or checked in. */
+  my_attendance: AttendanceStatus | null;
+  /** Whether members check themselves in with a code in this group. */
+  self_check_in: boolean;
 }
+
+export type AttendanceStatus = 'present' | 'absent' | 'excused';
+
+/** One person on the register for a service or rehearsal. */
+export interface SheetRow {
+  user_id: string;
+  display_name: string;
+  part: string | null;
+  role: Role;
+  reply: Reply | null;
+  /** null until someone marks them. */
+  status: AttendanceStatus | null;
+  self_check_in: boolean;
+  /** You may mark them (part leaders: only their own part). */
+  can_mark: boolean;
+}
+
+export interface Tally {
+  present: number;
+  absent: number;
+  excused: number;
+  /** Present out of present and absent, in %; null before anyone is marked. */
+  rate: number | null;
+}
+
+export interface AttendanceReport {
+  from: string;
+  to: string;
+  tz: number;
+  events: { id: string; kind: EventKind; title: string; starts_at: string; marked: number }[];
+  members: (Tally & { user_id: string; display_name: string; part: string | null; role: Role; marks: Record<string, AttendanceStatus | null> })[];
+  parts: (Tally & { part: string; members: number })[];
+  months: (Tally & { month: string; events: number })[];
+  overall: Tally;
+}
+
+export type CheckInResult = 'present' | 'wrong_code' | 'locked';
 
 export interface EventInput {
   kind: EventKind;
@@ -255,12 +296,35 @@ export const api = {
   replies: (eventId: string) => request<{ user_id: string; status: Reply; display_name: string; part: string | null }[]>(`/events/${eventId}/replies`),
   readiness: (eventId: string) => request<PartReadiness[]>(`/events/${eventId}/readiness`),
 
+  attendance: (eventId: string) => request<SheetRow[]>(`/events/${eventId}/attendance`),
+  mark: (eventId: string, userId: string, status: AttendanceStatus) => request<{ ok: true }>(`/events/${eventId}/attendance/${userId}`, json('PUT', { status })),
+  markRest: (eventId: string, status: 'present' | 'absent') => request<{ marked: number }>(`/events/${eventId}/attendance/rest`, json('POST', { status })),
+  checkInCode: (eventId: string) => request<{ code: string }>(`/events/${eventId}/check-in-code`),
+  checkIn: (eventId: string, code: string) => request<{ result: CheckInResult }>(`/events/${eventId}/check-in`, json('POST', { code })),
+  myAttendance: (groupId: string) => request<Tally>(`/groups/${groupId}/my-attendance`),
+  attendanceReport: (groupId: string, range: { from?: string; to?: string } = {}) => request<AttendanceReport>(`/groups/${groupId}/attendance${rangeQuery(range)}`),
+
   repertoire: (groupId: string) => request<Song[]>(`/groups/${groupId}/repertoire`),
   addToRepertoire: (groupId: string, songId: string) => request<{ ok: true }>(`/groups/${groupId}/repertoire`, json('POST', { song_id: songId })),
   removeFromRepertoire: (groupId: string, songId: string) => request<{ ok: true }>(`/groups/${groupId}/repertoire/${songId}`, { method: 'DELETE' }),
 };
 
 /** Where the original sheet can be opened (anyone may view it). */
+/** A report's range, plus this phone's time zone so dates and months match its calendar. */
+function rangeQuery(range: { from?: string; to?: string }): string {
+  const q = new URLSearchParams();
+  if (range.from) q.set('from', range.from);
+  if (range.to) q.set('to', range.to);
+  q.set('tz', String(new Date().getTimezoneOffset()));
+  const qs = q.toString();
+  return qs ? `?${qs}` : '';
+}
+
+/** The attendance register as a spreadsheet (CSV) to download; it uses the signed-in session. */
+export function attendanceCsvUrl(groupId: string, range: { from?: string; to?: string } = {}): string {
+  return `${API_URL}/api/groups/${groupId}/attendance.csv${rangeQuery(range)}`;
+}
+
 export function sheetUrl(songId: string): string {
   return `${API_URL}/api/songs/${encodeURIComponent(songId)}/sheet`;
 }
