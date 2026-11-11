@@ -184,7 +184,7 @@ Each milestone ends merged, pushed and deployed. Home grows with them: each mile
    - Email and password sign-in (codes and Google later).
    - The welcome screen; joining by code or invite link (instant, or waiting for approval); starting a group with the WhatsApp invite step; "Just me"; "Look around first".
    - The five-tab shell.
-3. **Songs.**
+3. **Songs.** *Done.*
    - The library from the database, with search and filters.
    - Adding and editing sol-fa with the live check; attaching the original sheet.
    - Our repertoire and My songs; the player on real songs; private practice counts.

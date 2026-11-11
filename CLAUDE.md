@@ -90,7 +90,13 @@ The real app is live at https://abu.adalingo.workers.dev: one Cloudflare Worker 
      - **Onboarding:** welcome, sign up or in, join by code or invite link (instant, or waiting for approval), start a group with the WhatsApp invite step, "Just me", and "Look around first".
      - **The five tabs:** Home, Songs, Schedule (a placeholder), Group (members by part, approvals, roles, settings) and Me.
      - **Checked end to end** in headless Chrome on the live site, with the test data deleted afterwards.
-   - Next is milestone 3, songs.
+   - Milestone 3 (songs) is done:
+     - **Adding and editing songs:** sol-fa checked as you type, with a preview to play. The Worker runs the same reader (imported from `abu-app/src/solfa`) and refuses broken sol-fa.
+     - **Original sheets:** PDF or photo, stored in R2 bucket `abu-sheets`.
+     - **The library:** search by title, composer or words, with filters (Our repertoire, My songs, has sol-fa, tags).
+     - **On each song:** save to My songs, add to the repertoire (leaders), edit (whoever shared it, or their group), share on WhatsApp, and private practice (plays and "I know my part").
+     - **Demo songs** are in the database (migration `0003`).
+   - Next is milestone 4, schedule: services, song orders, Rehearse and Perform.
 
    The schema covers the entities the prototype uses:
    - `users`
