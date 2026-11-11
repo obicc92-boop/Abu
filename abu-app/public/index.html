@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="%LANG_ISO_CODE%">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <meta name="theme-color" content="#D93A1E" />
+    <title>%WEB_TITLE%</title>
+    <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
+    <style id="expo-reset">
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        overflow: hidden;
+        margin: 0;
+        background: #d93a1e;
+      }
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+      }
+      /* Shown until the app loads: the same red screen and music book as the
+         phone splash, so slow connections never see a blank page. */
+      #first-paint {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #d93a1e;
+      }
+    </style>
+  </head>
+
+  <body>
+    <noscript>Abụ needs JavaScript to run.</noscript>
+    <div id="root">
+      <div id="first-paint">
+        <svg width="110" height="88" viewBox="166 314 692 556" aria-label="Abụ">
+          <path d="M488 736H536V862L512 840L488 862Z" fill="#E6A325" />
+          <path d="M512 394C430 344 300 334 176 358V732C300 708 430 718 512 768C594 718 724 708 848 732V358C724 334 594 344 512 394Z" fill="#A3261A" />
+          <path d="M512 372C430 322 300 312 196 336V708C300 684 430 694 512 744C594 694 724 684 828 708V336C724 312 594 322 512 372Z" fill="#FFFFFF" />
+          <path d="M512 380V738" stroke="#EBD9D3" stroke-width="6" />
+          <path d="M244 430L468 452M244 500L468 522M244 570L468 592" fill="none" stroke="#F0C9BF" stroke-width="14" stroke-linecap="round" />
+          <g fill="#D93A1E">
+            <ellipse cx="306" cy="506" rx="27" ry="20" transform="rotate(-22 306 506)" />
+            <ellipse cx="412" cy="446" rx="27" ry="20" transform="rotate(-22 412 446)" />
+            <ellipse cx="604" cy="616" rx="42" ry="31" transform="rotate(-22 604 616)" />
+            <ellipse cx="740" cy="590" rx="42" ry="31" transform="rotate(-22 740 590)" />
+            <rect x="631" y="440" width="18" height="172" />
+            <rect x="767" y="414" width="18" height="172" />
+            <path d="M631 428L785 402V446L631 472Z" />
+          </g>
+        </svg>
+      </div>
+    </div>
+  </body>
+</html>

@@ -5,16 +5,24 @@ import { Figtree_800ExtraBold } from '@expo-google-fonts/figtree/800ExtraBold';
 import { JetBrainsMono_500Medium } from '@expo-google-fonts/jetbrains-mono/500Medium';
 import { JetBrainsMono_700Bold } from '@expo-google-fonts/jetbrains-mono/700Bold';
 import { Marcellus_400Regular } from '@expo-google-fonts/marcellus/400Regular';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
+import { View } from 'react-native';
 
-import { AnimatedSplash } from '@/splash/animated-splash';
+import { BrandMark } from '@/components/brand';
+import { AnimatedSplash, BOOK_WIDTH } from '@/splash/animated-splash';
+import { SessionProvider } from '@/state/session';
 import { colors } from '@/theme/tokens';
 
 SplashScreen.preventAutoHideAsync();
+
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
+});
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
@@ -35,14 +43,23 @@ export default function RootLayout() {
     if (loaded || error) SplashScreen.hideAsync();
   }, [loaded, error]);
 
-  // Fall back to system fonts rather than a blank screen if a font fails to load.
-  if (!loaded && !error) return null;
+  // While fonts load, show the same frame as the splash (and the web's first paint).
+  // If a font fails, carry on with system fonts rather than a blank screen.
+  if (!loaded && !error) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.red, alignItems: 'center', justifyContent: 'center' }}>
+        <BrandMark size={BOOK_WIDTH} />
+      </View>
+    );
+  }
 
   return (
-    <>
-      <StatusBar style={opening ? 'light' : 'dark'} />
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.sand } }} />
-      {opening ? <AnimatedSplash onDone={opened} /> : null}
-    </>
+    <QueryClientProvider client={queryClient}>
+      <SessionProvider>
+        <StatusBar style={opening ? 'light' : 'dark'} />
+        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.sand } }} />
+        {opening ? <AnimatedSplash onDone={opened} /> : null}
+      </SessionProvider>
+    </QueryClientProvider>
   );
 }

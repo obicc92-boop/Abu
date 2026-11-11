@@ -76,6 +76,8 @@ export function ToggleRow({ label, hint, value, onChange }: { label: string; hin
         accessibilityLabel={label}
         trackColor={{ false: colors.switchOff, true: colors.red }}
         thumbColor={colors.white}
+        // On the web, react-native-web colours the "on" knob separately.
+        {...({ activeThumbColor: colors.white } as object)}
       />
     </View>
   );

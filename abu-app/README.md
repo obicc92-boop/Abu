@@ -12,7 +12,9 @@ npm run typecheck
 npx expo lint
 ```
 
-`app.json` sets web output to `static`, so `npm run build:web` gives plain files in `dist/` that any static host can serve. Each demo song gets its own pre-rendered page (`generateStaticParams` in `src/app/song/[id].tsx`).
+`app.json` sets web output to `single`: the web app is one page whose router handles every path (the Worker serves `index.html` for any path that isn't a file). `public/index.html` paints the red splash with the music book before any JavaScript loads. `npm run build:web` puts the build in `dist/`.
+
+On phones the app talks to the live Worker; set `EXPO_PUBLIC_API_URL` to use a local `wrangler dev` instead. On the web, the app and the API share one origin.
 
 ### Deploy (Cloudflare)
 
@@ -28,12 +30,17 @@ Sound on Android and iOS comes from `react-native-audio-api`, a native module, s
 ## Layout
 
 - `src/app/`: screens (Expo Router).
-  - `index.tsx`: placeholder home listing the demo songs.
-  - `song/[id].tsx`: the player.
+  - `(tabs)/`: the five tabs: Home (`index.tsx`), Songs, Schedule, Group, Me. Anyone neither signed in nor looking around is sent to `welcome`.
+  - `welcome.tsx`, `auth.tsx`, `join.tsx`, `create-group.tsx`, `just-me.tsx`: onboarding.
+  - `song/[id].tsx`: the player, for demo songs and songs from the API.
+- `src/api/`: the API client and types (`client.ts`), and where the API lives (`config.ts`, `config.web.ts`).
+- `src/auth/`: the Better Auth client: secure storage on phones, cookies on the web.
+- `src/state/session.tsx`: who is signed in, their groups, the current group (remembered on the device), and "looking around".
+- `src/lib/`: device settings storage and group type names.
 - `src/solfa/`: the sol-fa reader and pitch helpers, ported from the prototype. Read its README first.
 - `src/score/layout.ts`: splits a song into lines of beat columns (port of `scoreHTML`).
 - `src/audio/`: the synth and scheduler (`engine.ts`), the audio context for web (`context.web.ts`) and phones (`context.ts`), and the `useSongPlayer` hook.
-- `src/components/`: the score, the player controls, and the brand mark and motif (`brand.tsx`).
+- `src/components/`: shared UI (`ui.tsx`: pages, buttons, fields, cards, the part picker), icons, the invite card, song rows, the score, the player controls, and the brand mark and motif (`brand.tsx`).
 - `src/splash/`: the opening animation that follows the still splash screen, and its particle layout.
 - `src/data/demo-songs.ts`: the prototype's demo songs (public domain or written for the demo). Never add the pilot choir's copyrighted sheets.
 - `src/theme/tokens.ts`: brand colours, part colours and fonts.

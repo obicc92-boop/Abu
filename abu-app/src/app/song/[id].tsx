@@ -1,8 +1,10 @@
+import { useQuery } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo, useRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { api } from '@/api/client';
 import { partLevel } from '@/audio/engine';
 import { useSongPlayer } from '@/audio/use-song-player';
 import { PartMixer, PlayButton, Stepper, ToggleRow } from '@/components/player-controls';
@@ -11,18 +13,35 @@ import { DEMO_SONGS, type DemoSong } from '@/data/demo-songs';
 import { KEY_NAMES, mod12, parseSolfa } from '@/solfa';
 import { colors, fonts } from '@/theme/tokens';
 
-/** Pre-render a page per demo song for the static web export. */
-export function generateStaticParams(): { id: string }[] {
-  return DEMO_SONGS.map((s) => ({ id: s.id }));
-}
-
 export default function SongScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const song = DEMO_SONGS.find((s) => s.id === id);
+  const demo = DEMO_SONGS.find((s) => s.id === id);
+  // Songs shared on Abụ come from the API; the demo songs are built in.
+  const shared = useQuery({ queryKey: ['song', id], queryFn: () => api.song(id), enabled: !demo && !!id, retry: false });
+  const song: DemoSong | undefined =
+    demo ??
+    (shared.data && {
+      id: shared.data.id,
+      title: shared.data.title,
+      composer: shared.data.composer,
+      key: shared.data.doh,
+      time: shared.data.time_signature,
+      tags: shared.data.tags,
+      solfa: shared.data.solfa,
+    });
+
   if (!song) {
     return (
       <SafeAreaView style={styles.page}>
-        <TopBar title="Song not found" subtitle="It may have been removed." />
+        <TopBar title={shared.isPending ? 'Loading…' : 'Song not found'} subtitle={shared.isPending ? '' : 'It may have been removed.'} />
+      </SafeAreaView>
+    );
+  }
+  if (!song.solfa.trim()) {
+    return (
+      <SafeAreaView style={styles.page}>
+        <TopBar title={song.title} subtitle={song.composer} />
+        <Text style={[styles.hint, { padding: 16 }]}>Nobody has typed this song in sol-fa yet, so it can’t play.</Text>
       </SafeAreaView>
     );
   }

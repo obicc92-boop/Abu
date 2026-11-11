@@ -20,7 +20,7 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "output": "static",
+      "output": "single",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
@@ -33,7 +33,8 @@
           "imageWidth": 110
         }
       ],
-      "react-native-audio-api"
+      "react-native-audio-api",
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,
