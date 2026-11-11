@@ -1,6 +1,7 @@
 /**
- * Group: who's in it, by part; the invite code; and for leaders, letting
- * people in, roles and the group's switches. In your own space: join or start one.
+ * Group: the invite code, notices, attendance (leaders and part leaders),
+ * who's in it by part; and for leaders, letting people in, roles, the
+ * group's switches and details. In your own space: join or start one.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
@@ -9,6 +10,7 @@ import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 
 import { api, type Member, type MyGroup, type Role } from '@/api/client';
 import { InviteCard } from '@/components/invite';
+import { NoticesSection } from '@/components/notices';
 import { Avatar, Body, Button, Card, ErrorText, Kicker, Loading, Page, PartPicker, TopBar } from '@/components/ui';
 import { rangeFrom, rateColor } from '@/lib/attendance';
 import { GROUP_TYPES } from '@/lib/group-types';
@@ -80,6 +82,8 @@ function GroupDetails({ group, me }: { group: MyGroup; me: string }) {
 
       {group.invite_code ? <InviteCard groupName={group.name} code={group.invite_code} /> : null}
 
+      <NoticesSection group={group} me={me} />
+
       {leader ? (
         <Card>
           <Kicker>Settings</Kicker>
@@ -102,6 +106,14 @@ function GroupDetails({ group, me }: { group: MyGroup; me: string }) {
             onChange={(v) => settings.mutate({ part_leaders_edit_orders: v })}
           />
           {settings.error ? <ErrorText message={settings.error.message} /> : null}
+          <Button
+            small
+            kind="ghost"
+            label="Name, leader’s title and sections"
+            accessibilityLabel="Group details and sections"
+            onPress={() => router.push('/group-settings')}
+            style={{ alignSelf: 'flex-start' }}
+          />
         </Card>
       ) : null}
 

@@ -4,6 +4,8 @@
  */
 import { authCookie } from '@/auth/client';
 
+import { dayKey } from '@/lib/dates';
+
 import { API_URL, SITE_URL } from './config';
 
 export type GroupType = 'catholic' | 'anglican' | 'pentecostal' | 'band' | 'personal';
@@ -192,6 +194,28 @@ export interface AttendanceReport {
 
 export type CheckInResult = 'present' | 'wrong_code' | 'locked';
 
+export interface Notice {
+  id: string;
+  group_id: string;
+  author_id: string | null;
+  author_name: string | null;
+  body: string;
+  /** The part it's for ("T"), or null for everyone. */
+  part: string | null;
+  pinned: boolean;
+  created_at: string;
+}
+
+/** Your own practice week, private to you. */
+export interface PracticeSummary {
+  week_plays: number;
+  week_days: number;
+  /** Days in a row up to today (or yesterday, until today is over). */
+  streak: number;
+  songs_known: number;
+  songs_practised: number;
+}
+
 export interface EventInput {
   kind: EventKind;
   title: string;
@@ -212,6 +236,11 @@ export interface Practice {
   plays: number;
   knows_part: boolean;
   last_played_at: string | null;
+  title: string;
+  composer: string;
+  doh: number;
+  time_signature: string;
+  playable: boolean;
 }
 
 export class ApiError extends Error {
@@ -275,7 +304,14 @@ export const api = {
     return request<Song>(`/songs/${id}/sheet`, { method: 'PUT', body, headers: { 'Content-Type': picked.type } });
   },
   removeSheet: (id: string) => request<Song>(`/songs/${id}/sheet`, { method: 'DELETE' }),
-  recordPlay: (id: string) => request<{ plays: number }>(`/songs/${id}/plays`, { method: 'POST' }),
+  /** One play-through, on today's date on this phone (for the week and streak on Me). */
+  recordPlay: (id: string) => request<{ plays: number }>(`/songs/${id}/plays`, json('POST', { day: dayKey() })),
+  practiceSummary: () => request<PracticeSummary>(`/me/practice/summary?today=${dayKey()}`),
+
+  notices: (groupId: string) => request<Notice[]>(`/groups/${groupId}/notices`),
+  postNotice: (groupId: string, body: string, part: string | null) => request<Notice>(`/groups/${groupId}/notices`, json('POST', { body, part })),
+  pinNotice: (noticeId: string, pinned: boolean) => request<{ ok: true }>(`/notices/${noticeId}/pin`, json('PUT', { pinned })),
+  deleteNotice: (noticeId: string) => request<{ ok: true }>(`/notices/${noticeId}`, { method: 'DELETE' }),
   setKnowsPart: (id: string, knows: boolean) => request<{ ok: true }>(`/songs/${id}/knows`, json('PUT', { knows })),
 
   myPractice: () => request<Practice[]>('/me/practice'),

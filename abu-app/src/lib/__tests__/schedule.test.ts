@@ -2,7 +2,7 @@ import { describe, expect, it } from '@jest/globals';
 
 import type { OrderItem } from '@/api/client';
 
-import { agoText, checkInOpen, hasStarted, isOver, monthName, relDay, weekBucket } from '../dates';
+import { agoText, checkInOpen, dayKey, hasStarted, isOver, monthName, postedText, relDay, weekBucket } from '../dates';
 import { bySection, nextSection, sectionChoices } from '../order';
 
 // Wednesday 11 November 2026, 10:00 local time.
@@ -39,6 +39,15 @@ describe('dates', () => {
     expect(hasStarted(at(11, 9), NOW)).toBe(true);
     expect(hasStarted(at(11, 11), NOW)).toBe(false);
     expect(monthName('2026-11')).toBe('November 2026');
+  });
+
+  it('says when a notice was posted, and the day on this calendar', () => {
+    expect(postedText(at(11, 7), NOW)).toBe('today');
+    expect(postedText(at(10), NOW)).toBe('yesterday');
+    expect(postedText(at(8), NOW)).toBe('3 days ago');
+    expect(postedText(at(1), NOW)).toBe('Sun 1 Nov');
+    expect(dayKey(NOW)).toBe('2026-11-11');
+    expect(dayKey(new Date(2026, 0, 5))).toBe('2026-01-05');
   });
 
   it('says how long ago a song was sung', () => {

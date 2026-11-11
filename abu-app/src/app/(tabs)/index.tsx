@@ -12,6 +12,7 @@ import { BrandMark, Motif } from '@/components/brand';
 import { CheckedIn, CheckIn } from '@/components/check-in';
 import { EventCard } from '@/components/event-card';
 import { InviteCard } from '@/components/invite';
+import { NoticesSection } from '@/components/notices';
 import { Readiness } from '@/components/readiness';
 import { ReplyButtons } from '@/components/reply-buttons';
 import { SongRow } from '@/components/song-row';
@@ -178,6 +179,8 @@ export default function Home() {
       ) : null}
 
       {toLearn.length ? <LearnForUpcoming items={toLearn} practice={practice.data} part={g.part} /> : null}
+
+      {choir ? <NoticesSection group={choir} me={s.profile.id} forMe limit={3} /> : null}
 
       {g.type !== 'personal' && (g.role === 'leader' || g.role === 'part_leader') && upcoming.service && upcoming.serviceDetails?.items.length ? (
         <Readiness eventId={upcoming.service.id} title={`Ready for ${upcoming.service.title}?`} />

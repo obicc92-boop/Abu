@@ -21,6 +21,20 @@ export function fmtTime(iso: string | Date): string {
   return `${h % 12 || 12}:${String(d.getMinutes()).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
 }
 
+/** A day on this phone's calendar, "2026-11-11". */
+export function dayKey(d = new Date()): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** When something was posted: "today", "yesterday", "3 days ago", or the date. */
+export function postedText(iso: string, now = new Date()): string {
+  const n = daysFromToday(iso, now);
+  if (n >= 0) return 'today';
+  if (n === -1) return 'yesterday';
+  if (n > -7) return `${-n} days ago`;
+  return fmtDate(iso);
+}
+
 /** Whole days from today to the date (0 today, 1 tomorrow, -1 yesterday). */
 export function daysFromToday(iso: string, now = new Date()): number {
   return Math.round((startOfDay(new Date(iso)).getTime() - startOfDay(now).getTime()) / 864e5);
