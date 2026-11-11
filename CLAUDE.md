@@ -26,6 +26,7 @@ The product owner has a pilot choir ready to test. The real app is started: `abu
 | Joining | A code or invite link joins **instantly by default**; the leader can switch on approval for new members. |
 | Practice privacy | Leaders see **totals per part** (practice, and how many marked "I know my part"). A member's own practice history is visible only to them. |
 | Roles | **Leader, part leader and member** only, for now. |
+| Song orders | **Leaders edit song orders. Part leaders can too when the leader allows it**: the group setting "Part leaders can edit song orders", off by default (owner's call, 11 November 2026). Planning, changing and deleting services stays with leaders. |
 | Icon and motif | **Drafts** in `design/brand-draft.html`, to refine later. The icon in the app is an open music book (notation on the left page, notes on the right, a gold ribbon); the owner rejected bar shapes because they look like phone signal bars. Motif: adire and uli line pattern, used only on the welcome screen, the next-service card and empty screens. |
 
 ## What's in the repository
@@ -98,7 +99,7 @@ The real app is live at https://abu.adalingo.workers.dev: one Cloudflare Worker 
      - **Demo songs** are in the database (migration `0003`).
    - Milestone 4 (schedule) is done:
      - **Planning (leaders):** services (named for the group type: Mass, Service, Performance), rehearsals and concerts. The date and time are picked by tapping, and rehearsals can repeat weekly for up to 12 more weeks. In your own space they're setlists.
-     - **Song orders:** songs by section (the group type's sections, plus "To prepare" for rehearsals). Leaders move songs up and down, change their section, remove them, add from the repertoire or the library with "last sung 3 weeks ago" hints, or copy an earlier order. Every change saves straight away. Only leaders change orders, until the owner answers the open question about part leaders.
+     - **Song orders:** songs by section (the group type's sections, plus "To prepare" for rehearsals). Leaders move songs up and down, change their section, remove them, add from the repertoire or the library with "last sung 3 weeks ago" hints, or copy an earlier order. Every change saves straight away. Leaders change orders, and part leaders too when the leader switches on "Part leaders can edit song orders" (added after milestone 5, migration `0004`).
      - **Replies:** "Going" or "Can't come", from Home or the service's page.
      - **Rehearse** steps through the order with the full player. **Perform** has no audio code at all, with large type (A−/A+), all parts or my part only, dark or light (remembered on the device), and the screen kept on.
      - **Home:** the next service with your reply, the next rehearsal, "Learn for upcoming" with your own practice, and readiness per part for leaders and part leaders.
@@ -128,5 +129,4 @@ The real app is live at https://abu.adalingo.workers.dev: one Cloudflare Worker 
 ## Open questions for the owner
 
 - The company name, to show once confirmed.
-- Whether part leaders can edit song orders (roles stay leader, part leader and member for now).
 - How songs are licensed and paid for, before the paid features.

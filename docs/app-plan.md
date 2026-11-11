@@ -136,7 +136,7 @@ Goal: a new member hears their own part within a minute.
 ## Roles
 
 - **Leader:** everything: the group, members and roles, songs, schedule and song orders, all attendance, notices, settings.
-- **Part leader:** marks attendance for their own part, posts notices, and writes notes for their part. Still open: can part leaders edit song orders?
+- **Part leader:** marks attendance for their own part, posts notices, and writes notes for their part. Edits song orders when the leader switches on "Part leaders can edit song orders" (off by default).
 - **Member:** learns songs, replies, checks in, and reads everything shared with the group.
 
 ## Look and feel

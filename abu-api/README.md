@@ -32,7 +32,8 @@ Wrangler uses the Cloudflare account it's signed in to on this Mac. Tests never 
 D1 has no row-level security, so every action in `src/domain/` checks access first (`src/domain/access.ts`). The rules come from the owner's decisions in `../CLAUDE.md`:
 
 - Joining with a code is instant, unless the leader switches on approval. Someone waiting sees only the group's name.
-- Only leaders change roles, approve members, plan services and song orders, and build the repertoire.
+- Only leaders change roles, approve members, plan services and build the repertoire.
+- Leaders edit song orders. Part leaders can too when a leader switches on `part_leaders_edit_orders` ("Part leaders can edit song orders"); see `requireOrderEditor` in `src/domain/access.ts`.
 - Leaders mark anyone's attendance; part leaders mark only their own part.
 - Self check-in needs the 4-digit code, which only leaders and part leaders can show. It works from 3 hours before the start to 6 hours after, and locks after five wrong codes.
 - Practice is private. Leaders and part leaders see only totals per part (`partReadiness`).
