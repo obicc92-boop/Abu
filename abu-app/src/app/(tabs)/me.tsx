@@ -12,7 +12,13 @@ import { api, type MyGroup } from '@/api/client';
 import { authClient } from '@/auth/client';
 import { SongRow } from '@/components/song-row';
 import { Avatar, Body, Button, Card, Chip, ErrorText, Field, Kicker, Loading, Page, PartPicker, PartTag, TopBar } from '@/components/ui';
+import { sinceText } from '@/lib/dates';
 import { GROUP_TYPES } from '@/lib/group-types';
+import { dataSaverOn, forgetOfflineSummary, saveForOffline, setDataSaver, useOfflineSummary } from '@/lib/keep-offline';
+import { clearOfflineData } from '@/lib/offline';
+import { useOnline } from '@/lib/online';
+import { install, usePwa } from '@/lib/pwa';
+import { clearSheets, connectionKind } from '@/lib/sheets-cache';
 import { readSetting, writeSetting } from '@/lib/storage';
 import { partName } from '@/solfa';
 import { useSession } from '@/state/session';
@@ -40,6 +46,7 @@ export default function Me() {
             }}
           />
         </Card>
+        <OnThisPhone />
         <PerformLook />
         <About />
       </Page>
@@ -83,6 +90,7 @@ export default function Me() {
         <Button kind="ghost" label="Start a group" onPress={() => router.push('/create-group')} style={{ flexGrow: 1 }} />
       </View>
 
+      <OnThisPhone />
       <Password />
       <PerformLook />
       <About />
@@ -212,6 +220,90 @@ function GroupRow({ group: g, me, current }: { group: MyGroup; me: string; curre
   );
 }
 
+/**
+ * What's kept on this phone for church halls without data: installing the
+ * website as an app, what's saved and when, the data saver for sheets, and
+ * clearing it all.
+ */
+function OnThisPhone() {
+  const s = useSession();
+  const queryClient = useQueryClient();
+  const pwa = usePwa();
+  const online = useOnline();
+  const summary = useOfflineSummary();
+  const [saver, setSaver] = useState(dataSaverOn);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const signedIn = s.status === 'signedIn';
+  const save = useMutation({ mutationFn: () => saveForOffline(queryClient, s.groups) });
+  const clear = useMutation({
+    mutationFn: async () => {
+      await clearOfflineData();
+      await clearSheets();
+      forgetOfflineSummary();
+      if (signedIn) await s.refresh();
+    },
+    onSuccess: () => setConfirmClear(false),
+  });
+  const chooseSaver = (on: boolean) => {
+    setSaver(on);
+    setDataSaver(on);
+  };
+
+  return (
+    <Card>
+      <Kicker>On this phone</Kicker>
+      {pwa.installed ? (
+        <Text style={styles.small}>Abụ is installed on this phone, so it opens like an app, even without data.</Text>
+      ) : pwa.canInstall ? (
+        <>
+          <Text style={styles.small}>Install Abụ to open it like an app from your home screen. It works without data in church.</Text>
+          <Button small label="Install Abụ" onPress={() => void install()} style={{ alignSelf: 'flex-start' }} />
+        </>
+      ) : pwa.ios ? (
+        <Text style={styles.small}>To install Abụ on this iPhone or iPad: in Safari, tap Share, then “Add to Home Screen”.</Text>
+      ) : null}
+
+      {signedIn ? (
+        <>
+          <Text style={styles.label}>Saved for offline</Text>
+          <Text style={styles.small}>
+            {summary
+              ? `${summary.songs} ${summary.songs === 1 ? 'song' : 'songs'}, ${summary.orders} ${summary.orders === 1 ? 'song order' : 'song orders'} for the next three weeks, ${summary.notices} ${summary.notices === 1 ? 'notice' : 'notices'} and ${summary.sheets} ${summary.sheets === 1 ? 'sheet' : 'sheets'}. Updated ${sinceText(summary.at)}.`
+              : 'Nothing saved yet. Abụ saves your coming services, their songs and your notices while you’re online.'}
+            {summary?.sheetsWaiting ? ` ${summary.sheetsWaiting} ${summary.sheetsWaiting === 1 ? 'sheet waits' : 'sheets wait'} for Wi-Fi.` : ''}
+          </Text>
+          {save.error ? <ErrorText message={save.error.message} /> : null}
+          <Button small kind="ghost" label={save.isPending ? 'Saving…' : 'Save now'} onPress={() => save.mutate()} disabled={!online} busy={save.isPending} style={{ alignSelf: 'flex-start' }} />
+        </>
+      ) : null}
+
+      <Text style={styles.label}>Original sheets (PDFs and photos)</Text>
+      <View style={styles.row}>
+        <Chip label="Save on Wi-Fi only" on={saver} onPress={() => chooseSaver(true)} />
+        <Chip label="Save on any connection" on={!saver} onPress={() => chooseSaver(false)} />
+      </View>
+      <Text style={styles.small}>
+        {saver
+          ? connectionKind() === 'unknown'
+            ? 'Data saver is on. This browser can’t tell Wi-Fi from mobile data, so sheets are saved only when you choose any connection. Songs, orders and notices are small and always saved.'
+            : 'Data saver is on: sheets are saved only on Wi-Fi. Songs, orders and notices are small and always saved.'
+          : 'Sheets for your coming services are saved on any connection, which uses more data.'}
+      </Text>
+
+      {confirmClear ? (
+        <View style={styles.row}>
+          <Text style={[styles.small, { flexBasis: '100%' }]}>Remove everything saved on this phone? You stay signed in; it saves again next time you’re online.</Text>
+          <Button small kind="danger" label="Yes, clear it" onPress={() => clear.mutate()} busy={clear.isPending} />
+          <Button small kind="ghost" label="Keep it" onPress={() => setConfirmClear(false)} />
+        </View>
+      ) : (
+        <Button small kind="ghost" label="Clear saved data" onPress={() => setConfirmClear(true)} style={{ alignSelf: 'flex-start' }} />
+      )}
+      {clear.error ? <ErrorText message={clear.error.message} /> : null}
+    </Card>
+  );
+}
+
 /** Change your password with the current one; other phones are signed out. */
 function Password() {
   const [open, setOpen] = useState(false);
@@ -293,6 +385,7 @@ const styles = StyleSheet.create({
   name: { fontFamily: fonts.heavy, fontSize: 19, color: colors.ink },
   small: { fontFamily: fonts.body, fontSize: 13, lineHeight: 18, color: colors.muted },
   link: { fontFamily: fonts.heavy, fontSize: 13.5, color: colors.red },
+  label: { fontFamily: fonts.heavy, fontSize: 13, color: colors.ink, marginTop: 4 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   stats: { flexDirection: 'row', gap: 8 },
   stat: { flex: 1, backgroundColor: colors.sand, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 8, alignItems: 'center' },

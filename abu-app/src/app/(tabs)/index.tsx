@@ -11,6 +11,7 @@ import { api, type EventDetails, type GroupEvent, type MyGroup, type OrderItem, 
 import { BrandMark, Motif } from '@/components/brand';
 import { CheckedIn, CheckIn } from '@/components/check-in';
 import { EventCard } from '@/components/event-card';
+import { InstallHint } from '@/components/install-hint';
 import { InviteCard } from '@/components/invite';
 import { NoticesSection } from '@/components/notices';
 import { Readiness } from '@/components/readiness';
@@ -110,6 +111,8 @@ export default function Home() {
       ) : null}
 
       {choir && upcoming.live && upcoming.liveDetails ? <HappeningNow group={choir} event={upcoming.live} details={upcoming.liveDetails} /> : null}
+
+      <InstallHint />
 
       {g.status === 'pending' ? (
         <Card>

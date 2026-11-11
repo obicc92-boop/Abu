@@ -35,6 +35,17 @@ export function postedText(iso: string, now = new Date()): string {
   return fmtDate(iso);
 }
 
+/** How long ago, to the minute: "just now", "5 minutes ago", "today at 4:30 PM", "yesterday", or the date. */
+export function sinceText(iso: string, now = new Date()): string {
+  const minutes = Math.floor((now.getTime() - new Date(iso).getTime()) / 60_000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'} ago`;
+  const days = daysFromToday(iso, now);
+  if (days === 0) return `today at ${fmtTime(iso)}`;
+  if (days === -1) return 'yesterday';
+  return fmtDate(iso);
+}
+
 /** Whole days from today to the date (0 today, 1 tomorrow, -1 yesterday). */
 export function daysFromToday(iso: string, now = new Date()): number {
   return Math.round((startOfDay(new Date(iso)).getTime() - startOfDay(now).getTime()) / 864e5);
