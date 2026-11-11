@@ -59,7 +59,10 @@ export function SongView({ id, banner }: { id: string; banner?: ReactNode }) {
       </SafeAreaView>
     );
   }
-  return <Player key={`${song.id}-${shared.data?.solfa.length ?? 0}`} song={song} apiSong={shared.data} banner={banner} />;
+  // A fresh player when the sol-fa itself changes (after an edit), but not when the
+  // library's copy of a built-in demo song arrives with the same text: that would
+  // stop a song someone has just started.
+  return <Player key={`${song.id}-${song.solfa.length}`} song={song} apiSong={shared.data} banner={banner} />;
 }
 
 function Player({ song, apiSong, banner }: { song: DemoSong; apiSong?: Song; banner?: ReactNode }) {
