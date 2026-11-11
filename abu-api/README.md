@@ -68,6 +68,7 @@ The database itself guarantees what must never break: a group always keeps a lea
     - self check-in: `GET /api/events/:id/check-in-code`, `POST /api/events/:id/check-in`
     - rates: `GET /api/groups/:id/my-attendance` (yours), `GET /api/groups/:id/attendance` and `.../attendance.csv` (the report; optional `from`, `to` and `tz`, the viewer's `getTimezoneOffset()`)
   - Notices: `GET` and `POST /api/groups/:id/notices` (`body`, optional `part`), `PUT /api/notices/:id/pin`, `DELETE /api/notices/:id`.
+  - The leader's To do: `GET /api/groups/:id/todo` (leaders; part leaders for their part).
   - Your practice week: `GET /api/me/practice/summary?today=YYYY-MM-DD`; `POST /api/songs/:id/plays` takes the phone's `day`.
   - Changing your password is Better Auth's own `POST /api/auth/change-password`.
 - `src/domain/`: groups and people, songs and repertoire, events and replies, attendance and check-in, practice, notices.

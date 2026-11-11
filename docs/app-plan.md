@@ -195,11 +195,41 @@ Each milestone ends merged, pushed and deployed. Home grows with them: each mile
    - Me: profile, your part in each group, switching groups, your practice (this week, songs you know, a gentle streak), changing your password, Perform's background, About.
    - Later: the group photo, birthdays, text size, language and notifications. Downloads and the data saver move to milestone 7.
 7. **Offline and installable.** *Done (web).* The whole app kept on the phone by a service worker, with "New version ready"; songs, song orders and notices for the next three weeks saved while online; sheets on Wi-Fi only with the data saver; signed in and playing offline, with plays sent later; installable from the browser. Phones: data kept; sheets and connection detection still to do.
-8. **Pilot ready.**
-   - Home complete: the next service, replying, checking in, learning, readiness per part, and the leader's To do.
-   - Invite links shared to WhatsApp.
-   - The Android build tested on Tecno, Infinix and itel phones.
-   - The pilot choir onboarded.
+8. **Pilot ready.** *Built; the owner's steps below.*
+   - Home complete: the next service with a countdown, replying, checking in, learning by service, readiness per part, and the leader's To do with quick buttons. *Done.*
+   - Invite links shared to WhatsApp, a QR code to scan at rehearsal, reminders to reply, and services shared on WhatsApp. *Done.*
+   - The Android build tested on Tecno, Infinix and itel phones. *Ready to build (owner).*
+   - The pilot choir onboarded. *Owner.*
+
+### Pilot ready: the owner's steps
+
+**1. The Android test build (about 30 minutes, mostly waiting).**
+
+1. Make a free account at expo.dev.
+2. On the Mac, in `abu-app/`: `npx eas-cli@latest login`, then `npx eas-cli@latest build --profile preview --platform android`.
+3. The first time, EAS asks three things:
+   - to create the project: yes;
+   - for the **Android application id**: this is permanent once the app is on the Play Store, so choose it with the company name in mind (for example `com.yourcompany.abu`);
+   - to generate a keystore: yes (EAS keeps it).
+4. When the build finishes, EAS shows a link and a QR code. Open it on each phone, download the APK, allow "Install unknown apps" for the browser, and install.
+5. On each phone (Tecno, Infinix, itel), check:
+   - sign in, and switch between your groups;
+   - play a song: all four parts sound right, and Mute, Solo and Tempo work;
+   - Perform: big text, no sound, the screen stays on;
+   - Home, Schedule and the song order load quickly, and WhatsApp sharing opens WhatsApp;
+   - the app stays smooth with other apps open (these phones have little memory).
+6. Tell the builder what didn't work, with a screenshot if you can.
+
+Known gaps in the phone app: it keeps songs and orders offline but not sheets yet, and "Download the register" opens the browser, which isn't signed in. The web app (installed from Chrome) does both.
+
+**2. Onboarding the pilot choir.**
+
+1. The choirmaster creates the choir in Abụ (the web app at abu.adalingo.workers.dev works today; installing it from Chrome puts it on the home screen).
+2. At the next rehearsal, show the QR code (Group tab, then "Show QR code to scan at rehearsal"), or share the invite on the choir's WhatsApp group.
+3. Plan the next service and its song order, and switch on self check-in if wanted.
+4. After the first week, look at the To do, the replies and the attendance report, and note what the choir found hard.
+
+**3. Optional before the pilot:** an Abụ domain on Cloudflare instead of abu.adalingo.workers.dev (it can also send the sign-in emails later).
 
 ### What the owner needs to do
 

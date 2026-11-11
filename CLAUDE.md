@@ -2,7 +2,7 @@
 
 Abụ (Igbo for "song") is an app for choirs and music groups that read **tonic sol-fa**. Members learn their part by hearing it played, and leaders organise songs, services and rehearsals in one place. The first users are church choirs in Nigeria (Catholic, Anglican, Pentecostal), plus non-church groups such as bands and orchestras. It will go international later.
 
-The product owner has a pilot choir ready to test. The real app is started: `abu-app/` (the Expo app: sol-fa reader, score and player, live on the web) and `abu-api/` (the Cloudflare Worker: website hosting, API and D1 database). **Next: milestone 8, pilot ready (see `docs/app-plan.md`).**
+The product owner has a pilot choir ready to test. The real app is started: `abu-app/` (the Expo app: sol-fa reader, score and player, live on the web) and `abu-api/` (the Cloudflare Worker: website hosting, API and D1 database). **Next: the owner's pilot steps (the Android test build on Tecno, Infinix and itel phones, and onboarding the pilot choir; see "Pilot ready" in `docs/app-plan.md`), then the order of work after the MVP.**
 
 ## Decisions already made (don't re-ask)
 
@@ -123,7 +123,14 @@ The real app is live at https://abu.adalingo.workers.dev: one Cloudflare Worker 
      - **Traps found:** a query `gcTime` over about 24.8 days overflows the browser's timer and throws data away at once (kept at 20 days, with a test). Saved data must not count as fresh: every screen refetches as it opens (`staleTime: 0`), and the editors (song order, event details, attendance register) wait for the server's latest when online.
      - **Checked end to end** offline on the live site (the page and the service worker both cut off), with every other suite rerun.
      - **Phones (Android and iOS builds)** keep data with AsyncStorage the same way, but don't save sheets or detect the connection yet.
-   - Next is milestone 8, pilot ready: Home complete (the leader's To do), and the Android build tested on Tecno, Infinix and itel phones.
+   - Milestone 8 (pilot ready) is built; what's left needs the owner:
+     - **Leader's To do on Home** (`GET /api/groups/:id/todo`, `abu-app/src/components/todo.tsx`): attendance not marked (last 14 days), who hasn't replied (next 7 days), services with no songs and songs with no sol-fa (next 14 days), people waiting to join. Part leaders get their own part's replies and attendance. Quick buttons: plan, post a notice, add a song.
+     - **Who's coming** on a service's page for leaders (part leaders: their part), with names and "Remind on WhatsApp"; anyone can share a service on WhatsApp.
+     - **Home:** learning grouped by service ("4 of 6 known"), each song once; a countdown on the day.
+     - **Invite QR code** to show at rehearsal (`/invite-qr`), checked by decoding it in the tests.
+     - **Faster first visit on cheap phones:** the interface fonts are preloaded and the sol-fa font no longer holds up the first screen. Measured with the CPU 6× slower on slow 4G: welcome ready in about 6.9 s on a first visit (was 8.6 s) and under 1 s after.
+     - **Android:** the Android bundle builds, `expo-doctor` passes, and `abu-app/eas.json` has `preview` (an APK for testers) and `development` profiles. Building needs the owner's Expo account: see "Pilot ready" in `docs/app-plan.md`.
+     - **Checked end to end** on the live site (the new pilot suite plus all the others), with the test data deleted afterwards.
 
    The schema covers the entities the prototype uses:
    - `users`

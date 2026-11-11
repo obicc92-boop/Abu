@@ -25,11 +25,13 @@ The website is served by the `abu` Cloudflare Worker in `../abu-api`, together w
 Sound on Android and iOS comes from `react-native-audio-api`, a native module, so it needs a **development build**: in Expo Go the app opens but the player says sound isn't available. Either:
 
 - Local: install Android Studio (it brings the JDK), then `npx expo run:android` with a phone plugged in or an emulator running.
-- Cloud: `npx eas-cli@latest build --profile development --platform android`, then install the APK on the phone.
+- Cloud: `npx eas-cli@latest build --profile development --platform android`, then install the APK on the phone (`expo-dev-client` is installed for this).
+
+For testers, `npx eas-cli@latest build --profile preview --platform android` makes an ordinary installable APK (profiles in `eas.json`). Building needs an Expo account; see "Pilot ready" in `../docs/app-plan.md`. To check the Android code bundles without building: `npx expo export --platform android --output-dir /tmp/abu-android`.
 
 ### Offline and installable (web)
 
-- `npm run build:web` runs `expo export`, then `scripts/offline-build.mjs`, which uses Workbox to write `dist/sw.js`: every file of the build is kept on the phone (versioned, so a deploy replaces them), pages open from the kept shell, and original sheets are network-first with a saved copy (`abu-sheets` cache). New versions wait: `src/lib/pwa.web.ts` shows "New version ready · Update" and reloads only on tap.
+- `npm run build:web` runs `expo export`, then `scripts/offline-build.mjs`, which preloads the interface fonts in `index.html` (the sol-fa font loads after the first screen) and uses Workbox to write `dist/sw.js`: every file of the build is kept on the phone (versioned, so a deploy replaces them), pages open from the kept shell, and original sheets are network-first with a saved copy (`abu-sheets` cache). New versions wait: `src/lib/pwa.web.ts` shows "New version ready · Update" and reloads only on tap.
 - `public/manifest.json`, `public/icons/` and the tags in `public/index.html` make it installable. The icons come from `design/brand/icon.svg`.
 - Data: `src/lib/offline.ts` saves the TanStack Query cache in IndexedDB (`offline-store.web.ts`; AsyncStorage on phones) and restores it on opening. Keep `gcTime` under about 24.8 days: longer overflows the timer and drops data at once. `staleTime` is 0 so every screen refetches as it opens; editors wait for `isFetchedAfterMount` when online.
 - `src/lib/keep-offline.ts` saves the next three weeks of services, their songs, notices and the repertoire while online, plus sheets on Wi-Fi (the data saver, on by default). `src/lib/outbox.ts` holds plays made offline. `src/state/session.tsx` keeps you signed in when the sign-in check can't reach the server.
