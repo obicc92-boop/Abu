@@ -26,7 +26,7 @@ The product owner has a pilot choir ready to test. The real app is started in `a
 | Joining | A code or invite link joins **instantly by default**; the leader can switch on approval for new members. |
 | Practice privacy | Leaders see **totals per part** (practice, and how many marked "I know my part"). A member's own practice history is visible only to them. |
 | Roles | **Leader, part leader and member** only, for now. |
-| Icon and motif | **Drafts** in `design/brand-draft.html`, to refine later. Icon draft A is in the app: four rounded voice-part bars, centred so they don't look like signal bars, with a gold dot below. Motif: adire and uli line pattern, used only on the welcome screen, the next-service card and empty screens. |
+| Icon and motif | **Drafts** in `design/brand-draft.html`, to refine later. The icon in the app is an open music book (notation on the left page, notes on the right, a gold ribbon); the owner rejected bar shapes because they look like phone signal bars. Motif: adire and uli line pattern, used only on the welcome screen, the next-service card and empty screens. |
 
 ## What's in the repository
 

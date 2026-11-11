@@ -30,7 +30,7 @@
         {
           "backgroundColor": "#D93A1E",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 110
         }
       ],
       "react-native-audio-api"

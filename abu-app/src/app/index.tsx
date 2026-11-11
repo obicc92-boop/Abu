@@ -17,7 +17,7 @@ export default function Home() {
       <ScrollView contentContainerStyle={styles.body}>
         <View style={styles.hero}>
           <Motif color={colors.white} opacity={0.16} fade />
-          <BrandMark size={38} />
+          <BrandMark size={64} />
           <Text style={styles.brand}>Abụ</Text>
           <Text style={styles.tagline}>Learn your part. Keep your choir together.</Text>
         </View>

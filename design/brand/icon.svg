@@ -1,9 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <!-- Abụ app icon, draft A (in use). Four rounded bars: the four voice parts,
-       centred like a sung waveform so they don't read as phone signal bars.
-       A gold dot below, like the dot under the ụ in Abụ.
-       Faint sound rings from the motif sit behind. -->
+  <!-- Abụ app icon, draft 2: an open music book. Notation on the left page,
+       a pair of notes on the right, and a gold ribbon marker like a hymnal's.
+       Faint sound rings from the motif sit behind.
+       The comments mark the parts that the icon export reuses. -->
   <rect width="1024" height="1024" fill="#D93A1E"/>
+  <!--rings-->
   <g fill="none" stroke="#C93118" stroke-width="18">
     <circle cx="0" cy="1024" r="330"/>
     <circle cx="0" cy="1024" r="470"/>
@@ -11,13 +12,31 @@
     <circle cx="0" cy="1024" r="750"/>
     <circle cx="0" cy="1024" r="890"/>
   </g>
-  <g id="mark">
-    <g fill="#FFFFFF">
-      <rect x="245" y="339" width="96" height="218" rx="48"/>
-      <rect x="391" y="276" width="96" height="344" rx="48"/>
-      <rect x="537" y="238" width="96" height="420" rx="48"/>
-      <rect x="683" y="313.5" width="96" height="269" rx="48"/>
+  <!--/rings-->
+  <!--mark-->
+  <g transform="translate(0 -73)">
+    <!--silhouette-->
+    <path d="M488 736H536V862L512 840L488 862Z" fill="#E6A325"/>
+    <path d="M512 394C430 344 300 334 176 358V732C300 708 430 718 512 768C594 718 724 708 848 732V358C724 334 594 344 512 394Z" fill="#A3261A"/>
+    <path d="M512 372C430 322 300 312 196 336V708C300 684 430 694 512 744C594 694 724 684 828 708V336C724 312 594 322 512 372Z" fill="#FFFFFF"/>
+    <!--/silhouette-->
+    <!--notation-->
+    <path d="M512 380V738" stroke="#EBD9D3" stroke-width="6"/>
+    <g fill="none" stroke="#F0C9BF" stroke-width="14" stroke-linecap="round">
+      <path d="M244 430L468 452"/>
+      <path d="M244 500L468 522"/>
+      <path d="M244 570L468 592"/>
     </g>
-    <circle cx="512" cy="750" r="36" fill="#E6A325"/>
+    <g fill="#D93A1E">
+      <ellipse cx="306" cy="506" rx="27" ry="20" transform="rotate(-22 306 506)"/>
+      <ellipse cx="412" cy="446" rx="27" ry="20" transform="rotate(-22 412 446)"/>
+      <ellipse cx="604" cy="616" rx="42" ry="31" transform="rotate(-22 604 616)"/>
+      <ellipse cx="740" cy="590" rx="42" ry="31" transform="rotate(-22 740 590)"/>
+      <rect x="631" y="440" width="18" height="172"/>
+      <rect x="767" y="414" width="18" height="172"/>
+      <path d="M631 428L785 402V446L631 472Z"/>
+    </g>
+    <!--/notation-->
   </g>
+  <!--/mark-->
 </svg>

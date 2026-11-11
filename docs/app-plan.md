@@ -145,9 +145,8 @@ Drafts: `design/brand-draft.html` (sources in `design/brand/`).
   - Sand background, white cards, red for actions, gold for celebration (a learned song, a streak), dark ink for text.
   - **Part colours are the signature**: avatar rings, chips and score labels.
 - **Type:** Marcellus for the name and big titles, Figtree for the interface, JetBrains Mono for the score.
-- **App icon (draft A):** four rounded bars for the four voice parts, centred like a sung waveform so they don't read as phone signal bars, and a gold dot below like the dot under the ụ in Abụ.
-  - Draft B is the same mark in the four part colours on cream.
-  - Draft A is in the app now.
+- **App icon (draft, in the app now):** an open music book on red, with notation on the left page, a pair of notes on the right, and a gold ribbon marker like a hymnal's.
+  - An earlier draft of four rising bars was dropped because it looked like a phone's signal icon.
 - **Motif (draft):** fine line rings and dots from adire, with lines and small stars from uli. Where tiles meet, the rings join into sound waves.
   - Only on the welcome screen, the next-service card and empty screens, in one colour at low strength.
   - Never behind the score, words or lists.

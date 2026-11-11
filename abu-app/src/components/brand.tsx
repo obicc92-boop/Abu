@@ -4,21 +4,32 @@
  */
 import { useId } from 'react';
 import { StyleSheet, View } from 'react-native';
-import Svg, { Circle, Defs, G, LinearGradient, Mask, Path, Pattern, Rect, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, Ellipse, G, LinearGradient, Mask, Path, Pattern, Rect, Stop } from 'react-native-svg';
 
 import { colors } from '@/theme/tokens';
 
-/** The four voice-part bars and the gold dot, as on the app icon. */
-export function BrandMark({ size = 48, color = colors.white, dot = colors.gold }: { size?: number; color?: string; dot?: string }) {
+/**
+ * The open music book from the app icon (design/brand/icon.svg): notation on
+ * the left page, a pair of notes on the right, and a gold ribbon. Drawn for a
+ * red background. `size` is the width.
+ */
+export function BrandMark({ size = 56 }: { size?: number }) {
   return (
-    <Svg width={size} height={(size * 548) / 534} viewBox="245 238 534 548" accessibilityElementsHidden importantForAccessibility="no">
-      <G fill={color}>
-        <Rect x={245} y={339} width={96} height={218} rx={48} />
-        <Rect x={391} y={276} width={96} height={344} rx={48} />
-        <Rect x={537} y={238} width={96} height={420} rx={48} />
-        <Rect x={683} y={313.5} width={96} height={269} rx={48} />
+    <Svg width={size} height={(size * 556) / 692} viewBox="166 314 692 556" accessibilityElementsHidden importantForAccessibility="no">
+      <Path d="M488 736H536V862L512 840L488 862Z" fill={colors.gold} />
+      <Path d="M512 394C430 344 300 334 176 358V732C300 708 430 718 512 768C594 718 724 708 848 732V358C724 334 594 344 512 394Z" fill={colors.redDeep} />
+      <Path d="M512 372C430 322 300 312 196 336V708C300 684 430 694 512 744C594 694 724 684 828 708V336C724 312 594 322 512 372Z" fill={colors.white} />
+      <Path d="M512 380V738" stroke="#EBD9D3" strokeWidth={6} />
+      <Path d="M244 430L468 452M244 500L468 522M244 570L468 592" fill="none" stroke="#F0C9BF" strokeWidth={14} strokeLinecap="round" />
+      <G fill={colors.red}>
+        <Ellipse cx={306} cy={506} rx={27} ry={20} transform="rotate(-22 306 506)" />
+        <Ellipse cx={412} cy={446} rx={27} ry={20} transform="rotate(-22 412 446)" />
+        <Ellipse cx={604} cy={616} rx={42} ry={31} transform="rotate(-22 604 616)" />
+        <Ellipse cx={740} cy={590} rx={42} ry={31} transform="rotate(-22 740 590)" />
+        <Rect x={631} y={440} width={18} height={172} />
+        <Rect x={767} y={414} width={18} height={172} />
+        <Path d="M631 428L785 402V446L631 472Z" />
       </G>
-      <Circle cx={512} cy={750} r={36} fill={dot} />
     </Svg>
   );
 }
