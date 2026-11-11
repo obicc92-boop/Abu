@@ -1,0 +1,5 @@
+# The pilot choir's sample sheets are copyrighted: never commit them (see CLAUDE.md).
+*.pdf
+
+# macOS
+.DS_Store
