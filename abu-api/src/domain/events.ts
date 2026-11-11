@@ -46,6 +46,10 @@ export interface EventDetails {
   /** Your role in the event's group: the app shows planning tools to leaders. */
   my_role: Role;
   my_part: string | null;
+  /** Your own attendance mark, once someone has marked you (or you checked in). */
+  my_attendance: 'present' | 'absent' | 'excused' | null;
+  /** Whether members check themselves in with a code in this group. */
+  self_check_in: boolean;
 }
 
 const KINDS: EventKind[] = ['service', 'rehearsal', 'concert'];
@@ -143,7 +147,7 @@ export async function listEvents(db: D1Database, me: string, groupId: string, op
 export async function eventDetails(db: D1Database, me: string, eventId: string): Promise<EventDetails> {
   const groupId = await groupOfEvent(db, eventId);
   const m = await requireMember(db, groupId, me);
-  const [event, items, mine, counts] = await Promise.all([
+  const [event, items, mine, counts, att, group] = await Promise.all([
     getEvent(db, me, eventId),
     listOrder(db, me, eventId),
     db.prepare('select status from rsvps where event_id = ? and user_id = ?').bind(eventId, me).first<{ status: Reply }>(),
@@ -151,6 +155,11 @@ export async function eventDetails(db: D1Database, me: string, eventId: string):
       .prepare(`select sum(status = 'going') as going, sum(status = 'cant') as cant from rsvps where event_id = ?`)
       .bind(eventId)
       .first<{ going: number | null; cant: number | null }>(),
+    db
+      .prepare('select status from attendance where event_id = ? and user_id = ?')
+      .bind(eventId, me)
+      .first<{ status: EventDetails['my_attendance'] }>(),
+    db.prepare('select self_check_in from groups where id = ?').bind(groupId).first<{ self_check_in: number }>(),
   ]);
   return {
     event,
@@ -159,6 +168,8 @@ export async function eventDetails(db: D1Database, me: string, eventId: string):
     replies: { going: counts?.going ?? 0, cant: counts?.cant ?? 0 },
     my_role: m.role,
     my_part: m.part,
+    my_attendance: att?.status ?? null,
+    self_check_in: group?.self_check_in === 1,
   };
 }
 

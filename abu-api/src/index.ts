@@ -43,6 +43,17 @@ import {
   type EventKind,
   type Reply,
 } from './domain/events';
+import {
+  attendanceReport,
+  attendanceSheet,
+  checkIn,
+  checkInCode,
+  markAttendance,
+  markRest,
+  myAttendance,
+  reportCsv,
+  type AttendanceStatus,
+} from './domain/attendance';
 import { myPractice, partReadiness, recordPlay, setKnowsPart } from './domain/practice';
 import {
   addToRepertoire,
@@ -375,6 +386,57 @@ app.get('/events/:id/replies', async (c) => c.json(await listReplies(c.env.DB, c
 
 /** How ready each part is: totals only, for leaders and part leaders. */
 app.get('/events/:id/readiness', async (c) => c.json(await partReadiness(c.env.DB, c.get('userId'), c.req.param('id'))));
+
+/* ---------- Attendance ---------- */
+
+/** The register for one service or rehearsal: everyone, their reply and mark (leaders and part leaders). */
+app.get('/events/:id/attendance', async (c) => c.json(await attendanceSheet(c.env.DB, c.get('userId'), c.req.param('id'))));
+
+/** Mark one person present, absent or excused. */
+app.put('/events/:id/attendance/:userId', async (c) => {
+  const status = text(await body(c), 'status') as AttendanceStatus | undefined;
+  await markAttendance(c.env.DB, c.get('userId'), c.req.param('id'), c.req.param('userId'), status ?? ('' as AttendanceStatus));
+  return c.json({ ok: true });
+});
+
+/** Mark everyone not marked yet as present or absent; "Can't come" replies become excused. */
+app.post('/events/:id/attendance/rest', async (c) => {
+  const status = text(await body(c), 'status') as 'present' | 'absent' | undefined;
+  return c.json({ marked: await markRest(c.env.DB, c.get('userId'), c.req.param('id'), status ?? ('' as 'present')) });
+});
+
+/** The 4-digit code to show at the rehearsal (leaders and part leaders). */
+app.get('/events/:id/check-in-code', async (c) => c.json({ code: await checkInCode(c.env.DB, c.get('userId'), c.req.param('id')) }));
+
+/** Check yourself in with the code: "present", "wrong_code" or "locked" (after five wrong codes). */
+app.post('/events/:id/check-in', async (c) => {
+  const code = text(await body(c), 'code') ?? '';
+  return c.json({ result: await checkIn(c.env.DB, c.get('userId'), c.req.param('id'), code) });
+});
+
+/** Your own attendance in a group, seen only by you. */
+app.get('/groups/:id/my-attendance', async (c) => c.json(await myAttendance(c.env.DB, c.get('userId'), c.req.param('id'))));
+
+/** Rates and the register by member, part and month (leaders and part leaders). */
+const reportRange = (c: { req: { query: (k: string) => string | undefined } }) => ({
+  from: c.req.query('from'),
+  to: c.req.query('to'),
+  tz: c.req.query('tz') === undefined ? undefined : Number(c.req.query('tz')),
+});
+
+app.get('/groups/:id/attendance', async (c) => c.json(await attendanceReport(c.env.DB, c.get('userId'), c.req.param('id'), reportRange(c))));
+
+/** The same register as a spreadsheet to download. */
+app.get('/groups/:id/attendance.csv', async (c) => {
+  const report = await attendanceReport(c.env.DB, c.get('userId'), c.req.param('id'), reportRange(c));
+  const name = `abu-attendance-${report.from.slice(0, 10)}-to-${report.to.slice(0, 10)}.csv`;
+  // The byte order mark makes Excel read names like "Ọkafor" correctly.
+  return c.body(`\uFEFF${reportCsv(report)}`, 200, {
+    'content-type': 'text/csv; charset=utf-8',
+    'content-disposition': `attachment; filename="${name}"`,
+    'cache-control': 'private, no-store',
+  });
+});
 
 /* ---------- Errors ---------- */
 
