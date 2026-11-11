@@ -9,8 +9,9 @@ import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
+import { AnimatedSplash } from '@/splash/animated-splash';
 import { colors } from '@/theme/tokens';
 
 SplashScreen.preventAutoHideAsync();
@@ -25,6 +26,11 @@ export default function RootLayout() {
     JetBrainsMono_700Bold,
   });
 
+  // The opening animation covers the app until it finishes; its first frame
+  // matches the still splash screen, which is hidden underneath it.
+  const [opening, setOpening] = useState(true);
+  const opened = useCallback(() => setOpening(false), []);
+
   useEffect(() => {
     if (loaded || error) SplashScreen.hideAsync();
   }, [loaded, error]);
@@ -34,8 +40,9 @@ export default function RootLayout() {
 
   return (
     <>
-      <StatusBar style="dark" />
+      <StatusBar style={opening ? 'light' : 'dark'} />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.sand } }} />
+      {opening ? <AnimatedSplash onDone={opened} /> : null}
     </>
   );
 }

@@ -156,6 +156,11 @@ Drafts: `design/brand-draft.html` (sources in `design/brand/`).
   - a text-size setting
   - words beside icons, never icons alone
 - **Small moments:** the beat highlight, a soft vibration on taps, a gold tick for "I know my part".
+- **Opening animation** (built): the still splash hands over to an animation of the same frame.
+  - The book bounces, a glow and sound rings spread from it, notes and sol-fa syllables burst out across the screen with gold glitter, and "Abụ" rises in crowned with sparkles.
+  - About two seconds, and a tap skips it.
+  - A plain fade when the phone is set to reduce motion; once per visit on the web.
+  - Code: `abu-app/src/splash/`.
 
 ## Nigeria-first
 

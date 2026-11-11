@@ -38,7 +38,8 @@ Sound on Android and iOS comes from `react-native-audio-api`, a native module, s
 - `src/solfa/`: the sol-fa reader and pitch helpers, ported from the prototype. Read its README first.
 - `src/score/layout.ts`: splits a song into lines of beat columns (port of `scoreHTML`).
 - `src/audio/`: the synth and scheduler (`engine.ts`), the audio context for web (`context.web.ts`) and phones (`context.ts`), and the `useSongPlayer` hook.
-- `src/components/`: the score and the player controls.
+- `src/components/`: the score, the player controls, and the brand mark and motif (`brand.tsx`).
+- `src/splash/`: the opening animation that follows the still splash screen, and its particle layout.
 - `src/data/demo-songs.ts`: the prototype's demo songs (public domain or written for the demo). Never add the pilot choir's copyrighted sheets.
 - `src/theme/tokens.ts`: brand colours, part colours and fonts.
 
