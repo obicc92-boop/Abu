@@ -1,15 +1,24 @@
 /**
- * Home: what's happening now for the group you're looking at.
- * Grows with each milestone: services, replies, check-in and learning come next.
+ * Home: what's happening now for the group you're looking at: the next
+ * service with your reply, the next rehearsal, the songs to learn for them,
+ * and (for leaders) how ready each part is.
  */
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { api, type GroupEvent, type MyGroup, type OrderItem, type Practice, type Reply } from '@/api/client';
 import { BrandMark, Motif } from '@/components/brand';
+import { EventCard } from '@/components/event-card';
 import { InviteCard } from '@/components/invite';
+import { Readiness } from '@/components/readiness';
+import { ReplyButtons } from '@/components/reply-buttons';
 import { SongRow } from '@/components/song-row';
-import { Avatar, Body, Button, Card, Kicker, Loading, Page, PartTag } from '@/components/ui';
+import { Avatar, Body, Button, Card, ErrorText, Kicker, Loading, Page, PartTag } from '@/components/ui';
 import { DEMO_SONGS } from '@/data/demo-songs';
+import { fmtDate, fmtTime, isOver, relDay, startOfDay } from '@/lib/dates';
+import { kindNoun } from '@/lib/group-types';
+import { partName } from '@/solfa';
 import { useSession } from '@/state/session';
 import { colors, fonts } from '@/theme/tokens';
 
@@ -18,13 +27,35 @@ function greeting(): string {
   return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
 }
 
+/**
+ * The group's next service (or setlist) and next rehearsal, each with its
+ * details (your reply and its songs).
+ */
+function useUpcoming(g: MyGroup | null) {
+  const active = !!g && g.status === 'active';
+  const from = startOfDay(new Date()).toISOString();
+  const events = useQuery({ queryKey: ['events', g?.id, 'from', from], queryFn: () => api.events(g!.id, { from }), enabled: active });
+  const soon = (events.data ?? []).filter((e) => !isOver(e.starts_at));
+  const service = soon.find((e) => e.kind !== 'rehearsal');
+  const rehearsal = soon.find((e) => e.kind === 'rehearsal');
+  const serviceDetails = useQuery({ queryKey: ['event', service?.id], queryFn: () => api.event(service!.id), enabled: !!service });
+  const rehearsalDetails = useQuery({ queryKey: ['event', rehearsal?.id], queryFn: () => api.event(rehearsal!.id), enabled: !!rehearsal });
+  return { loading: active && events.isPending, service, rehearsal, serviceDetails: serviceDetails.data, rehearsalDetails: rehearsalDetails.data };
+}
+
 export default function Home() {
   const s = useSession();
+  const upcoming = useUpcoming(s.status === 'signedIn' ? s.group : null);
+  const practice = useQuery({ queryKey: ['myPractice'], queryFn: api.myPractice, enabled: s.status === 'signedIn' });
 
   if (s.status !== 'signedIn') return <LookingAround />;
   if (s.loadingMe || !s.group || !s.profile) return <Loading />;
 
   const g = s.group;
+  // Songs in the next service and rehearsal, each once, in order.
+  const toLearn = [...(upcoming.serviceDetails?.items ?? []), ...(upcoming.rehearsalDetails?.items ?? [])].filter(
+    (item, i, all) => all.findIndex((x) => x.song_id === item.song_id) === i,
+  );
   const firstName = s.profile.display_name.split(' ')[0] || 'there';
   const choirs = s.groups.filter((x) => x.type !== 'personal');
 
@@ -83,27 +114,121 @@ export default function Home() {
             <Button kind="outlineLight" small label="Start a group" onPress={() => router.push('/create-group')} />
           </View>
         </Card>
+      ) : upcoming.service ? (
+        <NextService group={g} event={upcoming.service} myReply={upcoming.serviceDetails?.my_reply ?? null} songs={upcoming.serviceDetails?.items.length} />
       ) : (
-        <>
-          <Card tone="red">
-            <Motif color={colors.white} opacity={0.16} fade />
-            <Kicker color="#FFD9CF">Next service</Kicker>
-            <Text style={[styles.cardTitle, { color: colors.white }]}>Nothing planned yet</Text>
+        <Card tone="red">
+          <Motif color={colors.white} opacity={0.16} fade />
+          <Kicker color="#FFD9CF">Next {kindNoun(g.type, 'service')}</Kicker>
+          <Text style={[styles.cardTitle, { color: colors.white }]}>{upcoming.loading ? 'Loading…' : 'Nothing planned yet'}</Text>
+          {!upcoming.loading ? (
             <Text style={styles.onRed}>
-              {g.role === 'leader'
-                ? 'Planning services, rehearsals and song orders is coming in the next update.'
-                : 'Your services and rehearsals will show here, with their song orders.'}
+              {g.role === 'leader' ? 'Plan the next service and build its song order by section.' : 'Your services and rehearsals will show here, with their song orders.'}
             </Text>
-          </Card>
-          {g.role === 'leader' && g.invite_code ? <InviteCard groupName={g.name} code={g.invite_code} /> : null}
-        </>
+          ) : null}
+          {g.role === 'leader' && !upcoming.loading ? (
+            <View style={styles.row}>
+              <Button kind="light" small label={`Plan a ${kindNoun(g.type, 'service')}`} onPress={() => router.push('/event-editor')} />
+            </View>
+          ) : null}
+        </Card>
       )}
 
-      <Kicker>Try a song</Kicker>
-      {DEMO_SONGS.map((d) => (
-        <SongRow key={d.id} song={{ id: d.id, title: d.title, composer: d.composer, doh: d.key, time: d.time, playable: true }} />
-      ))}
+      {g.type === 'personal' && upcoming.service ? (
+        <>
+          <Kicker>Your next setlist</Kicker>
+          <EventCard event={upcoming.service} groupType={g.type} />
+        </>
+      ) : null}
+      {g.type !== 'personal' && upcoming.rehearsal ? (
+        <>
+          <Kicker>Next rehearsal</Kicker>
+          <EventCard event={upcoming.rehearsal} groupType={g.type} />
+        </>
+      ) : null}
+
+      {toLearn.length ? <LearnForUpcoming items={toLearn} practice={practice.data} part={g.part} /> : null}
+
+      {g.type !== 'personal' && (g.role === 'leader' || g.role === 'part_leader') && upcoming.service && upcoming.serviceDetails?.items.length ? (
+        <Readiness eventId={upcoming.service.id} title={`Ready for ${upcoming.service.title}?`} />
+      ) : null}
+
+      {g.type !== 'personal' && g.status === 'active' && g.role === 'leader' && g.invite_code ? <InviteCard groupName={g.name} code={g.invite_code} /> : null}
+
+      {!toLearn.length ? (
+        <>
+          <Kicker>Try a song</Kicker>
+          {DEMO_SONGS.map((d) => (
+            <SongRow key={d.id} song={{ id: d.id, title: d.title, composer: d.composer, doh: d.key, time: d.time, playable: true }} />
+          ))}
+        </>
+      ) : null}
     </Page>
+  );
+}
+
+/** The red card: the next service, when and where, and your reply. */
+function NextService({ group, event, myReply, songs }: { group: MyGroup; event: GroupEvent; myReply: Reply | null; songs?: number }) {
+  const queryClient = useQueryClient();
+  const send = useMutation({
+    mutationFn: (status: Reply) => api.reply(event.id, status),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['event', event.id] }),
+  });
+  const mine = send.isPending ? (send.variables ?? null) : myReply;
+  const personal = group.type === 'personal';
+  const when = relDay(event.starts_at);
+  const open = () => router.push({ pathname: '/event/[id]', params: { id: event.id } });
+  return (
+    <Card tone="red">
+      <Motif color={colors.white} opacity={0.16} fade />
+      <Kicker color="#FFD9CF">
+        Next {kindNoun(group.type, event.kind)}
+        {when ? ` · ${when}` : ''}
+      </Kicker>
+      <Pressable onPress={open} accessibilityRole="link">
+        <Text style={[styles.cardTitle, { color: colors.white }]}>{event.title}</Text>
+        <Text style={styles.onRed}>{[fmtDate(event.starts_at), fmtTime(event.starts_at), event.venue].filter(Boolean).join(' · ')}</Text>
+      </Pressable>
+      {!personal ? <ReplyButtons light value={mine} onChange={(v) => send.mutate(v)} /> : null}
+      {send.error ? <ErrorText message={send.error.message} /> : null}
+      <View style={styles.row}>
+        <Button
+          kind="light"
+          small
+          label={songs === 0 ? (group.role === 'leader' ? 'Add songs' : 'No songs yet') : songs === undefined ? 'Song order' : `Song order · ${songs} ${songs === 1 ? 'song' : 'songs'}`}
+          onPress={() => (songs === 0 && group.role === 'leader' ? router.push({ pathname: '/event/[id]/order', params: { id: event.id } }) : open())}
+        />
+        {songs ? <Button kind="outlineLight" small label="Perform" onPress={() => router.push({ pathname: '/event/[id]/perform', params: { id: event.id, i: '0' } })} /> : null}
+      </View>
+    </Card>
+  );
+}
+
+/** Songs coming up, with how far along you are on each (your own practice, seen only by you). */
+function LearnForUpcoming({ items, practice, part }: { items: OrderItem[]; practice?: Practice[]; part: string | null }) {
+  const bySong = new Map((practice ?? []).map((p) => [p.song_id, p]));
+  const known = items.filter((i) => bySong.get(i.song_id)?.knows_part).length;
+  return (
+    <View style={{ gap: 8 }}>
+      <View style={styles.learnHead}>
+        <Kicker>Learn for upcoming</Kicker>
+        <Text style={styles.small}>
+          {part ? `${partName(part)} · ` : ''}
+          {known} of {items.length} known
+        </Text>
+      </View>
+      {items.slice(0, 8).map((item) => {
+        const p = bySong.get(item.song_id);
+        const note = p?.knows_part ? '✓ Know it' : p?.plays ? `${p.plays} ${p.plays === 1 ? 'play' : 'plays'}` : 'New';
+        return (
+          <SongRow
+            key={item.song_id}
+            song={{ id: item.song_id, title: item.title, composer: item.composer, doh: item.doh, time: item.time_signature, playable: item.playable }}
+            note={note}
+          />
+        );
+      })}
+    </View>
   );
 }
 
@@ -146,4 +271,6 @@ const styles = StyleSheet.create({
   cardTitle: { fontFamily: fonts.heavy, fontSize: 20, color: colors.ink },
   onRed: { fontFamily: fonts.body, fontSize: 14.5, lineHeight: 20, color: '#FFE7E0' },
   row: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginTop: 4 },
+  learnHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  small: { fontFamily: fonts.body, fontSize: 12.5, color: colors.muted },
 });
