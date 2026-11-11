@@ -194,7 +194,7 @@ Each milestone ends merged, pushed and deployed. Home grows with them: each mile
    - Group: members by part, changing parts and roles, notices to everyone or one part (post, pin, delete), settings (approval, self check-in, part leaders editing orders, name, leader's title, section names).
    - Me: profile, your part in each group, switching groups, your practice (this week, songs you know, a gentle streak), changing your password, Perform's background, About.
    - Later: the group photo, birthdays, text size, language and notifications. Downloads and the data saver move to milestone 7.
-7. **Offline and installable.** Songs, song orders and notices for upcoming services kept on the phone; the installable website; the data saver.
+7. **Offline and installable.** *Done (web).* The whole app kept on the phone by a service worker, with "New version ready"; songs, song orders and notices for the next three weeks saved while online; sheets on Wi-Fi only with the data saver; signed in and playing offline, with plays sent later; installable from the browser. Phones: data kept; sheets and connection detection still to do.
 8. **Pilot ready.**
    - Home complete: the next service, replying, checking in, learning, readiness per part, and the leader's To do.
    - Invite links shared to WhatsApp.

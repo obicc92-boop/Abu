@@ -27,6 +27,14 @@ Sound on Android and iOS comes from `react-native-audio-api`, a native module, s
 - Local: install Android Studio (it brings the JDK), then `npx expo run:android` with a phone plugged in or an emulator running.
 - Cloud: `npx eas-cli@latest build --profile development --platform android`, then install the APK on the phone.
 
+### Offline and installable (web)
+
+- `npm run build:web` runs `expo export`, then `scripts/offline-build.mjs`, which uses Workbox to write `dist/sw.js`: every file of the build is kept on the phone (versioned, so a deploy replaces them), pages open from the kept shell, and original sheets are network-first with a saved copy (`abu-sheets` cache). New versions wait: `src/lib/pwa.web.ts` shows "New version ready · Update" and reloads only on tap.
+- `public/manifest.json`, `public/icons/` and the tags in `public/index.html` make it installable. The icons come from `design/brand/icon.svg`.
+- Data: `src/lib/offline.ts` saves the TanStack Query cache in IndexedDB (`offline-store.web.ts`; AsyncStorage on phones) and restores it on opening. Keep `gcTime` under about 24.8 days: longer overflows the timer and drops data at once. `staleTime` is 0 so every screen refetches as it opens; editors wait for `isFetchedAfterMount` when online.
+- `src/lib/keep-offline.ts` saves the next three weeks of services, their songs, notices and the repertoire while online, plus sheets on Wi-Fi (the data saver, on by default). `src/lib/outbox.ts` holds plays made offline. `src/state/session.tsx` keeps you signed in when the sign-in check can't reach the server.
+- To see it in Chrome: DevTools, Application, Service workers and Storage. Local `wrangler dev` on localhost runs the service worker too.
+
 ## Layout
 
 - `src/app/`: screens (Expo Router).
@@ -41,11 +49,11 @@ Sound on Android and iOS comes from `react-native-audio-api`, a native module, s
 - `src/api/`: the API client and types (`client.ts`), and where the API lives (`config.ts`, `config.web.ts`).
 - `src/auth/`: the Better Auth client: secure storage on phones, cookies on the web.
 - `src/state/session.tsx`: who is signed in, their groups, the current group (remembered on the device), and "looking around".
-- `src/lib/`: device settings storage, dates as people say them (`dates.ts`), song order helpers (`order.ts`), keeping the screen on (`screen-on.ts`), one-request-at-a-time saving (`serial.ts`), attendance report ranges and colours (`attendance.ts`), downloads (`download.ts`), group type names, and suggested song tags.
+- `src/lib/`: device settings storage, dates as people say them (`dates.ts`), song order helpers (`order.ts`), keeping the screen on (`screen-on.ts`), one-request-at-a-time saving (`serial.ts`), offline data and saving (`offline.ts`, `keep-offline.ts`, `outbox.ts`, `sheets-cache.ts`), the installable website (`pwa.ts`), the connection (`online.ts`), attendance report ranges and colours (`attendance.ts`), downloads (`download.ts`), group type names, and suggested song tags.
 - `src/solfa/`: the sol-fa reader and pitch helpers, ported from the prototype. Read its README first.
 - `src/score/layout.ts`: splits a song into lines of beat columns (port of `scoreHTML`).
 - `src/audio/`: the synth and scheduler (`engine.ts`), the audio context for web (`context.web.ts`) and phones (`context.ts`), and the `useSongPlayer` hook.
-- `src/components/`: shared UI (`ui.tsx`: pages, buttons, fields, cards, the part picker), icons, the invite card, song rows, the song view (player or sheet), event cards, the Going / Can't come buttons, self check-in, notices, readiness per part, the score (player, dark and light themes), the player controls, and the brand mark and motif (`brand.tsx`).
+- `src/components/`: shared UI (`ui.tsx`: pages, buttons, fields, cards, the part picker), icons, the invite card, song rows, the song view (player or sheet), event cards, the Going / Can't come buttons, self check-in, notices, the offline and update bars, the install card, readiness per part, the score (player, dark and light themes), the player controls, and the brand mark and motif (`brand.tsx`).
 - `src/splash/`: the opening animation that follows the still splash screen, and its particle layout.
 - `src/data/demo-songs.ts`: the prototype's demo songs (public domain or written for the demo). Never add the pilot choir's copyrighted sheets.
 - `src/theme/tokens.ts`: brand colours, part colours and fonts.

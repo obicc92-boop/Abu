@@ -2,7 +2,7 @@
 
 Abụ (Igbo for "song") is an app for choirs and music groups that read **tonic sol-fa**. Members learn their part by hearing it played, and leaders organise songs, services and rehearsals in one place. The first users are church choirs in Nigeria (Catholic, Anglican, Pentecostal), plus non-church groups such as bands and orchestras. It will go international later.
 
-The product owner has a pilot choir ready to test. The real app is started: `abu-app/` (the Expo app: sol-fa reader, score and player, live on the web) and `abu-api/` (the Cloudflare Worker: website hosting, API and D1 database). **Next: milestone 7, offline and installable (see `docs/app-plan.md`).**
+The product owner has a pilot choir ready to test. The real app is started: `abu-app/` (the Expo app: sol-fa reader, score and player, live on the web) and `abu-api/` (the Cloudflare Worker: website hosting, API and D1 database). **Next: milestone 8, pilot ready (see `docs/app-plan.md`).**
 
 ## Decisions already made (don't re-ask)
 
@@ -116,7 +116,14 @@ The real app is live at https://abu.adalingo.workers.dev: one Cloudflare Worker 
      - **Me:** your practice (plays this week, songs you know, and a gentle streak of days in a row, counted on the phone's calendar in the new `practice_days` table; private to you), your part in each group, changing your password (other phones are signed out), Perform's background on this phone, and About.
      - **Checked end to end** on the live site (21 Group and Me checks, plus the other suites), with the test data deleted afterwards.
      - **Left for later:** the group photo, birthdays, text size, language and notifications. Downloads and the data saver come with milestone 7.
-   - Next is milestone 7, offline and installable: songs, song orders and notices for upcoming services kept on the phone; the installable website; the data saver.
+   - Milestone 7 (offline and installable) is done, for the web app:
+     - **Installable:** a manifest and icons (`abu-app/public/`); Android offers "Install", iPhones use "Add to Home Screen"; Home and Me offer it.
+     - **The app itself offline:** a Workbox service worker (Expo's recommendation), generated after each export by `abu-app/scripts/offline-build.mjs`, keeps the whole build (about 2.8 MB) on the phone. New versions wait for "Update" in a bar, so nothing reloads during Perform.
+     - **Your data offline:** the query cache is saved in IndexedDB and restored on opening (`abu-app/src/lib/offline.ts`). While online, Abụ saves each group's next three weeks of services with their orders and songs, the notices, the repertoire and My songs (`src/lib/keep-offline.ts`). Sheets are saved too, but with the data saver on (the default) only on Wi-Fi. You stay signed in offline (the last sign-in is kept on the phone). Plays made offline are sent when you're back. An "Offline" bar shows; changes say "No connection".
+     - **Traps found:** a query `gcTime` over about 24.8 days overflows the browser's timer and throws data away at once (kept at 20 days, with a test). Saved data must not count as fresh: every screen refetches as it opens (`staleTime: 0`), and the editors (song order, event details, attendance register) wait for the server's latest when online.
+     - **Checked end to end** offline on the live site (the page and the service worker both cut off), with every other suite rerun.
+     - **Phones (Android and iOS builds)** keep data with AsyncStorage the same way, but don't save sheets or detect the connection yet.
+   - Next is milestone 8, pilot ready: Home complete (the leader's To do), and the Android build tested on Tecno, Infinix and itel phones.
 
    The schema covers the entities the prototype uses:
    - `users`
