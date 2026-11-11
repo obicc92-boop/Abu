@@ -18,10 +18,22 @@
       body {
         height: 100%;
       }
+      /* Android Chrome hides its address bar as you scroll, which makes the
+         screen taller than "100%" (that's measured with the bar showing).
+         100dvh follows the bar, so the app always reaches the bottom of the
+         screen. Older browsers keep 100%. */
+      @supports (height: 100dvh) {
+        html,
+        body {
+          height: 100dvh;
+        }
+      }
       body {
         overflow: hidden;
         margin: 0;
-        background: #d93a1e;
+        /* The app's sand, so nothing red shows around it (the red first paint
+           below has its own background). */
+        background: #f7f1ed;
       }
       #root {
         display: flex;
