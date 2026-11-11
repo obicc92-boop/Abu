@@ -1,5 +1,6 @@
-/** The group's code, big, with WhatsApp sharing and copying. */
+/** The group's code, big, with WhatsApp sharing, copying, and a QR code to show at rehearsal. */
 import * as Clipboard from 'expo-clipboard';
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { Linking, StyleSheet, Text, View } from 'react-native';
 
@@ -8,7 +9,7 @@ import { colors, fonts } from '@/theme/tokens';
 
 import { Body, Button, Card, Kicker } from './ui';
 
-export function InviteCard({ groupName, code, intro }: { groupName: string; code: string; intro?: string }) {
+export function InviteCard({ groupName, code, intro, showQr = true }: { groupName: string; code: string; intro?: string; showQr?: boolean }) {
   const [copied, setCopied] = useState<'code' | 'link' | null>(null);
   const copy = async (what: 'code' | 'link') => {
     await Clipboard.setStringAsync(what === 'code' ? code : inviteLink(code));
@@ -31,6 +32,7 @@ export function InviteCard({ groupName, code, intro }: { groupName: string; code
         <Button kind="ghost" small label={copied === 'code' ? 'Copied ✓' : 'Copy code'} onPress={() => copy('code')} style={{ flex: 1 }} />
         <Button kind="ghost" small label={copied === 'link' ? 'Copied ✓' : 'Copy invite link'} onPress={() => copy('link')} style={{ flex: 1 }} />
       </View>
+      {showQr ? <Button kind="ghost" small label="Show QR code to scan at rehearsal" onPress={() => router.push({ pathname: '/invite-qr', params: { code, name: groupName } })} /> : null}
     </Card>
   );
 }

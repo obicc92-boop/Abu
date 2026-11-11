@@ -1,7 +1,7 @@
 /**
  * Thin bars along the top: "Offline" while there's no connection, and "New
- * version ready" when an update has downloaded. Neither shows during Perform
- * or the check-in code, which take the whole screen.
+ * version ready" when an update has downloaded. Neither shows during Perform,
+ * the check-in code or the invite QR code, which take the whole screen.
  */
 import { usePathname } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -16,7 +16,7 @@ export function ConnectionBars() {
   const { updateReady } = usePwa();
   const insets = useSafeAreaInsets();
   const path = usePathname();
-  if (/\/(perform|code)$/.test(path)) return null;
+  if (/\/(perform|code|invite-qr)$/.test(path)) return null;
   if (online && !updateReady) return null;
   return (
     <View style={{ paddingTop: insets.top }}>
