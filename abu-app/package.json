@@ -7,7 +7,10 @@
     "@expo-google-fonts/figtree": "^0.4.1",
     "@expo-google-fonts/jetbrains-mono": "^0.4.1",
     "@expo-google-fonts/marcellus": "^0.4.1",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@tanstack/query-async-storage-persister": "^5.107.1",
     "@tanstack/react-query": "^5.107.1",
+    "@tanstack/react-query-persist-client": "^5.107.1",
     "better-auth": "^1.7.20",
     "expo": "~58.0.24",
     "expo-clipboard": "~58.0.4",
@@ -22,6 +25,7 @@
     "expo-splash-screen": "~58.0.14",
     "expo-status-bar": "~58.0.5",
     "expo-system-ui": "~58.0.7",
+    "idb-keyval": "^6.3.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-native": "0.88.1",
@@ -42,7 +46,8 @@
     "eslint-config-expo": "~58.0.4",
     "jest": "~30.5.2",
     "jest-expo": "~58.0.14",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "workbox-build": "^7.4.1"
   },
   "scripts": {
     "start": "expo start",
@@ -52,7 +57,7 @@
     "lint": "expo lint",
     "test": "jest",
     "typecheck": "tsc --noEmit",
-    "build:web": "expo export --platform web"
+    "build:web": "expo export --platform web && node scripts/offline-build.mjs"
   },
   "private": true,
   "jest": {
