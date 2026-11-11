@@ -8,7 +8,22 @@
  * Updates wait (no skipWaiting): the app shows "New version ready" and only
  * reloads when someone taps Update, never in the middle of Perform.
  */
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { generateSW } from 'workbox-build';
+
+// The interface fonts download alongside the scripts instead of after them, so
+// a first visit on slow data opens sooner. (The sol-fa font loads later.)
+const fonts = readdirSync('dist/assets', { recursive: true })
+  .map(String)
+  .filter((f) => /(Figtree_(500Medium|700Bold|800ExtraBold)|Marcellus_400Regular)\.[0-9a-f]+\.ttf$/.test(f));
+const html = readFileSync('dist/index.html', 'utf8');
+if (fonts.length && !html.includes('rel="preload"')) {
+  const links = fonts.map((f) => `<link rel="preload" href="/${join('assets', f).split('\\').join('/')}" as="font" type="font/ttf" crossorigin />`).join('');
+  writeFileSync('dist/index.html', html.replace('</head>', `${links}</head>`));
+}
+console.log(`Preloading ${fonts.length} fonts.`);
 
 const { count, size, warnings } = await generateSW({
   globDirectory: 'dist',

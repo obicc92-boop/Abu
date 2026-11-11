@@ -31,14 +31,16 @@ function KeepOffline() {
 }
 
 export default function RootLayout() {
+  // The app opens once the interface fonts are ready (the web page preloads them).
   const [loaded, error] = useFonts({
     Marcellus_400Regular,
     Figtree_500Medium,
     Figtree_700Bold,
     Figtree_800ExtraBold,
-    JetBrainsMono_500Medium,
-    JetBrainsMono_700Bold,
   });
+  // The sol-fa font loads alongside without holding up the first screen: the
+  // score is laid out in beat columns, so it lines up while the font arrives.
+  useFonts({ JetBrainsMono_500Medium, JetBrainsMono_700Bold });
 
   // The opening animation covers the app until it finishes; its first frame
   // matches the still splash screen, which is hidden underneath it.
