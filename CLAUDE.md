@@ -70,7 +70,11 @@ The real app is live at https://abu.adalingo.workers.dev: one Cloudflare Worker 
 
 **Later:**
 - Pen writing (v1.5).
-- AI "scan a sheet to draft" for photos and PDFs. Typed sheets work best; handwritten ones need more correcting. **Planned in `docs/scan-plan.md`** (clean the page, read it with a vision AI checked by Abụ's sol-fa checker, review line by line, then play; Phase 0 proves it on real sheets first). **Phase 0 is under way** in `abu-reader/` (see its README): MusicXML converts to sol-fa (`abu-app/src/musicxml`), and typed PDFs that keep their text are read without AI (92% of bars pass the checker); Claude Opus 5.5 read pictures of typed lines with 98% of bars right at about 1.3 US cents a line (the Anthropic key, copied from SonkoMusic with the owner's approval, is in `abu-reader/.env`, never in git). The owner's sheets stay in `abu-reader/data/`, never in git.
+- **Scanning sheets: Phase 1 is built in the web app** (Songs → Scan, or Add a song → Scan a sheet instead). It's planned in `docs/scan-plan.md`, with Phase 0's measurements in `abu-reader/README.md`.
+  - **How it works:** Claude finds the lines on each page and reads each line (`abu-api/src/scan.ts`, daily allowance in `scan_usage`). The person checks every line against its picture (`abu-app/src/app/scan.tsx`), and the song editor opens with the original sheet attached.
+  - **Accuracy:** typed lines read with 98% of bars right, at about 1.5 US cents a line.
+  - **The key:** it's the Worker secret `ANTHROPIC_API_KEY`; the owner's key from SonkoMusic, approved, is kept locally in `abu-reader/.env`.
+  - **Still to do:** typed PDFs read from their own text (`abu-reader/scripts/pdf-text.py`), measuring handwriting with real corrections, and phones.
 - Playback that follows repeats (D.S., D.C., 1st and 2nd endings). The format already reserves `{ds}`, `{dc}`, `{segno}`, `{fine}`, `{1.}`, `{2.}`.
 - Staff notation.
 - A singing voice instead of the synth.

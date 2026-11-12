@@ -27,6 +27,14 @@ Wrangler uses the Cloudflare account it's signed in to on this Mac. Tests never 
 - **Production secret:** `BETTER_AUTH_SECRET` is a Worker secret, set with `npx wrangler secret put BETTER_AUTH_SECRET`. `BETTER_AUTH_URL` is in `wrangler.jsonc`; change it when Abụ gets its own domain.
 - **Local dev:** put both in `.dev.vars` (git-ignored), apply migrations with `npx wrangler d1 migrations apply abu --local`, and run `npx wrangler dev --port 8790`. Port 8787 is often taken by another project on this Mac.
 
+### Scanning sheets
+
+- **The reader:** Claude Opus 5.5, called from `src/scan.ts` with the Anthropic SDK. It answers to a fixed JSON schema.
+- **Production secret:** `ANTHROPIC_API_KEY` is a Worker secret, set with `npx wrangler secret put ANTHROPIC_API_KEY`. Without it, scanning answers "Scanning isn't switched on yet" before anything is counted.
+- **Optional gateway:** set `ANTHROPIC_BASE_URL` to send the calls through Cloudflare AI Gateway instead of straight to Anthropic.
+- **Local dev:** the key can go in `.dev.vars`. Tests always run without it (`vitest.config.ts`), so they never reach Claude.
+- **Daily allowance** (`src/domain/scan.ts`, table `scan_usage`): 40 pages and 400 lines per person, and 2,000 lines for everyone together, about US$30 at most.
+
 ## Who can see and change what
 
 D1 has no row-level security, so every action in `src/domain/` checks access first (`src/domain/access.ts`). The rules come from the owner's decisions in `../CLAUDE.md`:
@@ -71,10 +79,15 @@ The database itself guarantees what must never break: a group always keeps a lea
   - The leader's To do: `GET /api/groups/:id/todo` (leaders; part leaders for their part).
   - Your practice week: `GET /api/me/practice/summary?today=YYYY-MM-DD`; `POST /api/songs/:id/plays` takes the phone's `day`.
   - Changing your password is Better Auth's own `POST /api/auth/change-password`.
+  - Scanning (signed in):
+    - `POST /api/scan/page?w=&h=` (body = a JPEG, PNG or WebP of a page, up to 5 MB) finds the lines of music, in the picture's pixels, plus the title, composer, key and time.
+    - `POST /api/scan/line?parts=S,A,T,B&time=&key=` (body = a picture of one line) reads it into sol-fa, with the words and the bars to check first.
+    - `GET /api/scan/allowance` returns what's left today.
 - `src/domain/`: groups and people, songs and repertoire, events and replies, attendance and check-in, practice, notices.
 - `src/errors.ts`: errors with an HTTP status and a message safe to show people.
 - `src/auth.ts`: sign-in.
 - Sol-fa: `src/domain/songs.ts` imports the app's reader from `../abu-app/src/solfa`, so a song is checked by the same code on both sides. Keep that module free of app-only imports.
 - Original sheets: R2 bucket `abu-sheets` (binding `SHEETS`), under `sheets/<song id>/`.
 - `migrations/`: D1 migrations, applied by `npm run deploy` (or `npm run db:migrate`).
+- `src/scan.ts`: reading scanned sheets with Claude: the prompts, the answer schemas, and shaping the answers.
 - `test/`: access rules (`rules.test.ts`), sign-in and onboarding over HTTP (`auth.test.ts`), and the public endpoints (`http.test.ts`).

@@ -158,6 +158,27 @@ Details and numbers are in `abu-reader/README.md`.
   - **Finding lines in a photo:** the trial cut lines using the PDF's own positions.
   - **The sheet drawer and Abụ's own reader:** for reading on the phone, free, without a connection. At these prices that's no longer urgent for cost, but it still matters for offline use.
 
+### Phase 1 so far (12 November 2026): scanning in the web app
+
+- **Line finding:** a whole page goes to Claude, which returns a box for each line of music and the heading (`abu-reader/scripts/claude-lines.py`).
+  - On typed pages it matched 75 of the 86 lines found from the PDFs' text, with 88% overlap; most of the rest were the text reader's own mistakes.
+  - On handwritten pages it boxed the lines well by eye ("Domon Maria", "Vovome", "Laudate Dominum").
+  - It costs about 3 US cents a page.
+- **Built:**
+  - **Scan a sheet:** a PDF (drawn with pdf.js in the browser) or photos.
+  - **Reading:** each page goes to `POST /api/scan/page`, and each line is cut out and read with `POST /api/scan/line`, 3 at a time, with a daily allowance.
+  - **Review:** the line's picture above what was read; checked as you type; the bars to check first; play; read again; leave out; "Looks right".
+  - **Saving:** upbeats printed at the start of a line move back with their words, and the time is guessed if not printed. The song editor opens with the original sheet attached, and nothing is saved before Save.
+- **Checked end to end:**
+  - **Test sheet:** a public-domain hymn (Old Hundredth) typeset as a typed sol-fa sheet.
+  - **Results:** as a PDF and as a photo-like JPEG, all 4 lines were found and all 48 bars were read exactly, in about 12 seconds. The song saved with its sheet.
+- **Not yet:**
+  - typed PDFs read from their text (free and instant, `abu-reader/scripts/pdf-text.py`, to port into the app)
+  - cleanup with corners for photos
+  - reading in the background (Cloudflare Workflows)
+  - phones (Phase 2)
+  - keeping corrections as lessons (needs each group's permission)
+
 ## What the owner needs to provide or decide
 
 0. **SonkoMusic's reader and PDMX:** whether Abụ may reuse SonkoMusic's reader code and its copy of PDMX (both the owner's, and PDMX is public domain or CC0). Also whether PDMX hymns may become songs in Abụ's library once converted and checked.
