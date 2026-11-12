@@ -65,4 +65,4 @@ W  Sing a-loud and be glad
 
 1. **MVP: type or paste** the sol-fa in the editor, using the format above.
 2. **MVP: attach the original sheet.** A PDF or photo is stored with the song, so members can still see the original even before anyone has typed it in.
-3. **Later: scan to draft.** AI reads a photo or PDF and fills in the editor for a person to check. This works best on typed sheets like the Calypso Carol. Handwritten sheets will need more correcting.
+3. **Later: scan to draft.** AI reads a photo or PDF and fills in the editor for a person to check. This works best on typed sheets like the Calypso Carol. Handwritten sheets will need more correcting. The plan is in `scan-plan.md`.
