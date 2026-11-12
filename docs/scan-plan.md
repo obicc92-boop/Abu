@@ -138,6 +138,22 @@ Updated after SonkoMusic: Abụ's own reader moves forward, because its training
 | **2. Phones and polish** | The phone's own scanner on Android and iPhone, the reader on the phone, several pages at once, the sol-fa keypad, a scanning allowance per group. | About 2 weeks |
 | **3. Handwriting and staff scores** | Handwriting-style training pages and permitted corrections, then handwritten sheets; staff-notation choir scores through SonkoMusic's piano reader and the converter. | Ongoing |
 
+### Phase 0 so far (12 November 2026)
+
+Details and numbers are in `abu-reader/README.md`.
+
+- **(a) MusicXML to sol-fa: done** (`abu-app/src/musicxml`, tested). On PDMX, 78% of hymns and choral pieces convert and play back exactly. Most of the rest change time signature mid-piece.
+- **(c) The test set: started** from the owner's shared folder of choir sheets. It has 58 distinct sol-fa sheets:
+  - 16 typed sol-fa sheets that still hold their text
+  - 10 staff scores with sol-fa printed with them
+  - 31 pictures, mostly handwritten
+- **New finding: typed PDFs can be read without any AI.** About half the sheets were typed in Word, and the PDF keeps every character and its position. Read that way, 92% of bars on typed sol-fa sheets pass Abụ's checker straight away, and the lines checked by eye were exactly right. Phase 1 should do this first for any PDF with text, and send only pictures to a reader.
+- **Next:**
+  - **Answer keys for typed sheets:** the fully passing typed sheets, checked, become answer keys.
+  - **Measuring Claude on pictures:** those same pages turned into pictures (and photographed) measure Claude's reading against the answer keys.
+  - **The sheet drawer:** for training Abụ's own reader.
+  - **Answers for the handwritten sheets:** these need the owner or choir members to type them.
+
 ## What the owner needs to provide or decide
 
 0. **SonkoMusic's reader and PDMX:** whether Abụ may reuse SonkoMusic's reader code and its copy of PDMX (both the owner's, and PDMX is public domain or CC0). Also whether PDMX hymns may become songs in Abụ's library once converted and checked.
