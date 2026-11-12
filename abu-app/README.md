@@ -45,9 +45,9 @@ For testers, `npx eas-cli@latest build --profile preview --platform android` mak
   - `song/[id].tsx`: the player (`components/song-view.tsx`), with the song's actions and your practice (`components/song-actions.tsx`). Sheet-only songs show their sheet and a "Type the sol-fa" button.
   - `song-editor.tsx`: add a song, or edit one (`?id=`). It checks the sol-fa as you type (`components/solfa-check.tsx`), previews and plays it, takes tags, and attaches the original sheet.
   - `event-editor.tsx`: plan a service, rehearsal or concert (a setlist in your own space), or change one (`?id=`). Dates and times are tapped, not typed; rehearsals can repeat weekly.
-  - `event/[id]/`: a service's page (`index.tsx`: details, your reply, the order by section, readiness for leaders), the order editor (`order.tsx`, saving each change in turn), Rehearse (`rehearse.tsx`: the player for each song), Perform (`perform.tsx`: no audio code at all; A−/A+, my part only, dark or light, the screen kept on), the attendance register (`attendance.tsx`) and the check-in code full screen (`code.tsx`).
+  - `event/[id]/`: a service's page (`index.tsx`: details, your reply, the order by section, readiness for leaders), the order editor (`order.tsx`: section blocks with their songs, renaming and moving sections, adding songs to a section; each change saved in turn), Rehearse (`rehearse.tsx`: the player for each song), Perform (`perform.tsx`: no audio code at all; A−/A+, my part only, dark or light, the screen kept on), the attendance register (`attendance.tsx`) and the check-in code full screen (`code.tsx`).
   - `attendance-report.tsx`: attendance reports for leaders and part leaders, with the spreadsheet download.
-  - `group-settings.tsx`: the group's name, church, town, leader's title and song order sections (leaders).
+  - `group-settings.tsx`: the group's name, church, town, leader's title and usual song order sections (leaders); in your own space, just your usual sections.
 - `src/api/`: the API client and types (`client.ts`), and where the API lives (`config.ts`, `config.web.ts`).
 - `src/auth/`: the Better Auth client: secure storage on phones, cookies on the web.
 - `src/state/session.tsx`: who is signed in, their groups, the current group (remembered on the device), and "looking around".
