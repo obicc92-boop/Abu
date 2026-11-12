@@ -1,0 +1,1 @@
+{"height": 64, "stride": 4, "band": {"above": 1.3, "below": 0.6, "side": 0.4}, "tokens": ["d", "r", "m", "f", "s", "l", "t", "de", "re", "fe", "se", "le", "ra", "ma", "lo", "ta", "^", "_", "|", "/", ":", ".", ",", "-", "x"], "trained": {"step": 9000, "held_error": 0.030847070344377347, "held_exact": 0.5620736698499318}}
