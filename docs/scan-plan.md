@@ -157,6 +157,10 @@ Details and numbers are in `abu-reader/README.md`.
   - **Handwritten sheets:** the open question. They need typed answers from the owner or choir members, to measure the same way.
   - **Finding lines in a photo:** the trial cut lines using the PDF's own positions.
   - **The sheet drawer and Abụ's own reader:** for reading on the phone, free, without a connection. At these prices that's no longer urgent for cost, but it still matters for offline use.
+- **(b) and (d, second half) Abụ's own reader: done**, as the owner asked (own model first, a little Haiku to check, like SonkoMusic).
+  - **Training:** a small model (1.1M weights) on 60,000 rows drawn from PDMX hymns in typed and handwriting-like fonts, and 56,000 real rows from 826 typed sheets in the owner's folder, labelled from the PDFs' text. Free data only, as the owner chose; no paid labelling of handwriting.
+  - **Results on the same 50 lines:** alone, it gets 98.9% of notes and 92.9% of bars right, for free. **With Haiku checking it: 100% of notes, 99.2% of bars, 49 of 50 lines exact, and no wrong bar the checker would miss**, at about 0.17 US cents a line. That's better than Opus alone (98.2% of bars) at about an eighth of the cost per line.
+  - **Not measured yet:** handwriting, and real phone photos. The training rows include handwriting-like fonts and photo faults, but there are no handwritten answers to measure against.
 
 ### Phase 1 so far (12 November 2026): scanning in the web app
 
@@ -166,12 +170,13 @@ Details and numbers are in `abu-reader/README.md`.
   - It costs about 3 US cents a page.
 - **Built:**
   - **Scan a sheet:** a PDF (drawn with pdf.js in the browser) or photos.
-  - **Reading:** each page goes to `POST /api/scan/page`, and each line is cut out and read with `POST /api/scan/line`, 3 at a time, with a daily allowance.
+  - **Reading:** Haiku finds the lines on each page (`POST /api/scan/page`). Each line is cut out and read in the browser by Abụ's own model (`abu-app/src/scan/own-reader.web.ts`, ONNX Runtime Web), then Haiku checks the reading against the picture (`POST /api/scan/check`). Only if Haiku's line still fails the checker does Opus read it (`POST /api/scan/line`). Lines go 3 at a time, with a daily allowance.
   - **Review:** the line's picture above what was read; checked as you type; the bars to check first; play; read again; leave out; "Looks right".
   - **Saving:** upbeats printed at the start of a line move back with their words, and the time is guessed if not printed. The song editor opens with the original sheet attached, and nothing is saved before Save.
 - **Checked end to end:**
   - **Test sheet:** a public-domain hymn (Old Hundredth) typeset as a typed sol-fa sheet.
-  - **Results:** as a PDF and as a photo-like JPEG, all 4 lines were found and all 48 bars were read exactly, in about 12 seconds. The song saved with its sheet.
+  - **Results:** as a PDF and as a photo-like JPEG, all 4 lines were found and all 48 bars were read exactly. The song saved with its sheet. With the own reader, the PDF needed only Haiku; the photo sent 2 of its 4 lines on to Opus.
+  - **Cost:** a typed page of 6 lines is about 1 US cent, against about 10 with Opus alone.
 - **Not yet:**
   - typed PDFs read from their text (free and instant, `abu-reader/scripts/pdf-text.py`, to port into the app)
   - cleanup with corners for photos

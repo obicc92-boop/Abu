@@ -71,8 +71,8 @@ The real app is live at https://abu.adalingo.workers.dev: one Cloudflare Worker 
 **Later:**
 - Pen writing (v1.5).
 - **Scanning sheets: Phase 1 is built in the web app** (Songs → Scan, or Add a song → Scan a sheet instead). It's planned in `docs/scan-plan.md`, with Phase 0's measurements in `abu-reader/README.md`.
-  - **How it works:** Claude finds the lines on each page and reads each line (`abu-api/src/scan.ts`, daily allowance in `scan_usage`). The person checks every line against its picture (`abu-app/src/app/scan.tsx`), and the song editor opens with the original sheet attached.
-  - **Accuracy:** typed lines read with 98% of bars right, at about 1.5 US cents a line.
+  - **How it works:** Haiku finds the lines on each page. Abụ's own model (trained in `abu-reader/train`, run in the browser from `abu-app/public/reader/`) reads each line, and Haiku checks that reading against the picture; Opus reads a line only when Haiku's still fails the checker (`abu-api/src/scan.ts`, daily allowance in `scan_usage`). The person checks every line against its picture (`abu-app/src/app/scan.tsx`), and the song editor opens with the original sheet attached.
+  - **Accuracy:** on 50 typed test lines, own model then Haiku got 99.2% of bars right (Opus alone: 98.2%), at about 0.17 US cents a line. Details in `abu-reader/README.md`.
   - **The key:** it's the Worker secret `ANTHROPIC_API_KEY`; the owner's key from SonkoMusic, approved, is kept locally in `abu-reader/.env`.
   - **Still to do:** typed PDFs read from their own text (`abu-reader/scripts/pdf-text.py`), measuring handwriting with real corrections, and phones.
 - Playback that follows repeats (D.S., D.C., 1st and 2nd endings). The format already reserves `{ds}`, `{dc}`, `{segno}`, `{fine}`, `{1.}`, `{2.}`.

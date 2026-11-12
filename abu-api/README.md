@@ -29,7 +29,7 @@ Wrangler uses the Cloudflare account it's signed in to on this Mac. Tests never 
 
 ### Scanning sheets
 
-- **The reader:** Claude Opus 5.5, called from `src/scan.ts` with the Anthropic SDK. It answers to a fixed JSON schema.
+- **The readers** (`src/scan.ts`, Anthropic SDK, answers to fixed JSON schemas): Claude Haiku 5.5 finds the lines on a page and checks the app's own reading of each line; Claude Opus 5.5 reads a line only when Haiku's still fails the checker. The app reads each line first with Abụ's own model, in the browser.
 - **Production secret:** `ANTHROPIC_API_KEY` is a Worker secret, set with `npx wrangler secret put ANTHROPIC_API_KEY`. Without it, scanning answers "Scanning isn't switched on yet" before anything is counted.
 - **Optional gateway:** set `ANTHROPIC_BASE_URL` to send the calls through Cloudflare AI Gateway instead of straight to Anthropic.
 - **Local dev:** the key can go in `.dev.vars`. Tests always run without it (`vitest.config.ts`), so they never reach Claude.
@@ -82,6 +82,7 @@ The database itself guarantees what must never break: a group always keeps a lea
   - Scanning (signed in):
     - `POST /api/scan/page?w=&h=` (body = a JPEG, PNG or WebP of a page, up to 5 MB) finds the lines of music, in the picture's pixels, plus the title, composer, key and time.
     - `POST /api/scan/line?parts=S,A,T,B&time=&key=` (body = a picture of one line) reads it into sol-fa, with the words and the bars to check first.
+    - `POST /api/scan/check?parts=S,A,T,B&draft=&time=&key=` (body = a picture of one line; `draft` = the own model's reading, up to 4,000 characters) has Haiku correct the draft against the picture. Same answer as `/scan/line`, and it counts as a line.
     - `GET /api/scan/allowance` returns what's left today.
 - `src/domain/`: groups and people, songs and repertoire, events and replies, attendance and check-in, practice, notices.
 - `src/errors.ts`: errors with an HTTP status and a message safe to show people.
