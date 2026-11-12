@@ -7,6 +7,7 @@ import type { Box, ScanPage } from './types';
 
 export const MAX_PAGES = 8;
 export const scanningHere = false;
+export const takePhoto = (): Promise<File | null> => Promise.resolve(null);
 const notYet = () => Promise.reject(new Error('Scanning works in the web app for now.'));
 
 export const loadPages = (_files: { file: Blob; type: string }[]): Promise<{ pages: ScanPage[]; more: boolean }> => notYet();

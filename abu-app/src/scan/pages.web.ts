@@ -116,4 +116,17 @@ export async function cutLine(page: ScanPage, box: Box): Promise<{ blob: Blob; u
   return { blob, url: URL.createObjectURL(blob), width: c.width, height: c.height, canvas: c };
 }
 
+/** Opens the phone's camera (on a computer, the file picker) for a photo of a page. */
+export function takePhoto(): Promise<File | null> {
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.setAttribute('capture', 'environment');
+    input.onchange = () => resolve(input.files?.[0] ?? null);
+    input.oncancel = () => resolve(null);
+    input.click();
+  });
+}
+
 export const scanningHere = true;

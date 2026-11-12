@@ -311,6 +311,8 @@ const styles = StyleSheet.create({
     color: colors.ink,
     textAlignVertical: 'top',
     outlineColor: colors.red,
+    // Rows don't wrap (bars stay lined up under each other); the box scrolls sideways instead.
+    ...({ whiteSpace: 'pre', overflowX: 'auto' } as object),
   },
   help: { backgroundColor: colors.sand, borderRadius: 12, padding: 12, gap: 4 },
   helpText: { fontFamily: fonts.body, fontSize: 13.5, lineHeight: 19, color: colors.ink },
