@@ -120,11 +120,19 @@ def is_solfa(text):
 
 def rows_of(chars):
     """Finds the rows, then octave marks: small figures or ticks just after a note in a row of notes."""
-    sizes = [c.size for c in chars if c.c != ' ']
-    if not sizes:
+    if not any(c.c != ' ' for c in chars):
         return [], [], []
-    main = statistics.median(sizes)
-    is_cand = lambda c: c.c in RAISED_CHARS or c.c in LOWERED_CHARS or (c.c in MARKISH and c.size < 0.85 * main)
+    letters = [c for c in chars if c.c.isalpha()]
+
+    def is_cand(m):
+        if m.c in RAISED_CHARS or m.c in LOWERED_CHARS:
+            return True
+        # A small figure or tick right after a bigger letter (judged against that letter, not the page:
+        # some sheets set their words smaller than their notes).
+        return m.c in MARKISH and any(
+            m.size < 0.85 * n.size and -1.5 <= m.x0 - n.x1 < 0.5 * n.size and abs(n.y - m.y) < 0.8 * n.size for n in letters
+        )
+
     cands = [c for c in chars if is_cand(c)]
     others = [c for c in chars if not is_cand(c)]
     rows, _, _ = cluster(others)
@@ -181,6 +189,7 @@ def to_abu(text, drawn_bars):
     t = text.translate(DASHES)
     t = t.replace('|', '/' if drawn_bars else '|').replace('¦', '|')
     t = re.sub(r"\s+'", "'", t)  # "d '" is d'
+    t = re.sub(r'(?<=[a-z]),(?=[\s:./|]|$)', '1', t)  # "t," (a comma after a note, not before one) is the low t1
     t = DYNAMICS.sub(' ', t)
     t = re.sub(r"(?<![\w'])\d+(?![\w'])", ' ', t)  # bar numbers
     t = re.sub(r'-{2,}', '-', t)

@@ -9,6 +9,10 @@
  * Bars right: bars written exactly as the answer (spaces aside).
  * Silent mistakes: wrong bars in lines that Abụ's checker passes, which only
  * a person listening would catch.
+ *
+ * Answers come from the PDFs' text, and the text reader makes mistakes too.
+ * Lines whose answer was found wrong by eye are listed with the reason in
+ * data/<set>/answers-wrong.json and left out.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -24,7 +28,10 @@ interface Answer {
 }
 
 const root = process.argv[2] ?? 'data/bantus';
-const answers = JSON.parse(readFileSync(join(root, 'answers.json'), 'utf8')) as Answer[];
+const wrongPath = join(root, 'answers-wrong.json');
+const wrong = existsSync(wrongPath) ? (JSON.parse(readFileSync(wrongPath, 'utf8')) as Record<string, string>) : {};
+const answers = (JSON.parse(readFileSync(join(root, 'answers.json'), 'utf8')) as Answer[]).filter((a) => !(a.id in wrong));
+if (Object.keys(wrong).length) console.log(`Leaving out ${Object.keys(wrong).length} answer lines found wrong by eye (${wrongPath}).`);
 const runs = process.argv.length > 3 ? process.argv.slice(3) : readdirSync('runs/claude-read').map((d) => join('runs/claude-read', d)).filter((d) => statSync(d).isDirectory());
 
 /** Each part's row, from "S  d :r |" lines; reading may use full names. */
@@ -39,9 +46,16 @@ function rows(text: string, parts: string[]): Record<string, string> {
   return out;
 }
 
-/** Bars as text, ignoring spaces and "/" for the medium accent (a beat like any other). */
+/** Bars as text, ignoring spaces, "/" for the medium accent (a beat like any other) and a whole beat written "x" (the same rest as an empty beat). */
 const bars = (row: string) => {
-  const out = row.split('|').map((b) => b.replace(/\s+/g, '').replace(/\//g, ':'));
+  const out = row.split('|').map((b) =>
+    b
+      .replace(/\s+/g, '')
+      .replace(/\//g, ':')
+      .split(':')
+      .map((beat) => (beat === 'x' ? '' : beat))
+      .join(':'),
+  );
   while (out.length && out[0] === '') out.shift();
   while (out.length && out[out.length - 1] === '') out.pop();
   return out;

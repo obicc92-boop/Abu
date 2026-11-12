@@ -148,11 +148,15 @@ Details and numbers are in `abu-reader/README.md`.
   - 10 staff scores with sol-fa printed with them
   - 31 pictures, mostly handwritten
 - **New finding: typed PDFs can be read without any AI.** About half the sheets were typed in Word, and the PDF keeps every character and its position. Read that way, 92% of bars on typed sol-fa sheets pass Abụ's checker straight away, and the lines checked by eye were exactly right. Phase 1 should do this first for any PDF with text, and send only pictures to a reader.
+- **(d, first half) Claude on pictures of typed lines: measured.** The owner approved using the Anthropic key from SonkoMusic; it's kept in `abu-reader/.env`, out of git.
+  - **What was read:** Claude Opus 5.5 read 50 lines from 14 typed sheets, cut out as pictures.
+  - **Results:** **99% of notes and 98% of bars** were right, and phone-photo-like pictures did as well as clean ones. Abụ's checker would miss about 1.5% to 2% of bars, which is why the review screen plays the song.
+  - **Cost and speed:** **about 1.3 US cents a line, or 6 to 11 cents a page**, below the 10 to 25 cents estimated above. About 5 seconds a line, with lines read side by side.
+  - **The whole trial cost US$1.52.** Details are in `abu-reader/README.md`.
 - **Next:**
-  - **Answer keys for typed sheets:** the fully passing typed sheets, checked, become answer keys.
-  - **Measuring Claude on pictures:** those same pages turned into pictures (and photographed) measure Claude's reading against the answer keys.
-  - **The sheet drawer:** for training Abụ's own reader.
-  - **Answers for the handwritten sheets:** these need the owner or choir members to type them.
+  - **Handwritten sheets:** the open question. They need typed answers from the owner or choir members, to measure the same way.
+  - **Finding lines in a photo:** the trial cut lines using the PDF's own positions.
+  - **The sheet drawer and Abụ's own reader:** for reading on the phone, free, without a connection. At these prices that's no longer urgent for cost, but it still matters for offline use.
 
 ## What the owner needs to provide or decide
 

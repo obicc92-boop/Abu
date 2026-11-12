@@ -15,6 +15,9 @@ import { parseSolfa } from '../../abu-app/src/solfa';
 
 const root = process.argv[2] ?? 'data/bantus';
 const perSheet = Number(process.argv[3] ?? 4);
+// --refresh keeps the same lines as the last answers.json (so earlier readings can be rescored) and rereads their text.
+const refresh = process.argv.includes('--refresh');
+const keep = refresh ? new Set((JSON.parse(readFileSync(join(root, 'answers.json'), 'utf8')) as { id: string }[]).map((a) => a.id)) : null;
 const PARTS: Record<number, string[]> = { 1: ['S'], 2: ['S', 'A'], 3: ['S', 'A', 'B'], 4: ['S', 'A', 'T', 'B'], 5: ['Solo', 'S', 'A', 'T', 'B'] };
 
 const kinds = JSON.parse(readFileSync(join(root, 'kinds.json'), 'utf8')) as Record<string, string>;
@@ -62,6 +65,10 @@ for (const file of readdirSync(join(root, 'lines')).sort()) {
     if (song.errors.length || song.bars < 3) return;
     good.push({ id: `${sheet}-${n}`, sheet, sheetName: names.get(sheet) ?? '', line: n, page: line.page, box: line.box, parts, time, key: data.key, text });
   });
+  if (keep) {
+    answers.push(...good.filter((g) => keep.has(g.id)));
+    continue;
+  }
   // A few lines from across each sheet.
   const step = Math.max(1, good.length / perSheet);
   for (let i = 0; i < Math.min(perSheet, good.length); i++) answers.push(good[Math.floor(i * step)]);

@@ -11,6 +11,9 @@ Phase 0 of `docs/scan-plan.md`: proving how well Abụ can read a sheet (PDF or 
 | `scripts/sheets-fetch.py` | Builds the test set of real sheets from a public Google Drive folder (the owner's shared folder of choir sheets): the sol-fa PDFs, one copy of each, sorted by whether the PDF still holds its sol-fa as text. Writes `data/<name>/`. |
 | `scripts/pdf-text.py` | Reads typed sheets that still hold their text into Abụ sol-fa drafts, with no AI: rows by position, table borders as bar lines, small raised or lowered figures as octave marks, four rows as S A T B, and upbeats printed at the start of the next line moved back. Writes `data/<name>/draft/`. |
 | `scripts/check-drafts.ts` | Runs Abụ's sol-fa checker over the drafts: bars passing per sheet, and the commonest problems. |
+| `scripts/answer-lines.ts` | Picks answer lines for measuring readers: lines of typed sol-fa sheets, read from the PDF's text, that pass the checker on their own. Writes `data/<name>/answers.json`. |
+| `scripts/claude-read.py` | Shows Claude a picture of each answer line (clean, or made to look like a phone photo) and saves its reading. Adds up the cost and stops at a cap. Needs `ANTHROPIC_API_KEY` in `abu-reader/.env` (git ignores it). |
+| `scripts/score-readings.ts` | Scores readings against the answers: notes right, bars right, and mistakes the checker would miss. Answer lines found wrong by eye go in `data/<name>/answers-wrong.json`, with the reason, and are left out. |
 
 ```sh
 python3 -m venv .venv && .venv/bin/pip install pymupdf pillow
@@ -19,6 +22,9 @@ npx --yes tsx scripts/pdmx-convert.ts hymns          # PDMX_DIR=... if PDMX isn'
 .venv/bin/python scripts/sheets-fetch.py <drive-folder-id>
 .venv/bin/python scripts/pdf-text.py data/bantus
 npx --yes tsx scripts/check-drafts.ts data/bantus
+npx --yes tsx scripts/answer-lines.ts data/bantus 4
+.venv/bin/python scripts/claude-read.py data/bantus --variant clean --cap 5   # then --variant photo
+npx --yes tsx scripts/score-readings.ts data/bantus
 ```
 
 ## Results so far (12 November 2026)
@@ -46,3 +52,37 @@ Most of the rest change time signature during the piece, which Abụ's format do
 | Staff scores with sol-fa | 10 | 1,060 of 1,417 (75%) | 0 |
 
 Passing the checker means every bar adds up and every note is real sol-fa; it doesn't prove the notes are right. Checked by eye against the page, the first two lines of "The Newborn Prince of Peace" (all four parts, octave marks, half beats and the upbeats moved back from the next line) were exactly right. What still fails: bars split oddly by the layout, words or labels inside rows of notes, and in staff scores, bar lines that belong to the staff and so don't cross the sol-fa.
+
+**Claude reading pictures of single lines** (`claude-read.py`, Claude Opus 5.5 at medium effort, 12 November 2026):
+
+- **What was measured:** 57 lines from 15 typed sheets, each cut out as a picture. Each line was read twice: once clean (200 dpi), and once made to look like a phone photo (lower resolution, tilt, blur, uneven light, paper tint, grain, JPEG).
+- **The answers:** they come from the PDFs' own text.
+- **Answers that turned out wrong:** most disagreements were the text reader's mistakes, not Claude's. In 157 of the first 179 differing bars, both of Claude's readings agreed with each other against the answer. Checked by eye, the text reader had:
+  - missed a font's octave ticks, and commas used as low marks (`t,`); both are now fixed
+  - cut two lines in the wrong place
+  - given fixed-width octave ticks to the wrong row
+  - made an empty bar from double table borders
+
+  The 7 lines still wrong are left out (`answers-wrong.json`).
+
+On the 50 lines left:
+
+| Pictures | Notes right | Bars right | Lines exactly right | Wrong bars the checker passes | Cost |
+|---|---|---|---|---|---|
+| Clean | 99.2% | 98.2% | 44 of 50 | 14 of 988 | 1.3 US cents a line |
+| Like a phone photo | 99.1% | 98.1% | 42 of 50 | 19 of 988 | 1.4 US cents a line |
+
+About 5 seconds a line, and 4 lines at a time.
+
+**Claude's mistakes:**
+- dropping a printed `.` or rest at the end of a bar
+- adding a low mark that isn't printed
+- reading `.` as `,` in the photo-like pictures
+- once, a sentence of explanation inside a row (the prompt or a structured answer should stop that)
+
+**What this doesn't cover yet:**
+- **Handwriting:** it's untested, because no handwritten answers exist yet.
+- **Finding the lines:** lines were cut using the PDF's own positions. Finding them in a photo is its own step.
+- **Real photos:** the photo-like pictures are milder than real ones, which have shadows and curled pages.
+
+The whole trial cost US$1.52.
