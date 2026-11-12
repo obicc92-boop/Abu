@@ -22,7 +22,7 @@ import fitz  # PyMuPDF
 from PIL import Image, ImageDraw
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-PRICES = {'claude-opus-5-5': (4.0, 20.0, 5.0, 0.20), 'claude-sonnet-5-5': (2.0, 10.0, 2.5, 0.10)}
+PRICES = {'claude-opus-5-5': (4.0, 20.0, 5.0, 0.20), 'claude-sonnet-5-5': (2.0, 10.0, 2.5, 0.10), 'claude-haiku-5-5': (0.10, 0.50, 0.125, 0.01)}
 LONG_EDGE = 1560
 
 SYSTEM = """You look at a page of a tonic sol-fa choir sheet (typed or handwritten, often in a table) and find each line of music on it, so each line can be cut out and read on its own.

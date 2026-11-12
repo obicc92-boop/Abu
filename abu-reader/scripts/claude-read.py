@@ -30,7 +30,7 @@ from PIL import Image, ImageChops, ImageFilter
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 # US dollars per million tokens: input, output, cache write (5 min), cache read.
-PRICES = {'claude-opus-5-5': (4.0, 20.0, 5.0, 0.20), 'claude-sonnet-5-5': (2.0, 10.0, 2.5, 0.10)}
+PRICES = {'claude-opus-5-5': (4.0, 20.0, 5.0, 0.20), 'claude-sonnet-5-5': (2.0, 10.0, 2.5, 0.10), 'claude-haiku-5-5': (0.10, 0.50, 0.125, 0.01)}
 
 SYSTEM = """You read one line of music from a picture of a typed tonic sol-fa choir sheet and write it in Abụ's sol-fa text format. Copy exactly what is printed; never correct or improve the music.
 
