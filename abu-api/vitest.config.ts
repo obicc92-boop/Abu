@@ -14,6 +14,8 @@ export default defineConfig(async () => {
             TEST_MIGRATIONS: migrations,
             BETTER_AUTH_URL: 'https://abu.test',
             BETTER_AUTH_SECRET: 'test-only-secret-that-is-long-enough-for-better-auth',
+            // Never the real key (wrangler dev's .dev.vars may hold one): tests must not reach Claude.
+            ANTHROPIC_API_KEY: '',
           },
         },
       }),
