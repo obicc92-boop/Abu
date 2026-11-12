@@ -4,6 +4,35 @@
 
 This is the hardest part of Abụ and the part that makes it worth using, so it's planned to be proved on real sheets before it's built in full.
 
+## What SonkoMusic already proved (12 November 2026)
+
+The owner's other app, SonkoMusic (`github.com/obicc92-boop/Sonkomusic`, on this Mac in `~/Desktop/Somtoo projects/Sonkomusic app`), already reads staff-notation lead sheets from PDFs and photos. Its `docs/014-lead-sheet-upload.md` and `apps/reader/README.md` record what was tried and measured on seven fake-book pages:
+
+| Approach | Notes exactly right | Speed |
+|---|---|---|
+| Audiveris (open-source scanner) | 69% | 10 s a page |
+| Claude Opus 5.5 reading each staff in enlarged pieces | 93% live (98% in the trial) | 1 to 5 min a page |
+| **Its own small model, trained only on lines it drew itself** | **92%** | **About 5 s a page, on the phone** |
+
+What carries over to sol-fa:
+
+- **The approach:**
+  1. Cut the page into lines.
+  2. Read each line.
+  3. Check that every bar adds up.
+  4. Let a person fix the rest on a check screen while the tune plays.
+- **The reader's whole kit in `apps/reader`:**
+  - **The training-picture generator:** random lines, drawn in several fonts at random sizes and weights, each with its exact answer.
+  - **The scan faults added while training:** tilt, blur, ink spread, thresholding, noise and JPEG blocks.
+  - **A small model:** about 1.8 million settings, a CNN with a CTC head, trained on an ordinary Mac's processor.
+  - **Export and phone reading:** export to ONNX, then reading on the phone with ONNX Runtime Web, so the page never leaves the phone and costs nothing per page.
+  - **The scoring scripts:** they line up a reading against the right answer and count notes and bars.
+- **Easier for sol-fa:** a row of sol-fa (S, A, T or B) is a line of letters and punctuation, simpler to read than notes on a stave, and the CTC model reads a line left to right as it is.
+- **PDMX, copied there:** 254,077 pieces of sheet music (MusicXML) from MuseScore, every one marked public domain or CC0, 222,856 with no licence conflict. About 1,400 mention hymns and about 2,000 mention choirs or SATB. Converted to sol-fa, they become real hymns and choir parts to draw as practice pages, and possibly songs for Abụ's library.
+- **Its piano reader** reads two-staff scores. A choir's staff-notation score is laid out much the same: soprano and alto on the top staff, tenor and bass below. Converted to sol-fa, it gives choirs with staff sheets a way in too.
+
+Copyrighted pages and transcriptions stay where they are, outside both repositories, as SonkoMusic already keeps them.
+
 ## Why it's hard, and why it's doable
 
 **Hard:**
@@ -100,14 +129,18 @@ Once checked, it's an ordinary Abụ song: all parts play, "Mine" and Focus work
 
 ## Phases
 
+Updated after SonkoMusic: Abụ's own reader moves forward, because its training kit already exists and was proven in about a week there.
+
 | Phase | What | About |
 |---|---|---|
-| **0. Prove it** | A test set of 10 to 20 sheets with typed answers. Compare Cloudflare's models with Claude, whole pages with line by line, and cleaned with raw photos. Result: accuracy, minutes to fix, cost per page, and a go or no-go for each approach. | 1 to 2 weeks |
-| **1. Typed sheets on the web** | Upload a PDF or photo, clean with corners, read text from typed PDFs directly, read in the background, check and repair, the line-by-line review screen, save and play. | 2 to 3 weeks |
-| **2. Phones and polish** | The phone's own scanner on Android and iPhone, several pages at once, the sol-fa keypad, "your draft is ready" notices, a scanning allowance per group. | About 2 weeks |
-| **3. Handwriting and our own model** | Practice sheets, permitted corrections, a trained model, then handwritten sheets. | Ongoing |
+| **0. Prove it** | **(a) MusicXML to sol-fa:** a converter in `src/solfa`, tested on PDMX hymns. **(b) A sol-fa sheet drawer:** the generator, drawing a song as a typed sheet (with or without table lines) or in handwriting-style fonts. **(c) A test set:** the owner's sheets with typed answers. **(d) Two readers, measured side by side:** Claude on enlarged sol-fa lines (SonkoMusic's method), and a first small sol-fa reader trained on drawn PDMX hymns (SonkoMusic's `apps/reader`, adapted). Results: accuracy, minutes to fix and cost per page for each. | 2 weeks |
+| **1. Typed sheets** | The better reader (or both: the own reader first, Claude on the lines that fail the checker), cleanup with corners, text read straight from typed PDFs, the line-by-line review screen, save and play. **MusicXML files** (MuseScore, Sibelius) open straight into sol-fa. | 2 to 3 weeks |
+| **2. Phones and polish** | The phone's own scanner on Android and iPhone, the reader on the phone, several pages at once, the sol-fa keypad, a scanning allowance per group. | About 2 weeks |
+| **3. Handwriting and staff scores** | Handwriting-style training pages and permitted corrections, then handwritten sheets; staff-notation choir scores through SonkoMusic's piano reader and the converter. | Ongoing |
 
 ## What the owner needs to provide or decide
+
+0. **SonkoMusic's reader and PDMX:** whether Abụ may reuse SonkoMusic's reader code and its copy of PDMX (both the owner's, and PDMX is public domain or CC0). Also whether PDMX hymns may become songs in Abụ's library once converted and checked.
 
 1. **Sample sheets:** 10 to 20 typical sheets, typed and handwritten, from the pilot choir and others. For each, the correct sol-fa typed out once; choir members can help. They stay private, out of the repository, as now.
 2. **An outside AI:** whether Abụ may use Anthropic's Claude (through Cloudflare AI Gateway) when Cloudflare's own models aren't accurate enough. That needs an Anthropic account and API key.
