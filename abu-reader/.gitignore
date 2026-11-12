@@ -1,0 +1,6 @@
+# Generated pages, converted songs, models and anything from the owner's sheets stay out of git.
+data/
+runs/
+node_modules/
+.venv/
+__pycache__/
