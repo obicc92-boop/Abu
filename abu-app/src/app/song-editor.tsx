@@ -1,13 +1,14 @@
 /**
  * Add a song, or edit one (?id=...). Type or paste the sol-fa and it's checked
  * as you type; preview and play it before saving; attach the original sheet
- * (PDF or photo). A song can be saved as sheet only.
+ * (PDF or photo). A song can be saved as sheet only. After scanning a sheet
+ * (?from=scan) it opens with what was read and checked, and the sheet attached.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as DocumentPicker from 'expo-document-picker';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useDeferredValue, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import { api, type PickedFile, type Song } from '@/api/client';
 import { useSongPlayer } from '@/audio/use-song-player';
@@ -16,6 +17,7 @@ import { Score } from '@/components/score';
 import { SolfaCheck } from '@/components/solfa-check';
 import { Body, Button, Card, Chip, ErrorText, Field, Kicker, Loading, Page, TopBar } from '@/components/ui';
 import { TAG_GROUPS } from '@/lib/tags';
+import { clearScanDraft, scanDraft, type ScanDraft } from '@/scan/draft';
 import { KEY_NAMES, parseSolfa } from '@/solfa';
 import { useSession } from '@/state/session';
 import { colors, fonts } from '@/theme/tokens';
@@ -30,7 +32,8 @@ T  m :- /f :r  | d :d  /m :r  | s :- /- :-  |
 B  d1:- /f1:s1 | l1:m1 /d1:s1 | d1:- /- :-  |`;
 
 export default function SongEditorScreen() {
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { id, from } = useLocalSearchParams<{ id?: string; from?: string }>();
+  const [draft] = useState(() => (from === 'scan' && !id ? scanDraft() : null));
   const { status } = useSession();
   const existing = useQuery({ queryKey: ['song', id], queryFn: () => api.song(id!), enabled: !!id });
   if (status === 'signedOut') return <Redirect href={{ pathname: '/auth', params: { mode: 'sign-in' } }} />;
@@ -42,25 +45,25 @@ export default function SongEditorScreen() {
       </Page>
     );
   }
-  return <Editor song={existing.data} />;
+  return <Editor song={existing.data} draft={draft} />;
 }
 
-function Editor({ song }: { song?: Song }) {
+function Editor({ song, draft }: { song?: Song; draft: ScanDraft | null }) {
   const s = useSession();
   const queryClient = useQueryClient();
   const editing = !!song;
   const choirs = s.groups.filter((g) => g.type !== 'personal' && g.status === 'active');
   const defaultFrom = s.group && s.group.type !== 'personal' && s.group.status === 'active' ? s.group.id : null;
 
-  const [title, setTitle] = useState(song?.title ?? '');
-  const [composer, setComposer] = useState(song?.composer ?? '');
-  const [doh, setDoh] = useState(song?.doh ?? 0);
-  const [time, setTime] = useState(song?.time_signature ?? '4/4');
+  const [title, setTitle] = useState(song?.title ?? draft?.title ?? '');
+  const [composer, setComposer] = useState(song?.composer ?? draft?.composer ?? '');
+  const [doh, setDoh] = useState(song?.doh ?? draft?.doh ?? 0);
+  const [time, setTime] = useState(song?.time_signature ?? draft?.time ?? '4/4');
   const [tags, setTags] = useState<string[]>(song?.tags ?? []);
-  const [solfa, setSolfa] = useState(song?.solfa ?? '');
+  const [solfa, setSolfa] = useState(song?.solfa ?? draft?.solfa ?? '');
   const [from, setFrom] = useState<string | null>(defaultFrom);
   const [addToRep, setAddToRep] = useState(true);
-  const [picked, setPicked] = useState<PickedFile | null>(null);
+  const [picked, setPicked] = useState<PickedFile | null>(draft?.sheet ?? null);
   const [removeSheet, setRemoveSheet] = useState(false);
   const [pickError, setPickError] = useState<string | null>(null);
   const [showHelp, setShowHelp] = useState(false);
@@ -88,6 +91,7 @@ function Editor({ song }: { song?: Song }) {
       return saved;
     },
     onSuccess: async (saved) => {
+      if (draft) clearScanDraft();
       await queryClient.invalidateQueries({ queryKey: ['songs'] });
       await queryClient.invalidateQueries({ queryKey: ['repertoire'] });
       await queryClient.invalidateQueries({ queryKey: ['song', saved.id] });
@@ -119,7 +123,17 @@ function Editor({ song }: { song?: Song }) {
 
   return (
     <Page>
-      <TopBar back title={editing ? 'Edit song' : 'Add a song'} subtitle={editing ? song!.title : 'Type or paste the sol-fa; it’s checked as you type.'} />
+      <TopBar
+        back
+        title={editing ? 'Edit song' : draft ? 'Save the scanned song' : 'Add a song'}
+        subtitle={editing ? song!.title : draft ? 'Check the title, key and time, then save.' : 'Type or paste the sol-fa; it’s checked as you type.'}
+      />
+      {!editing && !draft && Platform.OS === 'web' ? (
+        <Card tone="sand">
+          <Body>Have the sheet as a PDF or photo? Abụ can read it for you to check.</Body>
+          <Button small kind="ghost" label="Scan a sheet instead" onPress={() => router.push('/scan')} style={{ alignSelf: 'flex-start' }} />
+        </Card>
+      ) : null}
 
       <Card>
         <Field label="Title" value={title} onChangeText={setTitle} placeholder="e.g. Ekele Diri Chukwu" />

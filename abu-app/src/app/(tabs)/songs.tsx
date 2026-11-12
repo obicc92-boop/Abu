@@ -5,7 +5,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { api, type Song } from '@/api/client';
 import { SearchIcon } from '@/components/icons';
@@ -52,7 +52,14 @@ export default function Songs() {
       <TopBar
         title="Songs"
         subtitle="Every song shared on Abụ is open to you."
-        right={signedIn ? <Button small label="Add a song" onPress={() => router.push('/song-editor')} /> : undefined}
+        right={
+          signedIn ? (
+            <View style={{ flexDirection: 'row', gap: 6 }}>
+              {Platform.OS === 'web' ? <Button small kind="ghost" label="Scan" onPress={() => router.push('/scan')} /> : null}
+              <Button small label="Add a song" onPress={() => router.push('/song-editor')} />
+            </View>
+          ) : undefined
+        }
       />
       <View style={styles.search}>
         <SearchIcon color={colors.muted} />

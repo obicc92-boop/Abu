@@ -113,6 +113,21 @@ export interface PickedFile {
   file?: Blob;
 }
 
+/** A scanned page: its heading, and where its lines of music are (in the picture's pixels). */
+export interface ScanPageReading {
+  title: string;
+  composer: string;
+  key: string;
+  time: string;
+  lines: { top: number; bottom: number; left: number; right: number; parts: string[] }[];
+}
+
+/** One scanned line read into sol-fa, with the bars the reader wasn't sure of. */
+export interface ScanLineReading {
+  text: string;
+  doubts: { part: string; bar: number }[];
+}
+
 export type EventKind = 'service' | 'rehearsal' | 'concert';
 export type Reply = 'going' | 'cant';
 
@@ -318,6 +333,17 @@ export const api = {
     return request<Song>(`/songs/${id}/sheet`, { method: 'PUT', body, headers: { 'Content-Type': picked.type } });
   },
   removeSheet: (id: string) => request<Song>(`/songs/${id}/sheet`, { method: 'DELETE' }),
+  /** Scanning a sheet: find the lines of music on a page (a JPEG, with its size in pixels). */
+  scanPage: (image: Blob, width: number, height: number) =>
+    request<ScanPageReading>(`/scan/page?w=${Math.round(width)}&h=${Math.round(height)}`, { method: 'POST', body: image, headers: { 'Content-Type': 'image/jpeg' } }),
+  /** Read one line of music (a JPEG) into sol-fa. */
+  scanLine: (image: Blob, o: { parts: string[]; time?: string; key?: string }) => {
+    const q = new URLSearchParams({ parts: o.parts.join(',') });
+    if (o.time) q.set('time', o.time);
+    if (o.key) q.set('key', o.key);
+    return request<ScanLineReading>(`/scan/line?${q}`, { method: 'POST', body: image, headers: { 'Content-Type': 'image/jpeg' } });
+  },
+  scanAllowance: () => request<{ pages: number; lines: number }>('/scan/allowance'),
   /** One play-through, on today's date on this phone (for the week and streak on Me). */
   recordPlay: (id: string, day = dayKey()) => request<{ plays: number }>(`/songs/${id}/plays`, json('POST', { day })),
   practiceSummary: () => request<PracticeSummary>(`/me/practice/summary?today=${dayKey()}`),
