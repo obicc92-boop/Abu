@@ -1,18 +1,20 @@
 /**
- * Edit a song order (leaders): move songs up and down, change their section,
- * remove them, and add songs from the repertoire or the library. Every change
- * saves straight away, one request at a time, so quick taps arrive in order.
+ * Edit a song order, section by section (leaders, and part leaders when
+ * allowed). Each section has its songs and its own "Add a song", so a section
+ * can hold several; sections can be renamed, moved, and added with any name.
+ * Every change saves straight away, one request at a time, so quick taps
+ * arrive in order.
  */
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
-import { useDeferredValue, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useDeferredValue, useRef, useState, type ReactNode } from 'react';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { api, type EventDetails, type MyGroup, type OrderItem, type Song } from '@/api/client';
 import { SearchIcon } from '@/components/icons';
 import { Body, Button, Card, Chip, ErrorText, Field, Kicker, Loading, Page, TopBar } from '@/components/ui';
 import { agoText } from '@/lib/dates';
-import { nextSection, sectionChoices } from '@/lib/order';
+import { bySection, cleanSection, insertAfter, moveSection, moveSong, renameSection, sectionChoices } from '@/lib/order';
 import { useOnline } from '@/lib/online';
 import { useSerial } from '@/lib/serial';
 import { KEY_NAMES } from '@/solfa';
@@ -76,6 +78,10 @@ function OrderEditor({ details, group, reload }: { details: EventDetails; group:
     itemsRef.current = next;
     setItems(next);
   };
+  // New sections with no songs yet (a section only exists in an order once it has a song).
+  const [pending, setPending] = useState<string[]>([]);
+  // The section whose song picker is open.
+  const [adding, setAdding] = useState<string | null>(null);
 
   // One request at a time, in the order the taps happened.
   const { run: queue, idle, busy, error } = useSerial(() => void queryClient.invalidateQueries({ queryKey: ['events'] }));
@@ -87,33 +93,37 @@ function OrderEditor({ details, group, reload }: { details: EventDetails; group:
       await api.setOrder(e.id, itemsRef.current.map((i) => ({ id: i.id, section: i.section })));
     });
   };
-
-  const move = (index: number, by: -1 | 1) => {
-    const to = index + by;
-    if (to < 0 || to >= items.length) return;
-    const next = [...itemsRef.current];
-    [next[index], next[to]] = [next[to], next[index]];
+  const change = (next: OrderItem[]) => {
     update(next);
     saveOrder();
   };
-  const setSection = (itemId: string, section: string) => {
-    update(itemsRef.current.map((i) => (i.id === itemId ? { ...i, section } : i)));
-    saveOrder();
-  };
+
   const remove = (itemId: string) => {
     void queue(async () => {
       await api.removeFromOrder(e.id, itemId);
       update(itemsRef.current.filter((i) => i.id !== itemId));
     });
   };
-  const add = (song: Song, section: string) =>
+  /** Adds a song at the end of its section (after `afterId`, the section's last song), or at the end. */
+  const add = (song: Song, section: string, afterId: string | null) =>
     queue(async () => {
       const item = await api.addToOrder(e.id, song.id, section);
-      update([...itemsRef.current, item]);
+      const next = insertAfter(itemsRef.current, afterId && itemsRef.current.some((i) => i.id === afterId) ? afterId : null, item);
+      update(next);
+      setPending((p) => p.filter((x) => x !== section));
+      // The server added it at the end: send the order with it in its section.
+      if (next[next.length - 1].id !== item.id) await api.setOrder(e.id, next.map((i) => ({ id: i.id, section: i.section })));
     });
 
-  const [editingSection, setEditingSection] = useState<string | null>(null);
-  const choices = sectionChoices(group.sections, rehearsal, items.map((i) => i.section));
+  const runs = bySection(items);
+  const used = new Set(items.map((i) => i.section));
+  const suggestions = sectionChoices(group.sections, rehearsal).filter((x) => !used.has(x) && !pending.includes(x));
+  const newSection = (name: string) => {
+    const clean = cleanSection(name);
+    if (!clean) return;
+    if (!used.has(clean) && !pending.includes(clean)) setPending([...pending, clean]);
+    setAdding(clean);
+  };
 
   const done = async () => {
     await idle();
@@ -132,84 +142,228 @@ function OrderEditor({ details, group, reload }: { details: EventDetails; group:
         </Card>
       ) : null}
 
-      {items.length ? (
-        <View style={{ gap: 8 }}>
-          {items.map((item, i) => (
-            <View key={item.id} style={styles.row}>
-              <View style={styles.rowTop}>
-                <Text style={styles.ord}>{i + 1}</Text>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Pressable
-                    onPress={() => setEditingSection(editingSection === item.id ? null : item.id)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Section: ${item.section || 'none'}. Change`}
-                    hitSlop={6}
-                  >
-                    <Text style={styles.section}>{item.section || 'Choose a section'} ▾</Text>
-                  </Pressable>
-                  <Text style={styles.title} numberOfLines={2}>
-                    {item.title}
-                  </Text>
-                </View>
+      {runs.map((run, r) => {
+        const last = run.items[run.items.length - 1].item;
+        return (
+          <SectionBlock
+            key={`${r}-${run.section}`}
+            name={run.section}
+            canMoveUp={r > 0}
+            canMoveDown={r < runs.length - 1}
+            onMove={(by) => change(moveSection(itemsRef.current, r, by))}
+            onRename={(name) => change(renameSection(itemsRef.current, r, name))}
+            adding={adding === run.section && runs.findIndex((x) => x.section === run.section) === r}
+            onAdding={(on) => setAdding(on ? run.section : null)}
+            picker={<SongPicker group={group} items={items} section={run.section} onAdd={(song) => add(song, run.section, last.id)} />}
+          >
+            {run.items.map(({ item, n }) => (
+              <View key={item.id} style={styles.row}>
+                <Text style={styles.ord}>{n}</Text>
+                <Text style={[styles.title, { flex: 1 }]} numberOfLines={2}>
+                  {item.title}
+                </Text>
                 <View style={styles.tools}>
-                  <Tool label="↑" a11y={`Move ${item.title} up`} disabled={i === 0} onPress={() => move(i, -1)} />
-                  <Tool label="↓" a11y={`Move ${item.title} down`} disabled={i === items.length - 1} onPress={() => move(i, 1)} />
+                  <Tool label="↑" a11y={`Move ${item.title} up`} disabled={n === 1} onPress={() => change(moveSong(itemsRef.current, n - 1, -1))} />
+                  <Tool label="↓" a11y={`Move ${item.title} down`} disabled={n === items.length} onPress={() => change(moveSong(itemsRef.current, n - 1, 1))} />
                   <Tool label="✕" a11y={`Remove ${item.title}`} onPress={() => remove(item.id)} />
                 </View>
               </View>
-              {editingSection === item.id ? (
-                <View style={styles.wrap}>
-                  {choices.map((c) => (
-                    <Chip
-                      key={c}
-                      label={c}
-                      on={item.section === c}
-                      onPress={() => {
-                        setSection(item.id, c);
-                        setEditingSection(null);
-                      }}
-                    />
-                  ))}
-                </View>
-              ) : null}
-            </View>
-          ))}
-        </View>
-      ) : (
-        <Card style={{ alignItems: 'center' }}>
-          <Body>No songs yet. Add the first one below.</Body>
-        </Card>
-      )}
+            ))}
+          </SectionBlock>
+        );
+      })}
 
-      <AddSong group={group} rehearsal={rehearsal} items={items} choices={choices} onAdd={add} />
+      {pending.map((name) => (
+        <SectionBlock
+          key={`new-${name}`}
+          name={name}
+          isNew
+          onRename={(next) => {
+            const clean = cleanSection(next);
+            if (!clean) return;
+            setPending(pending.map((x) => (x === name ? clean : x)));
+            if (adding === name) setAdding(clean);
+          }}
+          onRemove={() => setPending(pending.filter((x) => x !== name))}
+          adding={adding === name}
+          onAdding={(on) => setAdding(on ? name : null)}
+          picker={<SongPicker group={group} items={items} section={name} onAdd={(song) => add(song, name, null)} />}
+        />
+      ))}
+
+      <NewSection suggestions={suggestions} empty={!items.length && !pending.length} onAdd={newSection} />
+
+      {group.role === 'leader' ? (
+        <Pressable onPress={() => router.push('/group-settings')} accessibilityRole="link" style={{ alignSelf: 'center' }} hitSlop={8}>
+          <Text style={styles.link}>{group.type === 'personal' ? 'Change your usual sections' : 'Change the group’s usual sections'}</Text>
+        </Pressable>
+      ) : null}
     </Page>
   );
 }
 
-function Tool({ label, a11y, onPress, disabled }: { label: string; a11y: string; onPress: () => void; disabled?: boolean }) {
+/** A section: its name (rename it), its songs, moving the whole section, and adding songs to it. */
+function SectionBlock({
+  name,
+  isNew,
+  canMoveUp,
+  canMoveDown,
+  onMove,
+  onRename,
+  onRemove,
+  adding,
+  onAdding,
+  picker,
+  children,
+}: {
+  name: string;
+  isNew?: boolean;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
+  onMove?: (by: -1 | 1) => void;
+  onRename: (name: string) => void;
+  onRemove?: () => void;
+  adding: boolean;
+  onAdding: (on: boolean) => void;
+  picker: ReactNode;
+  children?: ReactNode;
+}) {
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const label = name || 'No section';
   return (
-    <Pressable onPress={onPress} disabled={disabled} accessibilityRole="button" accessibilityLabel={a11y} style={[styles.tool, disabled && { opacity: 0.3 }]} hitSlop={4}>
+    <View style={styles.block}>
+      {renaming !== null ? (
+        <View style={styles.renameRow}>
+          <TextInput
+            value={renaming}
+            onChangeText={setRenaming}
+            autoFocus
+            maxLength={60}
+            accessibilityLabel={`New name for ${label}`}
+            style={styles.input}
+            onSubmitEditing={() => {
+              if (cleanSection(renaming)) onRename(cleanSection(renaming));
+              setRenaming(null);
+            }}
+          />
+          <Button
+            small
+            label="Save"
+            accessibilityLabel={`Save the name for ${label}`}
+            disabled={!cleanSection(renaming)}
+            onPress={() => {
+              onRename(cleanSection(renaming));
+              setRenaming(null);
+            }}
+          />
+        </View>
+      ) : (
+        <View style={styles.blockHead}>
+          <Pressable onPress={() => setRenaming(name)} accessibilityRole="button" accessibilityLabel={`Rename section ${label}`} style={{ flex: 1 }} hitSlop={6}>
+            <Text style={styles.section}>
+              {label} <Text style={styles.pencil}>✎</Text>
+            </Text>
+          </Pressable>
+          {onMove ? (
+            <View style={styles.tools}>
+              <Tool label="↑" a11y={`Move section ${label} up`} disabled={!canMoveUp} onPress={() => onMove(-1)} small />
+              <Tool label="↓" a11y={`Move section ${label} down`} disabled={!canMoveDown} onPress={() => onMove(1)} small />
+            </View>
+          ) : null}
+          {onRemove ? <Tool label="✕" a11y={`Remove section ${label}`} onPress={onRemove} small /> : null}
+        </View>
+      )}
+      {children}
+      {isNew && !adding ? <Text style={styles.small}>No songs yet. Add the first one.</Text> : null}
+      {adding ? (
+        <View style={styles.picker}>
+          {picker}
+          <Button small kind="ghost" label={`Done adding to ${label}`} onPress={() => onAdding(false)} style={{ alignSelf: 'flex-start' }} />
+        </View>
+      ) : (
+        <Pressable onPress={() => onAdding(true)} accessibilityRole="button" accessibilityLabel={`Add a song to ${label}`} style={styles.addRow} hitSlop={4}>
+          <Text style={styles.addText}>+ Add a song to {label}</Text>
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
+/** Start a new section: type any name, or tap one of the usual ones. */
+function NewSection({ suggestions, empty, onAdd }: { suggestions: string[]; empty: boolean; onAdd: (name: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  if (!open && !empty) {
+    return <Button kind="ghost" label="+ Add a section" onPress={() => setOpen(true)} />;
+  }
+  return (
+    <Card>
+      <Kicker>{empty ? 'Start with a section' : 'Add a section'}</Kicker>
+      {suggestions.length ? (
+        <View style={styles.wrap}>
+          {suggestions.map((x) => (
+            <Chip
+              key={x}
+              label={x}
+              on={false}
+              onPress={() => {
+                onAdd(x);
+                setOpen(false);
+              }}
+            />
+          ))}
+        </View>
+      ) : null}
+      <View style={styles.renameRow}>
+        <TextInput
+          value={name}
+          onChangeText={setName}
+          maxLength={60}
+          placeholder="Or type a name, e.g. Igbo hymn"
+          placeholderTextColor="#B3A39A"
+          accessibilityLabel="New section name"
+          style={styles.input}
+          onSubmitEditing={() => {
+            if (!cleanSection(name)) return;
+            onAdd(name);
+            setName('');
+            setOpen(false);
+          }}
+        />
+        <Button
+          small
+          label="Add"
+          accessibilityLabel="Add section"
+          disabled={!cleanSection(name)}
+          onPress={() => {
+            onAdd(name);
+            setName('');
+            setOpen(false);
+          }}
+        />
+      </View>
+      {!empty ? <Button small kind="ghost" label="Cancel" onPress={() => setOpen(false)} style={{ alignSelf: 'flex-start' }} /> : null}
+    </Card>
+  );
+}
+
+function Tool({ label, a11y, onPress, disabled, small }: { label: string; a11y: string; onPress: () => void; disabled?: boolean; small?: boolean }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={a11y}
+      style={[styles.tool, small && styles.toolSmall, disabled && { opacity: 0.3 }]}
+      hitSlop={4}
+    >
       <Text style={styles.toolText}>{label}</Text>
     </Pressable>
   );
 }
 
-/** Pick a section, then a song: the group's repertoire first, or search the whole library. */
-function AddSong({
-  group,
-  rehearsal,
-  items,
-  choices,
-  onAdd,
-}: {
-  group: MyGroup;
-  rehearsal: boolean;
-  items: OrderItem[];
-  choices: string[];
-  onAdd: (song: Song, section: string) => Promise<void>;
-}) {
-  const [picked, setPicked] = useState<string | null>(null);
-  const section = picked ?? nextSection(group.sections, rehearsal, items);
+/** Songs to add to one section: the group's repertoire first, or search the whole library. Stays open to add several. */
+function SongPicker({ group, items, section, onAdd }: { group: MyGroup; items: OrderItem[]; section: string; onAdd: (song: Song) => Promise<void> }) {
   const [query, setQuery] = useState('');
   const q = useDeferredValue(query.trim());
   const [adding, setAdding] = useState<string | null>(null);
@@ -224,16 +378,9 @@ function AddSong({
   const label = q ? 'From the library' : repertoire.data?.length ? (group.type === 'personal' ? 'My songs' : 'Our repertoire') : 'From the library';
 
   return (
-    <Card>
-      <Kicker>Add a song</Kicker>
-      <Text style={styles.label}>Into which section?</Text>
-      <View style={styles.wrap}>
-        {choices.map((c) => (
-          <Chip key={c} label={c} on={section === c} onPress={() => setPicked(c)} />
-        ))}
-      </View>
+    <View style={{ gap: 6 }}>
       <View>
-        <Field label="Find a song" value={query} onChangeText={setQuery} placeholder="Title, composer or words" autoCapitalize="none" returnKeyType="search" />
+        <Field label={`Find a song for ${section || 'this section'}`} value={query} onChangeText={setQuery} placeholder="Title, composer or words" autoCapitalize="none" returnKeyType="search" />
         <View style={styles.searchIcon} pointerEvents="none">
           <SearchIcon color={colors.muted} />
         </View>
@@ -265,8 +412,7 @@ function AddSong({
                 busy={adding === song.id}
                 onPress={() => {
                   setAdding(song.id);
-                  onAdd(song, section)
-                    .then(() => setPicked(null))
+                  onAdd(song)
                     .catch(() => {})
                     .finally(() => setAdding(null));
                 }}
@@ -276,22 +422,43 @@ function AddSong({
         );
       })}
       {q && library.data && !library.data.length ? <Body muted>No songs match “{q}”. Share it from the Songs tab first.</Body> : null}
-    </Card>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  row: { backgroundColor: colors.white, borderRadius: 14, borderWidth: 1, borderColor: colors.line, padding: 10, gap: 8 },
-  rowTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  block: { backgroundColor: colors.white, borderRadius: 14, borderWidth: 1, borderColor: colors.line, padding: 12, gap: 8 },
+  blockHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  section: { fontFamily: fonts.heavy, fontSize: 12.5, letterSpacing: 0.6, textTransform: 'uppercase', color: colors.redDeep },
+  pencil: { fontFamily: fonts.body, fontSize: 13, color: colors.muted, textTransform: 'none' },
+  renameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  input: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: colors.line,
+    paddingHorizontal: 12,
+    fontFamily: fonts.body,
+    fontSize: 15,
+    color: colors.ink,
+    backgroundColor: colors.white,
+    outlineColor: colors.red,
+  },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4, borderTopWidth: 1, borderTopColor: colors.line },
   ord: { width: 26, height: 26, borderRadius: 8, backgroundColor: colors.sand, textAlign: 'center', lineHeight: 26, fontFamily: fonts.heavy, fontSize: 12.5, color: colors.muted, overflow: 'hidden' },
-  section: { fontFamily: fonts.heavy, fontSize: 11, letterSpacing: 0.6, textTransform: 'uppercase', color: colors.redDeep },
   title: { fontFamily: fonts.bold, fontSize: 15, color: colors.ink },
   small: { fontFamily: fonts.body, fontSize: 12.5, color: colors.muted },
   label: { fontFamily: fonts.heavy, fontSize: 13, color: colors.muted },
+  link: { fontFamily: fonts.heavy, fontSize: 14, color: colors.red },
   tools: { flexDirection: 'row', gap: 4 },
   tool: { width: 34, height: 34, borderRadius: 9, backgroundColor: colors.sand, alignItems: 'center', justifyContent: 'center' },
+  toolSmall: { width: 30, height: 30 },
   toolText: { fontFamily: fonts.heavy, fontSize: 15, color: colors.ink },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  addRow: { borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 10 },
+  addText: { fontFamily: fonts.heavy, fontSize: 14, color: colors.red },
+  picker: { borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 10, gap: 8 },
   pick: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderTopWidth: 1, borderTopColor: colors.line },
   searchIcon: { position: 'absolute', right: 14, bottom: 16 },
 });

@@ -1,6 +1,7 @@
 /**
  * The group's details (leaders): name, church, town, what the leader is
- * called, and the song order sections (rename, reorder, add, remove).
+ * called, and the song order sections (rename, reorder, add, remove). In your
+ * own space, just your usual sections for setlists.
  */
 import { useMutation } from '@tanstack/react-query';
 import { Redirect, router } from 'expo-router';
@@ -19,7 +20,7 @@ export default function GroupSettingsScreen() {
   const s = useSession();
   if (s.status === 'signedOut') return <Redirect href="/welcome" />;
   if (!s.group) return <Loading />;
-  if (s.group.role !== 'leader' || s.group.type === 'personal') {
+  if (s.group.role !== 'leader') {
     return (
       <Page>
         <TopBar back title="Group details" />
@@ -41,15 +42,21 @@ function Editor({ group }: { group: MyGroup }) {
   const [sections, setSections] = useState<string[]>(group.sections);
   const [adding, setAdding] = useState('');
 
+  const personal = group.type === 'personal';
   const save = useMutation({
     mutationFn: () =>
-      api.updateGroup(group.id, {
-        name: name.trim(),
-        church: church.trim(),
-        town: town.trim(),
-        leader_title: title.trim(),
-        sections: sections.map((x) => x.trim()).filter(Boolean),
-      }),
+      api.updateGroup(
+        group.id,
+        personal
+          ? { sections: sections.map((x) => x.trim()).filter(Boolean) }
+          : {
+              name: name.trim(),
+              church: church.trim(),
+              town: town.trim(),
+              leader_title: title.trim(),
+              sections: sections.map((x) => x.trim()).filter(Boolean),
+            },
+      ),
     onSuccess: async () => {
       await s.refresh();
       if (router.canGoBack()) router.back();
@@ -73,26 +80,30 @@ function Editor({ group }: { group: MyGroup }) {
 
   return (
     <Page>
-      <TopBar back title="Group details" subtitle={GROUP_TYPES[group.type].name} />
-      <Card>
-        <Field label="Group name" value={name} onChangeText={setName} maxLength={80} />
-        <Field label="Church or place (optional)" value={church} onChangeText={setChurch} maxLength={120} placeholder="e.g. St. Mary’s Catholic Church" />
-        <Field label="Town (optional)" value={town} onChangeText={setTown} maxLength={80} placeholder="e.g. Enugu" />
-      </Card>
+      <TopBar back title={personal ? 'Your usual sections' : 'Group details'} subtitle={personal ? 'For your setlists' : GROUP_TYPES[group.type].name} />
+      {personal ? null : (
+        <>
+          <Card>
+            <Field label="Group name" value={name} onChangeText={setName} maxLength={80} />
+            <Field label="Church or place (optional)" value={church} onChangeText={setChurch} maxLength={120} placeholder="e.g. St. Mary’s Catholic Church" />
+            <Field label="Town (optional)" value={town} onChangeText={setTown} maxLength={80} placeholder="e.g. Enugu" />
+          </Card>
 
-      <Card>
-        <Kicker>What members call the leader</Kicker>
-        <View style={styles.wrap}>
-          {TITLES.map((t) => (
-            <Chip key={t} label={t} on={title === t} onPress={() => setTitle(t)} />
-          ))}
-        </View>
-        <Field label="Leader’s title" value={title} onChangeText={setTitle} maxLength={40} />
-      </Card>
+          <Card>
+            <Kicker>What members call the leader</Kicker>
+            <View style={styles.wrap}>
+              {TITLES.map((t) => (
+                <Chip key={t} label={t} on={title === t} onPress={() => setTitle(t)} />
+              ))}
+            </View>
+            <Field label="Leader’s title" value={title} onChangeText={setTitle} maxLength={40} />
+          </Card>
+        </>
+      )}
 
       <Card>
         <Kicker>Song order sections</Kicker>
-        <Text style={styles.small}>In the order they usually come. Renaming one doesn’t change song orders already planned.</Text>
+        <Text style={styles.small}>In the order they usually come; each song order starts from these, and you can add others in the order itself. Renaming one doesn’t change song orders already planned.</Text>
         {sections.map((x, i) => (
           <View key={i} style={styles.section}>
             <TextInput
@@ -123,7 +134,7 @@ function Editor({ group }: { group: MyGroup }) {
       </Card>
 
       {save.error ? <ErrorText message={save.error.message} /> : null}
-      <Button label="Save" onPress={() => save.mutate()} disabled={!name.trim() || !title.trim()} busy={save.isPending} />
+      <Button label="Save" onPress={() => save.mutate()} disabled={!personal && (!name.trim() || !title.trim())} busy={save.isPending} />
     </Page>
   );
 }
