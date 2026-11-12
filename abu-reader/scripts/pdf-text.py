@@ -10,6 +10,9 @@ For each sheet in data/<set>/survey.json of kind "text", writes:
                              as S, A, T, B rows with words under them
   data/<set>/kinds.json      per sheet: "solfa" (a sol-fa sheet) or "staff"
                              (a staff score with sol-fa printed with it)
+  data/<set>/lines/<id>.json each line of music as printed (before upbeats
+                             are moved), with its page and box in PDF points,
+                             for cutting out pictures of single lines
 
 What it knows (from the owner's sheets):
   - Table borders are bar lines. A typed "|" inside a bar is the medium
@@ -184,7 +187,7 @@ def to_abu(text, drawn_bars):
     t = re.sub(r'\b([dfrlstm])\s+([ae])\b', r'\1\2', t)  # "t a" spaced out is ta
     t = re.sub(r"\b([a-z]{1,2})11(?![\d'])", r'\g<1>2', t)  # two low marks: two octaves down
     t = re.sub(r'\s*\|\s*', ' | ', t).strip()
-    t = re.sub(r'^\|\s*', '', t)
+    t = re.sub(r'^(\|\s*)+', '', t)  # double borders at the start
     t = re.sub(r'(\|\s*)+$', '', t).strip()
     return t + ' |' if t else t
 
@@ -230,7 +233,8 @@ def split_tall(system, across):
         starts = [idx[k] for k in range(0, len(idx), size)]
         bounds = starts + [len(system['rows'])]
         pieces = [list(range(a, b)) for a, b in zip(bounds, bounds[1:])]
-    return [{'rows': [system['rows'][i] for i in p], 'ys': [ys[i] for i in p], 'main': system['main']} for p in pieces if p]
+    keep = {k: system[k] for k in ('main', 'page', 'x0', 'x1')}
+    return [{'rows': [system['rows'][i] for i in p], 'ys': [ys[i] for i in p], **keep} for p in pieces if p]
 
 
 def read_pdf(path):
@@ -251,8 +255,11 @@ def read_pdf(path):
             if solfa:
                 drawn = any(crosses(s, y, main) for s in segs)
                 if cur is None or gap > 2.6 * main:
-                    cur = {'rows': [], 'ys': [], 'main': main}
+                    cur = {'rows': [], 'ys': [], 'main': main, 'page': page.number, 'x0': 1e9, 'x1': 0}
                     page_systems.append(cur)
+                ink = [c for c in r if c.c != ' ']
+                cur['x0'] = min(cur['x0'], ink[0].x0)
+                cur['x1'] = max(cur['x1'], ink[-1].x1)
                 cur['rows'].append(('n', to_abu(row_text(r, y, main, segs) if drawn else plain, drawn)))
                 cur['ys'].append(y)
                 last_y = y
@@ -266,7 +273,15 @@ def read_pdf(path):
                 if gap > 2.6 * main:
                     cur = None
         systems += [piece for s in page_systems for piece in split_tall(s, across)]
-    return header, merge_upbeats(systems), music
+    printed = [
+        {
+            'page': s['page'],
+            'box': [round(s['x0'] - 14, 1), round(min(s['ys']) - 1.2 * s['main'], 1), round(s['x1'] + 14, 1), round(max(s['ys']) + 0.7 * s['main'], 1)],
+            'rows': [list(r) for r in s['rows']],
+        }
+        for s in systems
+    ]
+    return header, merge_upbeats(systems), music, printed
 
 
 def bars_of(row):
@@ -359,7 +374,10 @@ def main():
     for s in survey:
         if s['kind'] != 'text' or (only and s['id'] not in only):
             continue
-        header, systems, music = read_pdf(root / 'pdf' / f"{s['id']}.pdf")
+        header, systems, music, printed = read_pdf(root / 'pdf' / f"{s['id']}.pdf")
+        key, time = header_info(header)
+        (root / 'lines').mkdir(exist_ok=True)
+        (root / 'lines' / f"{s['id']}.json").write_text(json.dumps({'key': key, 'time': time, 'lines': printed}, indent=1, ensure_ascii=False))
         kinds[s['id']] = 'staff' if music > 50 else 'solfa'
         (root / 'grid' / f"{s['id']}.txt").write_text(
             '\n'.join(header) + '\n\n' + '\n\n'.join('\n'.join(f'{k} {t}' for k, t in sy['rows']) for sy in systems)
