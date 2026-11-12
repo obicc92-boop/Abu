@@ -1,7 +1,9 @@
 /**
  * Scan a sheet (docs/scan-plan.md). Pick a PDF or photos of a sol-fa sheet;
- * Abụ finds the lines of music on each page and reads every line (Claude,
- * through the Worker). Then the person checks each line against its picture,
+ * Abụ finds the lines of music on each page (Haiku, through the Worker),
+ * reads every line with its own small model in the browser, and has Haiku
+ * check each reading against the picture; a line that still doesn't add up
+ * is read again by the strong reader (Opus). Then the person checks each line against its picture,
  * fixes what was misread, plays it, and carries on to the song editor to
  * save it with the original sheet attached. Nothing is saved before that.
  */
@@ -11,13 +13,14 @@ import { Redirect, router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { api, ApiError, type PickedFile } from '@/api/client';
+import { api, ApiError, type PickedFile, type ScanLineReading } from '@/api/client';
 import { useSongPlayer } from '@/audio/use-song-player';
 import { PlayButton } from '@/components/player-controls';
 import { SolfaCheck } from '@/components/solfa-check';
 import { Body, Button, Card, Chip, ErrorText, Kicker, Page, TopBar } from '@/components/ui';
 import { setScanDraft } from '@/scan/draft';
 import { joinLines, timeFor } from '@/scan/join';
+import { readLineOwn } from '@/scan/own-reader';
 import { cutLine, loadPages, MAX_PAGES, pageForFinding, scanningHere } from '@/scan/pages';
 import { parseKey, parseSolfa } from '@/solfa';
 import { useSession } from '@/state/session';
@@ -34,10 +37,17 @@ interface Line {
   id: string;
   page: number;
   parts: string[];
+  /** Rows of words in the line, for finding its rows. */
+  words: number;
   blob: Blob;
   url: string;
+  canvas: unknown;
   width: number;
   height: number;
+  /** Abụ's own model's reading, before Haiku checks it. */
+  draft: string;
+  /** Who read it: Abụ's own reader checked by Haiku, or the strong reader. */
+  via?: 'own' | 'strong';
   status: 'waiting' | 'reading' | 'read' | 'failed';
   text: string;
   doubts: { part: string; bar: number }[];
@@ -99,12 +109,33 @@ function Scanner() {
   };
 
   /** Reads a line; the text, or null when it failed. Throws only when today's allowance is used up. */
-  const readOne = async (line: Line, head: Heading): Promise<string | null> => {
+  /**
+   * Reads a line: Haiku checks Abụ's own model's reading, and if that still doesn't add up (or there's no
+   * reading, or `strong` is asked for) the strong reader reads it from scratch. Throws only when today's
+   * allowance is used up.
+   */
+  const readOne = async (line: Line, head: Heading, time: string, strong = false): Promise<string | null> => {
     update(line.id, { status: 'reading', error: undefined });
     try {
       const semitone = parseKey(head.key)?.semitone;
-      const r = await api.scanLine(line.blob, { parts: line.parts, time: head.time || undefined, key: semitone === undefined ? undefined : KEY_PARAM[semitone] });
-      update(line.id, { status: 'read', text: r.text, doubts: r.doubts, checked: false });
+      const opts = { parts: line.parts, time: time || undefined, key: semitone === undefined ? undefined : KEY_PARAM[semitone] };
+      let r: ScanLineReading | null = null;
+      let via: Line['via'] = 'strong';
+      if (!strong && line.draft) {
+        try {
+          r = await api.scanCheck(line.blob, { ...opts, draft: line.draft });
+          via = 'own';
+          if (parseSolfa(r.text, { time }).errors.length) r = null;
+        } catch (e) {
+          if (e instanceof ApiError && e.status === 429) throw e;
+          r = null; // the check failed: the strong reader reads it instead
+        }
+      }
+      if (!r) {
+        r = await api.scanLine(line.blob, opts);
+        via = 'strong';
+      }
+      update(line.id, { status: 'read', text: r.text, doubts: r.doubts, checked: false, via });
       return r.text;
     } catch (e) {
       update(line.id, { status: 'failed', error: (e as Error).message });
@@ -133,7 +164,7 @@ function Scanner() {
         for (const l of page.lines) {
           const box = { top: l.top * small.scale, bottom: l.bottom * small.scale, left: l.left * small.scale, right: l.right * small.scale };
           const cut = await cutLine(pages[p], box);
-          found.push({ id: `${p}-${found.length}`, page: p + 1, parts: l.parts, ...cut, status: 'waiting', text: '', doubts: [], checked: false, skipped: false });
+          found.push({ id: `${p}-${found.length}`, page: p + 1, parts: l.parts, words: l.words, ...cut, draft: '', status: 'waiting', text: '', doubts: [], checked: false, skipped: false });
         }
         setLines([...found]);
       }
@@ -142,7 +173,18 @@ function Scanner() {
         return setError('No lines of sol-fa were found on this sheet. Try a clearer, straighter photo of the whole page.');
       }
       setHeading(head);
-      setProgress(`Reading ${found.length} line${found.length === 1 ? '' : 's'} of music…`);
+      // Abụ's own reader first, on the phone (free); if it can't load, the strong reader reads every line.
+      for (let i = 0; i < found.length; i++) {
+        setProgress(`Reading line ${i + 1} of ${found.length}…`);
+        try {
+          found[i].draft = (await readLineOwn(found[i].canvas, found[i].parts, found[i].words)).text;
+        } catch {
+          found[i].draft = '';
+        }
+      }
+      // The time, as printed or from the bars Abụ's reader found.
+      const songTime = timeFor(head.time, found.map((l) => l.draft).filter(Boolean));
+      setProgress(`Checking ${found.length} line${found.length === 1 ? '' : 's'} of music…`);
       let next = 0;
       let stopped = false;
       const texts: string[] = [];
@@ -150,7 +192,7 @@ function Scanner() {
         while (!stopped && next < found.length) {
           const line = found[next++];
           try {
-            const text = await readOne(line, head);
+            const text = await readOne(line, head, songTime);
             if (text) texts.push(text);
           } catch (e) {
             // Out of today's allowance: no use trying the other lines.
@@ -160,7 +202,7 @@ function Scanner() {
         }
       };
       await Promise.all(Array.from({ length: READING_AT_ONCE }, worker));
-      setTime(timeFor(head.time, texts));
+      setTime(timeFor(head.time, texts.length ? texts : found.map((l) => l.draft)));
       setCurrent(0);
       setPhase('review');
     } catch (e) {
@@ -236,7 +278,7 @@ function Scanner() {
       setTime={setTime}
       doh={doh}
       update={update}
-      readAgain={(l) => readOne(l, heading).catch(() => null)}
+      readAgain={(l) => readOne(l, heading, time, true).catch(() => null)}
       note={note}
       onFinish={finish}
     />
@@ -324,6 +366,7 @@ function Review({ lines, current, setCurrent, heading, time, setTime, doh, updat
           {!empty && !parsed.errors.length ? <PlayButton playing={player.playing} onPress={player.togglePlay} size={42} /> : null}
         </View>
         {line.status === 'failed' ? <ErrorText message={line.error ?? 'This line couldn’t be read.'} /> : null}
+        {line.via ? <Text style={styles.small}>{line.via === 'own' ? 'Read by Abụ’s own reader, checked by Haiku.' : 'Read by the strong reader.'}</Text> : null}
         {line.doubts.length ? (
           <Body muted>
             Check these first: {line.doubts.map((d) => `${d.part === 'Solo' ? 'solo' : d.part} bar ${d.bar}`).join(', ')}.
@@ -349,7 +392,7 @@ function Review({ lines, current, setCurrent, heading, time, setTime, doh, updat
           <Button
             small
             kind="ghost"
-            label={line.status === 'reading' ? 'Reading…' : 'Read it again'}
+            label={line.status === 'reading' ? 'Reading…' : 'Read it again (strong reader)'}
             busy={line.status === 'reading'}
             onPress={() => readAgain(line)}
           />

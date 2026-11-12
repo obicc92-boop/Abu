@@ -29,7 +29,7 @@ const { count, size, warnings } = await generateSW({
   globDirectory: 'dist',
   globPatterns: ['**/*.{html,js,css,json,png,ico,svg,ttf,otf,woff,woff2}'],
   // pdf.js is only for scanning PDFs, which needs a connection anyway: not worth the space on every phone.
-  globIgnores: ['metadata.json', 'sw.js', 'workbox-*.js', 'pdfjs/**'],
+  globIgnores: ['metadata.json', 'sw.js', 'workbox-*.js', 'pdfjs/**', 'ort/**', 'reader/**'],
   swDest: 'dist/sw.js',
   mode: 'production',
   sourcemap: false,

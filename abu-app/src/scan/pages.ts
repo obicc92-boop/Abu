@@ -11,4 +11,4 @@ const notYet = () => Promise.reject(new Error('Scanning works in the web app for
 
 export const loadPages = (_files: { file: Blob; type: string }[]): Promise<{ pages: ScanPage[]; more: boolean }> => notYet();
 export const pageForFinding = (_page: ScanPage): Promise<{ blob: Blob; width: number; height: number; scale: number }> => notYet();
-export const cutLine = (_page: ScanPage, _box: Box): Promise<{ blob: Blob; url: string; width: number; height: number }> => notYet();
+export const cutLine = (_page: ScanPage, _box: Box): Promise<{ blob: Blob; url: string; width: number; height: number; canvas: unknown }> => notYet();

@@ -102,7 +102,7 @@ export async function pageForFinding(page: ScanPage): Promise<{ blob: Blob; widt
 }
 
 /** One line cut out of its page (with a little room around it), to read and to show beside the reading. */
-export async function cutLine(page: ScanPage, box: Box): Promise<{ blob: Blob; url: string; width: number; height: number }> {
+export async function cutLine(page: ScanPage, box: Box): Promise<{ blob: Blob; url: string; width: number; height: number; canvas: HTMLCanvasElement }> {
   const padY = Math.round((box.bottom - box.top) * 0.04) + 4;
   const padX = 6;
   const left = Math.max(0, box.left - padX);
@@ -113,7 +113,7 @@ export async function cutLine(page: ScanPage, box: Box): Promise<{ blob: Blob; u
   const [c, ctx] = canvas((right - left) * s, (bottom - top) * s);
   ctx.drawImage(page.canvas as HTMLCanvasElement, left, top, right - left, bottom - top, 0, 0, c.width, c.height);
   const blob = await jpeg(c, 0.9);
-  return { blob, url: URL.createObjectURL(blob), width: c.width, height: c.height };
+  return { blob, url: URL.createObjectURL(blob), width: c.width, height: c.height, canvas: c };
 }
 
 export const scanningHere = true;

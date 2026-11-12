@@ -119,7 +119,7 @@ export interface ScanPageReading {
   composer: string;
   key: string;
   time: string;
-  lines: { top: number; bottom: number; left: number; right: number; parts: string[] }[];
+  lines: { top: number; bottom: number; left: number; right: number; parts: string[]; words: number }[];
 }
 
 /** One scanned line read into sol-fa, with the bars the reader wasn't sure of. */
@@ -342,6 +342,13 @@ export const api = {
     if (o.time) q.set('time', o.time);
     if (o.key) q.set('key', o.key);
     return request<ScanLineReading>(`/scan/line?${q}`, { method: 'POST', body: image, headers: { 'Content-Type': 'image/jpeg' } });
+  },
+  /** Haiku checks the reading Abụ's own model made of a line (a JPEG), fixing what it got wrong. */
+  scanCheck: (image: Blob, o: { parts: string[]; time?: string; key?: string; draft: string }) => {
+    const q = new URLSearchParams({ parts: o.parts.join(','), draft: o.draft });
+    if (o.time) q.set('time', o.time);
+    if (o.key) q.set('key', o.key);
+    return request<ScanLineReading>(`/scan/check?${q}`, { method: 'POST', body: image, headers: { 'Content-Type': 'image/jpeg' } });
   },
   scanAllowance: () => request<{ pages: number; lines: number }>('/scan/allowance'),
   /** One play-through, on today's date on this phone (for the week and streak on Me). */
