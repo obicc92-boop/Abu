@@ -26,6 +26,7 @@ The product owner has a pilot choir ready to test. The real app is started: `abu
 | Joining | A code or invite link joins **instantly by default**; the leader can switch on approval for new members. |
 | Practice privacy | Leaders see **totals per part** (practice, and how many marked "I know my part"). A member's own practice history is visible only to them. |
 | Roles | **Leader, part leader and member** only, for now. |
+| Leader's own part | When starting a group, **"Your own part" starts on Soprano**, with "I don't sing" one tap away. Many choirmasters don't sing, but they usually teach a part (owner's call, 12 November 2026). |
 | Song orders | **Leaders edit song orders. Part leaders can too when the leader allows it**: the group setting "Part leaders can edit song orders", off by default (owner's call, 11 November 2026). Planning, changing and deleting services stays with leaders. |
 | Icon and motif | **Drafts** in `design/brand-draft.html`, to refine later. The icon in the app is an open music book (notation on the left page, notes on the right, a gold ribbon); the owner rejected bar shapes because they look like phone signal bars. Motif: adire and uli line pattern, used only on the welcome screen, the next-service card and empty screens. |
 
