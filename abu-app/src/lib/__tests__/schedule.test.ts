@@ -3,7 +3,7 @@ import { describe, expect, it } from '@jest/globals';
 import type { OrderItem } from '@/api/client';
 
 import { agoText, checkInOpen, countdownText, dayKey, hasStarted, isOver, monthName, postedText, relDay, sinceText, weekBucket } from '../dates';
-import { bySection, nextSection, sectionChoices } from '../order';
+import { bySection, cleanSection, insertAfter, moveSection, moveSong, nextSection, renameSection, sectionChoices } from '../order';
 
 // Wednesday 11 November 2026, 10:00 local time.
 const NOW = new Date(2026, 10, 11, 10, 0);
@@ -113,5 +113,39 @@ describe('song order', () => {
     expect(nextSection(sections, false, [item('a', 'Gloria')])).toBe('Gloria');
     expect(nextSection(sections, false, [item('a', 'Special')])).toBe('Special');
     expect(nextSection(sections, true, [item('a', 'Entrance')])).toBe('To prepare');
+  });
+});
+
+describe('editing an order by section', () => {
+  const order = () => [item('a', 'Entrance'), item('b', 'Entrance'), item('c', 'Kyrie'), item('d', 'Gloria'), item('e', 'Gloria')];
+  const show = (items: ReturnType<typeof order>) => items.map((i) => `${i.id}:${i.section}`).join(' ');
+
+  it('moves a song within its section, and across the edge into the next section', () => {
+    expect(show(moveSong(order(), 1, -1))).toBe('b:Entrance a:Entrance c:Kyrie d:Gloria e:Gloria');
+    expect(show(moveSong(order(), 1, 1))).toBe('a:Entrance b:Kyrie c:Kyrie d:Gloria e:Gloria');
+    expect(show(moveSong(order(), 3, -1))).toBe('a:Entrance b:Entrance c:Kyrie d:Kyrie e:Gloria');
+    expect(show(moveSong(order(), 0, -1))).toBe(show(order()));
+  });
+
+  it('moves a song that is alone in its section together with its section', () => {
+    expect(show(moveSong(order(), 2, -1))).toBe('c:Kyrie a:Entrance b:Entrance d:Gloria e:Gloria');
+    expect(show(moveSong(order(), 2, 1))).toBe('a:Entrance b:Entrance d:Gloria e:Gloria c:Kyrie');
+  });
+
+  it('moves whole sections and renames one', () => {
+    expect(show(moveSection(order(), 2, -1))).toBe('a:Entrance b:Entrance d:Gloria e:Gloria c:Kyrie');
+    expect(show(moveSection(order(), 0, -1))).toBe(show(order()));
+    expect(show(renameSection(order(), 0, 'Processional'))).toBe('a:Processional b:Processional c:Kyrie d:Gloria e:Gloria');
+  });
+
+  it('puts a new song at the end of its own section, or at the end', () => {
+    expect(show(insertAfter(order(), 'b', item('f', 'Entrance')))).toBe('a:Entrance b:Entrance f:Entrance c:Kyrie d:Gloria e:Gloria');
+    expect(show(insertAfter([...order(), item('f', 'Entrance')], 'b', item('f', 'Entrance')))).toBe('a:Entrance b:Entrance f:Entrance c:Kyrie d:Gloria e:Gloria');
+    expect(show(insertAfter(order(), null, item('f', 'Offertory')))).toBe('a:Entrance b:Entrance c:Kyrie d:Gloria e:Gloria f:Offertory');
+  });
+
+  it('tidies typed section names', () => {
+    expect(cleanSection('  Igbo   hymn ')).toBe('Igbo hymn');
+    expect(cleanSection('x'.repeat(70))).toHaveLength(60);
   });
 });
