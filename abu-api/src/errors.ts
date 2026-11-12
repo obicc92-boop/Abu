@@ -1,8 +1,8 @@
 /** An error with an HTTP status and a message that's safe to show the person. */
 export class AppError extends Error {
-  readonly status: 400 | 401 | 403 | 404 | 409;
+  readonly status: 400 | 401 | 403 | 404 | 409 | 422 | 429 | 503;
 
-  constructor(status: 400 | 401 | 403 | 404 | 409, message: string) {
+  constructor(status: 400 | 401 | 403 | 404 | 409 | 422 | 429 | 503, message: string) {
     super(message);
     this.name = 'AppError';
     this.status = status;

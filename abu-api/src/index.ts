@@ -72,6 +72,8 @@ import {
   type SongInput,
 } from './domain/songs';
 import { newId } from './domain/access';
+import { scanAllowance, useScan } from './domain/scan';
+import { checkImage, partOf, readLine, readPage, scanningReady } from './scan';
 import { AppError, badRequest, notFound } from './errors';
 
 type App = { Bindings: Env; Variables: { userId: string } };
@@ -195,6 +197,45 @@ app.delete('/songs/:id/sheet', signedIn, async (c) => {
   const old = await setSheet(c.env.DB, songId, null, null);
   if (old) await c.env.SHEETS.delete(old);
   return c.json(await getSong(c.env.DB, songId));
+});
+
+/* ---------- Scanning sheets (src/scan.ts) ---------- */
+
+const contentType = (c: { req: { header: (name: string) => string | undefined } }) => (c.req.header('content-type') ?? '').split(';')[0].trim().toLowerCase();
+
+app.get('/scan/allowance', signedIn, async (c) => c.json(await scanAllowance(c.env.DB, c.get('userId'))));
+
+/** Finds the lines of music on a page. The body is the picture; ?w= and ?h= give its size in pixels. */
+app.post('/scan/page', signedIn, async (c) => {
+  scanningReady(c.env);
+  const width = Number(c.req.query('w'));
+  const height = Number(c.req.query('h'));
+  if (!(width >= 50 && height >= 50 && width <= 5000 && height <= 5000)) throw badRequest('Say how big the picture is (w and h, in pixels).');
+  checkImage(contentType(c), Number(c.req.header('content-length') ?? 1) || 1);
+  const image = await c.req.arrayBuffer();
+  const type = checkImage(contentType(c), image.byteLength);
+  await useScan(c.env.DB, c.get('userId'), 'page');
+  return c.json(await readPage(c.env, image, type, Math.round(width), Math.round(height)));
+});
+
+/** Reads one line of music. The body is the picture; ?parts=S,A,T,B, and ?time= and ?key= when known. */
+app.post('/scan/line', signedIn, async (c) => {
+  scanningReady(c.env);
+  const parts = (c.req.query('parts') ?? 'S')
+    .split(',')
+    .map((p) => partOf(p))
+    .filter((p): p is string => !!p)
+    .slice(0, 6);
+  if (!parts.length) throw badRequest('Say which parts the line has (S, A, T, B or Solo).');
+  const time = c.req.query('time');
+  if (time && !/^\d{1,2}\/\d{1,2}$/.test(time)) throw badRequest('The time should look like 4/4.');
+  const key = c.req.query('key');
+  if (key && !/^[A-G][b#♭♯]?$/.test(key)) throw badRequest('The key should be a note name, like Ab.');
+  checkImage(contentType(c), Number(c.req.header('content-length') ?? 1) || 1);
+  const image = await c.req.arrayBuffer();
+  const type = checkImage(contentType(c), image.byteLength);
+  await useScan(c.env.DB, c.get('userId'), 'line');
+  return c.json(await readLine(c.env, image, type, { parts, time: time || undefined, key: key || undefined }));
 });
 
 /** Count a play-through (the player calls this at the end of a song). */
