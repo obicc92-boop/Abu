@@ -11,7 +11,10 @@ import Anthropic from '@anthropic-ai/sdk';
 
 import { AppError, badRequest } from './errors';
 
-const MODEL = 'claude-opus-5-5';
+/** The strong reader: reads a line from scratch, for lines the cheaper path can't get right. */
+const STRONG = 'claude-opus-5-5';
+/** The cheap one: finds the lines on a page, and checks the reading Abụ's own model made of a line. */
+const CHEAP = 'claude-haiku-5-5';
 export const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
 export type ImageType = (typeof IMAGE_TYPES)[number];
 /** Claude takes pictures up to 5 MB; the app sends far smaller ones. */
@@ -62,6 +65,8 @@ export interface FoundLine {
   right: number;
   /** The rows of notes, top to bottom: S, A, T, B or Solo. */
   parts: string[];
+  /** How many rows of words it has, for finding its rows. */
+  words: number;
 }
 
 export interface PageReading {
@@ -123,6 +128,10 @@ const LINE_SCHEMA = {
   additionalProperties: false,
 };
 
+const CHECK_SYSTEM = `${LINE_SYSTEM}
+
+A small model has already read this line; its reading comes with the picture. It is usually close, but check it bar by bar against the picture and correct every mistake: wrong or missing notes, octave marks, holds, rests, beat marks and bar lines. Keep what it got right exactly as it is. List the bars you corrected or still can't read with confidence as doubts.`;
+
 export interface LineReading {
   /** The line in Abụ's format: one row per part, the words under the first. */
   text: string;
@@ -137,7 +146,7 @@ const PART_NAMES: Record<string, string> = { s: 'S', soprano: 'S', a: 'A', alto:
 export const partOf = (name: string): string | null => PART_NAMES[name.trim().toLowerCase()] ?? null;
 
 /** Keeps boxes inside the picture, drops empty ones and puts them in reading order. */
-export function cleanPage(raw: { title?: string; composer?: string; key?: string; time?: string; lines?: Partial<FoundLine>[] }, width: number, height: number): PageReading {
+export function cleanPage(raw: { title?: string; composer?: string; key?: string; time?: string; lines?: (Partial<FoundLine> & { words_rows?: number })[] }, width: number, height: number): PageReading {
   const clamp = (v: unknown, max: number) => Math.max(0, Math.min(max, Math.round(Number(v) || 0)));
   const lines = (raw.lines ?? [])
     .map((l) => {
@@ -146,7 +155,8 @@ export function cleanPage(raw: { title?: string; composer?: string; key?: string
       const left = clamp(l.left, width);
       const right = clamp(l.right, width);
       const parts = (l.parts ?? []).map((p) => partOf(String(p))).filter((p): p is string => !!p);
-      return { top: Math.min(top, bottom), bottom: Math.max(top, bottom), left: Math.min(left, right), right: Math.max(left, right), parts: parts.length ? parts : ['S'] };
+      const words = Math.max(0, Math.min(6, Math.round(Number(l.words_rows) || 0)));
+      return { top: Math.min(top, bottom), bottom: Math.max(top, bottom), left: Math.min(left, right), right: Math.max(left, right), parts: parts.length ? parts : ['S'], words };
     })
     .filter((l) => l.bottom - l.top >= 8 && l.right - l.left >= 24)
     .sort((a, b) => a.top - b.top);
@@ -178,14 +188,15 @@ function base64(buf: ArrayBuffer): string {
   return btoa(s);
 }
 
-async function ask(env: Env, system: string, schema: Record<string, unknown>, image: ArrayBuffer, type: ImageType, prompt: string): Promise<unknown> {
+async function ask(env: Env, model: string, system: string, schema: Record<string, unknown>, image: ArrayBuffer, type: ImageType, prompt: string): Promise<unknown> {
   if (!env.ANTHROPIC_API_KEY) throw new AppError(503, 'Scanning isn’t switched on yet.');
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, baseURL: env.ANTHROPIC_BASE_URL || undefined, maxRetries: 2 });
   let message;
   try {
     message = await client.messages.create({
-      model: MODEL,
-      max_tokens: 8000,
+      model,
+      // Room for its thinking as well as the answer: a reply cut short isn't valid JSON.
+      max_tokens: 16000,
       system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
       output_config: { effort: 'medium', format: { type: 'json_schema', schema } },
       messages: [
@@ -225,7 +236,8 @@ export function checkImage(type: string, bytes: number): ImageType {
 
 /** Where the lines of music are on a page, and its heading. */
 export async function readPage(env: Env, image: ArrayBuffer, type: ImageType, width: number, height: number): Promise<PageReading> {
-  const raw = await ask(env, PAGE_SYSTEM, PAGE_SCHEMA, image, type, `The image is ${width} by ${height} pixels.`);
+  // Haiku finds the lines as well as Opus did on the owner's sheets (abu-reader/README.md), for a twentieth of the cost.
+  const raw = await ask(env, CHEAP, PAGE_SYSTEM, PAGE_SCHEMA, image, type, `The image is ${width} by ${height} pixels.`);
   return cleanPage(raw as Parameters<typeof cleanPage>[0], width, height);
 }
 
@@ -239,9 +251,28 @@ export async function readLine(env: Env, image: ArrayBuffer, type: ImageType, op
   ]
     .filter(Boolean)
     .join(' ');
-  const raw = (await ask(env, LINE_SYSTEM, LINE_SCHEMA, image, type, prompt)) as { rows?: { part?: string; notes?: string }[]; words?: string; doubts?: { part?: string; bar?: number }[] };
+  const raw = (await ask(env, STRONG, LINE_SYSTEM, LINE_SCHEMA, image, type, prompt)) as { rows?: { part?: string; notes?: string }[]; words?: string; doubts?: { part?: string; bar?: number }[] };
+  return shapeReading(raw, opts.parts);
+}
+
+/** Checks the reading Abụ's own model made of a line against its picture (Haiku), fixing what it got wrong. */
+export async function checkLine(env: Env, image: ArrayBuffer, type: ImageType, opts: { parts: string[]; time?: string; key?: string; draft: string }): Promise<LineReading> {
+  const beats = opts.time?.split('/')[0];
+  const prompt = [
+    `Parts, top to bottom: ${opts.parts.join(', ')}.`,
+    opts.time ? `Time ${opts.time}: ${beats} beats in a full bar.` : '',
+    opts.key ? `Doh is ${opts.key}.` : '',
+    `A small model read the line as:\n${opts.draft}`,
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const raw = (await ask(env, CHEAP, CHECK_SYSTEM, LINE_SCHEMA, image, type, prompt)) as { rows?: { part?: string; notes?: string }[]; words?: string; doubts?: { part?: string; bar?: number }[] };
+  return shapeReading(raw, opts.parts);
+}
+
+function shapeReading(raw: { rows?: { part?: string; notes?: string }[]; words?: string; doubts?: { part?: string; bar?: number }[] }, parts: string[]): LineReading {
   return {
-    text: lineText(raw, opts.parts),
+    text: lineText(raw, parts),
     doubts: (raw.doubts ?? [])
       .map((d) => ({ part: partOf(d.part ?? '') ?? '', bar: Math.round(Number(d.bar) || 0) }))
       .filter((d) => d.part && d.bar > 0),

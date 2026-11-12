@@ -73,7 +73,7 @@ import {
 } from './domain/songs';
 import { newId } from './domain/access';
 import { scanAllowance, useScan } from './domain/scan';
-import { checkImage, partOf, readLine, readPage, scanningReady } from './scan';
+import { checkImage, checkLine, partOf, readLine, readPage, scanningReady } from './scan';
 import { AppError, badRequest, notFound } from './errors';
 
 type App = { Bindings: Env; Variables: { userId: string } };
@@ -236,6 +236,28 @@ app.post('/scan/line', signedIn, async (c) => {
   const type = checkImage(contentType(c), image.byteLength);
   await useScan(c.env.DB, c.get('userId'), 'line');
   return c.json(await readLine(c.env, image, type, { parts, time: time || undefined, key: key || undefined }));
+});
+
+/** Checks a line Abụ's own model read (?draft=, the reading as text), with the line's picture as the body. */
+app.post('/scan/check', signedIn, async (c) => {
+  scanningReady(c.env);
+  const parts = (c.req.query('parts') ?? 'S')
+    .split(',')
+    .map((p) => partOf(p))
+    .filter((p): p is string => !!p)
+    .slice(0, 6);
+  if (!parts.length) throw badRequest('Say which parts the line has (S, A, T, B or Solo).');
+  const draft = (c.req.query('draft') ?? '').slice(0, 4000);
+  if (!draft.trim()) throw badRequest('Send the reading to check.');
+  const time = c.req.query('time');
+  if (time && !/^\d{1,2}\/\d{1,2}$/.test(time)) throw badRequest('The time should look like 4/4.');
+  const key = c.req.query('key');
+  if (key && !/^[A-G][b#♭♯]?$/.test(key)) throw badRequest('The key should be a note name, like Ab.');
+  checkImage(contentType(c), Number(c.req.header('content-length') ?? 1) || 1);
+  const image = await c.req.arrayBuffer();
+  const type = checkImage(contentType(c), image.byteLength);
+  await useScan(c.env.DB, c.get('userId'), 'line');
+  return c.json(await checkLine(c.env, image, type, { parts, time: time || undefined, key: key || undefined, draft }));
 });
 
 /** Count a play-through (the player calls this at the end of a song). */

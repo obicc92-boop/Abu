@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ensureUser } from '../src/domain/groups';
 import { scanAllowance, useScan } from '../src/domain/scan';
-import { cleanPage, lineText, readLine, readPage } from '../src/scan';
+import { checkLine, cleanPage, lineText, readLine, readPage } from '../src/scan';
 import { call, signUp } from './helpers';
 
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
@@ -93,12 +93,13 @@ describe('reading with Claude', () => {
       key: 'F',
       time: '2/4',
       lines: [
-        { top: 100, bottom: 400, left: 0, right: 800, parts: ['S', 'A', 'T', 'B'] },
-        { top: 600, bottom: 900, left: 10, right: 790, parts: ['S', 'A', 'T', 'B'] },
+        { top: 100, bottom: 400, left: 0, right: 800, parts: ['S', 'A', 'T', 'B'], words: 1 },
+        { top: 600, bottom: 900, left: 10, right: 790, parts: ['S', 'A', 'T', 'B'], words: 1 },
       ],
     });
     const request = JSON.parse(String(fetch.mock.calls[0][1]?.body));
-    expect(request.model).toBe('claude-opus-5-5');
+    // Haiku finds the lines; Opus is kept for reading lines from scratch.
+    expect(request.model).toBe('claude-haiku-5-5');
     expect(request.output_config.format.type).toBe('json_schema');
     expect(request.messages[0].content[0].source).toMatchObject({ type: 'base64', media_type: 'image/jpeg' });
   });
@@ -117,6 +118,21 @@ describe('reading with Claude', () => {
       text: 'S  s1 | d :-.r /m :d | f :m /r :- |\nW  O come let us a-dore him\nA  s1 | d :t1 /d :d | d :d /t1 :- |',
       doubts: [{ part: 'A', bar: 2 }],
     });
+  });
+
+  it('reads a line from scratch with the strong reader', async () => {
+    const fetch = claudeReplies({ rows: [{ part: 'S', notes: 'd :r' }], words: '', doubts: [] });
+    await readLine(withKey, JPEG.buffer, 'image/jpeg', { parts: ['S'] });
+    expect(JSON.parse(String(fetch.mock.calls[0][1]?.body)).model).toBe('claude-opus-5-5');
+  });
+
+  it('has Haiku check the reading Abụ’s own model made, with the picture', async () => {
+    const fetch = claudeReplies({ rows: [{ part: 'S', notes: "d :r /m :f | s :- /- :- |" }], words: 'Glo-ry to God', doubts: [{ part: 'S', bar: 1 }] });
+    const line = await checkLine(withKey, JPEG.buffer, 'image/jpeg', { parts: ['S'], time: '4/4', draft: 'S  d :r /m :f | s :- /- :- |' });
+    expect(line).toEqual({ text: 'S  d :r /m :f | s :- /- :- |\nW  Glo-ry to God', doubts: [{ part: 'S', bar: 1 }] });
+    const request = JSON.parse(String(fetch.mock.calls[0][1]?.body));
+    expect(request.model).toBe('claude-haiku-5-5');
+    expect(request.messages[0].content[1].text).toContain('A small model read the line as:\nS  d :r /m :f');
   });
 
   it('says plainly when a picture can’t be read', async () => {
