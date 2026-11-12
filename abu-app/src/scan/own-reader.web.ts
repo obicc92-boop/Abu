@@ -4,7 +4,7 @@
  * build (public/ort, copied at build time), free and on the phone. It reads a
  * line's rows of notes; Haiku then checks the reading against the picture.
  */
-import { findRows, greedy, notesLikeness, toText, type Gray, type RowBox } from './rows';
+import { barsFromBorders, findRows, greedy, notesLikeness, tableBorders, toText, type Gray, type RowBox } from './rows';
 
 interface Meta {
   height: number;
@@ -69,7 +69,7 @@ function grayOf(canvas: HTMLCanvasElement): Gray {
 }
 
 /** The row cut out as the reader was trained (a band around its baseline), as ink 1 / paper 0. */
-function band(canvas: HTMLCanvasElement, row: RowBox, meta: Meta): { data: Float32Array; width: number; steps: number } {
+function band(canvas: HTMLCanvasElement, row: RowBox, meta: Meta): { data: Float32Array; width: number; steps: number; left: number; scale: number } {
   const s = row.size;
   const left = row.left - meta.band.side * s;
   const top = row.baseline - meta.band.above * s;
@@ -93,20 +93,25 @@ function band(canvas: HTMLCanvasElement, row: RowBox, meta: Meta): { data: Float
       const i = (y * width + x) * 4;
       data[y * padded + x] = 1 - (0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]) / 255;
     }
-  return { data, width: padded, steps: Math.floor(width / meta.stride) };
+  return { data, width: padded, steps: Math.floor(width / meta.stride), left, scale: w / width };
 }
 
 /** A line's rows of notes, read by Abụ's own model: one row of Abụ text per part, and how sure it was. */
 export async function readLineOwn(canvas: HTMLCanvasElement, parts: string[], wordsRows = 1): Promise<{ text: string; sure: number }> {
   const { ort, session, meta } = await reader();
-  const rows = findRows(grayOf(canvas), parts.length + wordsRows);
+  const gray = grayOf(canvas);
+  const rows = findRows(gray, parts.length + wordsRows, parts.length);
+  const borders = rows.length >= 2 ? tableBorders(gray) : [];
   const read: { top: number; tokens: string[]; sure: number; score: number }[] = [];
   for (const row of rows) {
     const b = band(canvas, row, meta);
     const out = await session.run({ image: new ort.Tensor('float32', b.data, [1, 1, meta.height, b.width]) });
     const scores = out.tokens;
     const r = greedy(scores.data, Math.min(b.steps, scores.dims[1]), scores.dims[2], meta.tokens);
-    read.push({ top: row.top, ...r, score: notesLikeness(r) });
+    // Each token's place in the line: its step in the band, back in the line's pixels.
+    const xs = r.at.map((t) => b.left + (t + 0.5) * meta.stride * b.scale);
+    const tokens = barsFromBorders(r.tokens, xs, borders, 0.8 * row.size);
+    read.push({ top: row.top, ...r, tokens, score: notesLikeness(r) });
   }
   const chosen = [...read]
     .sort((a, b) => b.score - a.score)

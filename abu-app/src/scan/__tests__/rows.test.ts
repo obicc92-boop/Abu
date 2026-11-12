@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 
-import { findRows, greedy, notesLikeness, toText, type Gray } from '../rows';
+import { barsFromBorders, findRows, greedy, notesLikeness, tableBorders, toText, type Gray } from '../rows';
 
 /** A white picture with dark blocks standing in for rows of writing, and a table's lines. */
 function picture(width: number, height: number, blocks: [number, number][], tableLines: number[] = []): Gray {
@@ -35,6 +35,41 @@ describe('finding rows', () => {
     const rows = findRows(picture(400, 200, [[20, 40], [40, 60]]), 2);
     expect(rows).toHaveLength(2);
   });
+
+  it('splits a row twice as tall as the others, where two rows touch', () => {
+    const rows = findRows(picture(400, 200, [[20, 40], [70, 110]]), 3, 2);
+    expect(rows).toHaveLength(3);
+  });
+
+  it('doesn’t cut a row in half to find a row of words that isn’t in the picture', () => {
+    // Two parts, one row of words expected, but the line's picture only holds the parts.
+    const rows = findRows(picture(400, 200, [[20, 48], [70, 106]]), 3, 2);
+    expect(rows.map((r) => [r.top, r.bottom])).toEqual([
+      [19, 49],
+      [69, 107],
+    ]);
+  });
+});
+
+describe('a sheet set in a table', () => {
+  it('finds the table’s borders, not a “|” typed in a row', () => {
+    // Borders at 10, 200 and 390 through the whole line; a typed bar at 100 in the first row only.
+    const img = picture(400, 200, [[20, 40], [70, 90], [120, 140]], [10, 200, 390]);
+    for (let y = 18; y < 42; y++) img.data[y * 400 + 100] = 0;
+    expect(tableBorders(img)).toEqual([10, 200, 390]);
+  });
+
+  it('finds none when the line has no table', () => {
+    expect(tableBorders(picture(400, 200, [[20, 40], [70, 90]]))).toEqual([]);
+  });
+
+  it('reads a “|” away from the borders as the medium accent', () => {
+    // m :- |f :r ‖ m :-  — the typed bar in the cell is "/", the border is the barline.
+    const tokens = ['m', ':', '-', '|', 'f', ':', 'r', '|', 'm', ':', '-'];
+    const xs = [20, 40, 50, 100, 120, 150, 170, 199, 220, 240, 250];
+    expect(barsFromBorders(tokens, xs, [10, 200, 390], 16).join(' ')).toBe('m : - / f : r | m : -');
+    expect(barsFromBorders(tokens, xs, [], 16)).toEqual(tokens);
+  });
 });
 
 describe('reading the model’s output', () => {
@@ -51,6 +86,7 @@ describe('reading the model’s output', () => {
     // d d _ r r : blank m  →  d r : m
     const r = greedy(scores([1, 1, 0, 2, 2, 6, 0, 3]), 8, TOKENS.length + 1, TOKENS);
     expect(r.tokens).toEqual(['d', 'r', ':', 'm']);
+    expect(r.at).toEqual([0.5, 3.5, 5, 7]);
     expect(r.sure).toBeGreaterThan(0.99);
   });
 
@@ -65,5 +101,12 @@ describe('reading the model’s output', () => {
     // A row of words read as sol-fa: a few "notes" (letters), no beat marks.
     const words = { tokens: ['|', '/', 't', '-', '|', 'd', 'e', 'm', '|', 'ma', 'f'], mean: 0.95 };
     expect(notesLikeness(notes)).toBeGreaterThan(notesLikeness(words));
+  });
+
+  it('takes a held note (one note, then all beat marks) for a row of notes', () => {
+    // d' :- /- : | : /: | : /:  — the soprano holding one note across the line.
+    const held = { tokens: ['d', '^', ':', '-', '/', '-', ':', '|', ':', '/', ':', '|', ':', '/', ':'], mean: 0.9 };
+    const words = { tokens: ['|', '/', 't', '-', '|', 'd', 'e', 'm', '|', 'ma', 'f'], mean: 0.95 };
+    expect(notesLikeness(held)).toBeGreaterThan(notesLikeness(words));
   });
 });
