@@ -1,8 +1,10 @@
 /**
  * Pages of a sheet as pictures, in the browser: a PDF is drawn page by page
- * with pdf.js (served from Abụ's own site, public/pdfjs), a photo is turned
- * the right way up and kept. Lines are cut out of the pages to be read.
+ * with pdf.js (served from Abụ's own site, public/pdfjs), with its own text
+ * and drawn lines kept for reading typed sheets (pdf-text.ts); a photo is
+ * turned the right way up and kept. Lines are cut out of the pages to be read.
  */
+import { pageText, type PdfJsPage, type PdfOps } from './pdf-text';
 import type { Box, ScanPage } from './types';
 
 /** Pages are kept this big on their longer side, so a cut-out line is sharp enough to read. */
@@ -15,13 +17,13 @@ export const MAX_PAGES = 8;
 
 interface PdfJs {
   getDocument(src: { data: ArrayBuffer; wasmUrl: string; standardFontDataUrl: string }): { promise: Promise<PdfDoc> };
+  OPS: PdfOps;
 }
 interface PdfDoc {
   numPages: number;
   getPage(n: number): Promise<PdfPage>;
 }
-interface PdfPage {
-  getViewport(o: { scale: number }): { width: number; height: number };
+interface PdfPage extends PdfJsPage {
   render(o: { canvas: HTMLCanvasElement; canvasContext: CanvasRenderingContext2D; viewport: unknown }): { promise: Promise<void> };
 }
 
@@ -71,10 +73,13 @@ export async function loadPages(files: { file: Blob; type: string }[]): Promise<
         }
         const page = await doc.getPage(n);
         const base = page.getViewport({ scale: 1 });
-        const viewport = page.getViewport({ scale: PAGE_EDGE / Math.max(base.width, base.height) });
+        const pointScale = PAGE_EDGE / Math.max(base.width, base.height);
+        const viewport = page.getViewport({ scale: pointScale });
         const [c, ctx] = canvas(viewport.width, viewport.height);
         await page.render({ canvas: c, canvasContext: ctx, viewport }).promise;
-        pages.push({ canvas: c, width: c.width, height: c.height });
+        // Its text, for typed sheets: a PDF that can't give it is read from the picture instead.
+        const text = await pageText(page, lib.OPS).catch(() => undefined);
+        pages.push({ canvas: c, width: c.width, height: c.height, text, pointScale });
       }
     } else {
       if (pages.length >= MAX_PAGES) {
