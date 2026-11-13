@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ensureUser } from '../src/domain/groups';
 import { scanAllowance, useScan } from '../src/domain/scan';
-import { checkLine, cleanPage, lineText, readLine, readPage } from '../src/scan';
+import { checkLine, cleanPage, fixLine, lineText, readLine, readPage, readWords, rowsAnswer } from '../src/scan';
 import { call, signUp } from './helpers';
 
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
@@ -63,13 +63,60 @@ describe('the routes', () => {
     expect(res.status).toBe(401);
   });
 
-  it('say scanning is off when there is no key, without using the allowance', async () => {
+  it('say Claude is off when there is no key, without using the allowance', async () => {
     const { cookie } = await signUp('Off Scanner');
     const res = await call('/scan/page?w=800&h=1100', { method: 'POST', body: JPEG, headers: { 'content-type': 'image/jpeg' }, cookie });
     expect(res.status).toBe(503);
-    expect(await res.json()).toEqual({ error: 'Scanning isn’t switched on yet.' });
+    expect(await res.json()).toEqual({ error: 'Claude isn’t switched on for scanning.' });
     const left = await call('/scan/allowance', { cookie });
-    expect(await left.json()).toEqual({ pages: 40, lines: 400 });
+    // The allowance, and which readers the app can call: never Claude without a key.
+    expect(await left.json()).toMatchObject({ pages: 40, lines: 400, readers: { anthropic: false } });
+  });
+
+  it('check a correction request before reaching any reader', async () => {
+    const { cookie } = await signUp('Fix Scanner');
+    const res = await call('/scan/fix?parts=S,A', { method: 'POST', body: JPEG, headers: { 'content-type': 'image/jpeg' }, cookie });
+    expect(res.status).toBe(400);
+    const left = await call('/scan/allowance', { cookie });
+    expect(await left.json()).toMatchObject({ lines: 400 });
+  });
+});
+
+/** Cloudflare's reader as the AI binding answers, holding `answer` as its text; or failing with `error`. */
+function cloudflare(answer: string, error?: string) {
+  const run = vi.fn(async (_model: string, _input: unknown) => {
+    if (error) throw new Error(error);
+    return { choices: [{ message: { content: answer } }], usage: { prompt_tokens: 10, completion_tokens: 10 } };
+  });
+  return { env: { ...env, AI: { run } as unknown as Ai } as Env, run };
+}
+
+describe('reading with Cloudflare’s reader', () => {
+  it('corrects a line the own model read, as rows in Abụ’s format', async () => {
+    const { env: withAi, run } = cloudflare('```\nS  s1 | d :-.r /m :d |\nA  s1 | d :t1 /d :d\nW  O come let us\n```');
+    const r = await fixLine(withAi, JPEG.buffer, 'image/jpeg', { parts: ['S', 'A'], time: '4/4', key: 'G', draft: 'S  s1 | d :r /m :d |\nA  s1 | d :t1 /d :d |' });
+    expect(r.text).toBe('S  s1 | d :-.r /m :d |\nW  O come let us\nA  s1 | d :t1 /d :d |');
+    // The picture and the own model's reading go to Mistral, with the line's parts, time and key.
+    const [model, input] = run.mock.calls[0] as [string, { messages: { role: string; content: unknown }[] }];
+    expect(model).toBe('@cf/mistralai/mistral-small-3.1-24b-instruct');
+    const user = JSON.stringify(input.messages[1].content);
+    expect(user).toContain('data:image/jpeg;base64,');
+    expect(user).toContain('Parts, top to bottom: S, A. Time 4/4: 4 beats in a full bar. Doh is G.');
+    expect(user).toContain('A small model read the line as');
+  });
+
+  it('reads a row of words', async () => {
+    const { env: withAi } = cloudflare('"All peo-ple that on earth do dwell,"\n');
+    expect(await readWords(withAi, JPEG.buffer, 'image/jpeg')).toBe('All peo-ple that on earth do dwell,');
+  });
+
+  it('says when today’s free reading is used up', async () => {
+    const { env: withAi } = cloudflare('', '4006: you have used up your daily free allocation of 10,000 neurons');
+    await expect(readWords(withAi, JPEG.buffer, 'image/jpeg')).rejects.toMatchObject({ status: 503, message: expect.stringContaining('free AI reading') });
+  });
+
+  it('shapes an answer with stray text and long part names', () => {
+    expect(rowsAnswer('Here is the line:\nSoprano: d :r |\nAlto  t1 :d |\nTenor m :f |', ['S', 'A'])).toBe('S  d :r |\nA  t1 :d |');
   });
 });
 

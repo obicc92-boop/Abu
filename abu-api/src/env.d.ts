@@ -7,7 +7,8 @@ interface Env {
   ANTHROPIC_API_KEY?: string;
   ANTHROPIC_BASE_URL?: string;
 }
-// Scanning sheets: `npx wrangler secret put ANTHROPIC_API_KEY`. Without it, scanning says it isn't switched on.
+// Scanning sheets: `npx wrangler secret put ANTHROPIC_API_KEY` (optional). Without it, scanning uses only Abụ's own
+// reader and Cloudflare's (the AI binding, in wrangler.jsonc); Claude's routes say they aren't switched on.
 // ANTHROPIC_BASE_URL (optional) sends the calls through Cloudflare AI Gateway instead of straight to Anthropic.
 declare namespace Cloudflare {
   interface Env {

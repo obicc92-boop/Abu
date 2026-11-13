@@ -73,7 +73,7 @@ import {
 } from './domain/songs';
 import { newId } from './domain/access';
 import { scanAllowance, useScan } from './domain/scan';
-import { checkImage, checkLine, partOf, readLine, readPage, scanningReady } from './scan';
+import { checkImage, checkLine, cloudflareReady, fixLine, partOf, readLine, readPage, readWords, scanningReady, scanReaders } from './scan';
 import { AppError, badRequest, notFound } from './errors';
 
 type App = { Bindings: Env; Variables: { userId: string } };
@@ -203,7 +203,52 @@ app.delete('/songs/:id/sheet', signedIn, async (c) => {
 
 const contentType = (c: { req: { header: (name: string) => string | undefined } }) => (c.req.header('content-type') ?? '').split(';')[0].trim().toLowerCase();
 
-app.get('/scan/allowance', signedIn, async (c) => c.json(await scanAllowance(c.env.DB, c.get('userId'))));
+/** What's left of today's allowance, and which AI readers are switched on (the app tries them in order). */
+app.get('/scan/allowance', signedIn, async (c) => c.json({ ...(await scanAllowance(c.env.DB, c.get('userId'))), readers: scanReaders(c.env) }));
+
+/** The parts of a line (?parts=S,A,T,B), checked. */
+function lineParts(c: { req: { query: (name: string) => string | undefined } }): string[] {
+  const parts = (c.req.query('parts') ?? 'S')
+    .split(',')
+    .map((p) => partOf(p))
+    .filter((p): p is string => !!p)
+    .slice(0, 6);
+  if (!parts.length) throw badRequest('Say which parts the line has (S, A, T, B or Solo).');
+  return parts;
+}
+
+/** ?time= and ?key=, when known, checked. */
+function timeAndKey(c: { req: { query: (name: string) => string | undefined } }): { time?: string; key?: string } {
+  const time = c.req.query('time');
+  if (time && !/^\d{1,2}\/\d{1,2}$/.test(time)) throw badRequest('The time should look like 4/4.');
+  const key = c.req.query('key');
+  if (key && !/^[A-G][b#♭♯]?$/.test(key)) throw badRequest('The key should be a note name, like Ab.');
+  return { time: time || undefined, key: key || undefined };
+}
+
+/** Corrects a line Abụ's own model read that fails the checker (?draft=), with Cloudflare's reader; the body is the line's picture. */
+app.post('/scan/fix', signedIn, async (c) => {
+  cloudflareReady(c.env);
+  const parts = lineParts(c);
+  const draft = (c.req.query('draft') ?? '').slice(0, 4000);
+  if (!draft.trim()) throw badRequest('Send the reading to correct.');
+  const opts = timeAndKey(c);
+  checkImage(contentType(c), Number(c.req.header('content-length') ?? 1) || 1);
+  const image = await c.req.arrayBuffer();
+  const type = checkImage(contentType(c), image.byteLength);
+  await useScan(c.env.DB, c.get('userId'), 'line');
+  return c.json(await fixLine(c.env, image, type, { parts, draft, ...opts }));
+});
+
+/** Reads a row of words from its picture (the body), with Cloudflare's reader. */
+app.post('/scan/words', signedIn, async (c) => {
+  cloudflareReady(c.env);
+  checkImage(contentType(c), Number(c.req.header('content-length') ?? 1) || 1);
+  const image = await c.req.arrayBuffer();
+  const type = checkImage(contentType(c), image.byteLength);
+  await useScan(c.env.DB, c.get('userId'), 'line');
+  return c.json({ words: await readWords(c.env, image, type) });
+});
 
 /** Finds the lines of music on a page. The body is the picture; ?w= and ?h= give its size in pixels. */
 app.post('/scan/page', signedIn, async (c) => {
@@ -221,43 +266,27 @@ app.post('/scan/page', signedIn, async (c) => {
 /** Reads one line of music. The body is the picture; ?parts=S,A,T,B, and ?time= and ?key= when known. */
 app.post('/scan/line', signedIn, async (c) => {
   scanningReady(c.env);
-  const parts = (c.req.query('parts') ?? 'S')
-    .split(',')
-    .map((p) => partOf(p))
-    .filter((p): p is string => !!p)
-    .slice(0, 6);
-  if (!parts.length) throw badRequest('Say which parts the line has (S, A, T, B or Solo).');
-  const time = c.req.query('time');
-  if (time && !/^\d{1,2}\/\d{1,2}$/.test(time)) throw badRequest('The time should look like 4/4.');
-  const key = c.req.query('key');
-  if (key && !/^[A-G][b#♭♯]?$/.test(key)) throw badRequest('The key should be a note name, like Ab.');
+  const parts = lineParts(c);
+  const opts = timeAndKey(c);
   checkImage(contentType(c), Number(c.req.header('content-length') ?? 1) || 1);
   const image = await c.req.arrayBuffer();
   const type = checkImage(contentType(c), image.byteLength);
   await useScan(c.env.DB, c.get('userId'), 'line');
-  return c.json(await readLine(c.env, image, type, { parts, time: time || undefined, key: key || undefined }));
+  return c.json(await readLine(c.env, image, type, { parts, ...opts }));
 });
 
 /** Checks a line Abụ's own model read (?draft=, the reading as text), with the line's picture as the body. */
 app.post('/scan/check', signedIn, async (c) => {
   scanningReady(c.env);
-  const parts = (c.req.query('parts') ?? 'S')
-    .split(',')
-    .map((p) => partOf(p))
-    .filter((p): p is string => !!p)
-    .slice(0, 6);
-  if (!parts.length) throw badRequest('Say which parts the line has (S, A, T, B or Solo).');
+  const parts = lineParts(c);
   const draft = (c.req.query('draft') ?? '').slice(0, 4000);
   if (!draft.trim()) throw badRequest('Send the reading to check.');
-  const time = c.req.query('time');
-  if (time && !/^\d{1,2}\/\d{1,2}$/.test(time)) throw badRequest('The time should look like 4/4.');
-  const key = c.req.query('key');
-  if (key && !/^[A-G][b#♭♯]?$/.test(key)) throw badRequest('The key should be a note name, like Ab.');
+  const opts = timeAndKey(c);
   checkImage(contentType(c), Number(c.req.header('content-length') ?? 1) || 1);
   const image = await c.req.arrayBuffer();
   const type = checkImage(contentType(c), image.byteLength);
   await useScan(c.env.DB, c.get('userId'), 'line');
-  return c.json(await checkLine(c.env, image, type, { parts, time: time || undefined, key: key || undefined, draft }));
+  return c.json(await checkLine(c.env, image, type, { parts, draft, ...opts }));
 });
 
 /** Count a play-through (the player calls this at the end of a song). */

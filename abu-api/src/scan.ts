@@ -1,11 +1,17 @@
 /**
- * Reading sheets with Claude (see docs/scan-plan.md). The app sends a picture
- * of a page to find its lines of music, then a picture of each line to read
- * into Abụ sol-fa. Measured in Phase 0 (abu-reader/README.md): lines found
- * well on typed and handwritten pages, and 98% of bars read right on typed
- * lines, at about 1.5 US cents a line.
+ * The AI help for scanning sheets (see docs/scan-plan.md), used only where the
+ * app can't do the job itself. The app reads typed PDFs from their own text
+ * and finds and reads lines in pictures with Abụ's own model, in the browser.
+ * Then, only for a line that still fails Abụ's checker:
  *
- * Claude answers in JSON to a fixed schema, so the reply is always readable.
+ * 1. Cloudflare's own reader (Workers AI, Mistral Small 3.1) corrects it. It
+ *    also reads rows of words in pictures, which Abụ's model can't.
+ * 2. Claude, only if the Worker has an Anthropic key: Haiku checks the line,
+ *    and Opus reads it from scratch if that still fails. Haiku can also find
+ *    the lines on a page the app couldn't.
+ *
+ * Measured in abu-reader/README.md. Claude answers in JSON to a fixed schema;
+ * Cloudflare's reader answers in Abụ's own rows.
  */
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -179,6 +185,90 @@ export function lineText(raw: { rows?: { part?: string; notes?: string }[]; word
   return out.join('\n');
 }
 
+/* ---------- Asking Cloudflare's reader (Workers AI) ---------- */
+
+/**
+ * On the 57 test lines, Mistral Small 3.1 corrected 5 of the 12 lines that
+ * failed the checker and broke none, when only failing lines were sent and
+ * its answer kept only if it passed. Gemma 4, Llama 4 Scout and Qwen 3.8 did
+ * worse, and every model broke lines that were already right, so the app
+ * never sends it a line that passes. It read 79% of words right.
+ */
+const CLOUDFLARE = '@cf/mistralai/mistral-small-3.1-24b-instruct';
+
+const FIX_ANSWER = `Answer with only the corrected line: one row per part, in order, each as the part name, two spaces and the notes (for example \`S  s1 | d :-.r /m :d |\`), then a row \`W  \` and the words. No other text.`;
+const WORDS_PROMPT = `This picture is one row of words (the lyrics) from a tonic sol-fa choir sheet. Copy the words exactly as printed, left to right, keeping hyphens between syllables. Answer with only those words, nothing else. If there are no words, answer with nothing.`;
+
+/** Whether each reader can be used: the app tries them in this order. */
+export function scanReaders(env: Env): { cloudflare: boolean; anthropic: boolean } {
+  return { cloudflare: !!env.AI, anthropic: !!env.ANTHROPIC_API_KEY };
+}
+
+async function askCloudflare(env: Env, image: ArrayBuffer, type: ImageType, prompt: string, system: string | null, maxTokens: number): Promise<string> {
+  if (!env.AI) throw new AppError(503, 'Cloudflare’s reader isn’t switched on.');
+  const content = [
+    { type: 'image_url', image_url: { url: `data:${type};base64,${base64(image)}` } },
+    { type: 'text', text: prompt },
+  ];
+  const input = { messages: [...(system ? [{ role: 'system', content: system }] : []), { role: 'user', content }], max_tokens: maxTokens, temperature: 0 };
+  let out: { choices?: { message?: { content?: string } }[]; response?: string };
+  try {
+    out = (await (env.AI.run as (model: string, input: unknown) => Promise<unknown>)(CLOUDFLARE, input)) as typeof out;
+  } catch (e) {
+    const message = String((e as Error)?.message ?? e);
+    console.error('scan: Cloudflare reader failed', message);
+    // The free daily allowance of Workers AI (on the Workers Free plan, calls stop there). Not a 429: that
+    // means Abụ's own allowance is used up, and the app stops reading; this one only skips this reader.
+    if (/4006|daily free allocation|neurons/i.test(message)) throw new AppError(503, 'Today’s free AI reading is used up. Check the rest of the lines by eye, or try tomorrow.');
+    throw new AppError(503, 'Cloudflare’s reader is busy or out of reach. Try again in a minute.');
+  }
+  return (out?.choices?.[0]?.message?.content ?? out?.response ?? '').trim();
+}
+
+/** Cloudflare's reader's answer, rows as "S  d :r |" and "W  words", as a line in Abụ's format. */
+export function rowsAnswer(answer: string, parts: string[]): string {
+  const rows: { part: string; notes: string }[] = [];
+  let words = '';
+  for (const raw of answer.split('\n')) {
+    const m = raw
+      .trim()
+      .replace(/^`+|`+$/g, '')
+      .match(/^(Solo|Soprano|Alto|Tenor|Bass|S|A|T|B|W)\b[:.]?\s*(.*)$/i);
+    if (!m) continue;
+    if (m[1].toUpperCase() === 'W') words ||= m[2].trim();
+    else if (rows.length < parts.length) rows.push({ part: m[1], notes: m[2] });
+  }
+  return lineText({ rows, words }, parts);
+}
+
+/** Corrects a line Abụ's own model read that fails Abụ's checker (Cloudflare's reader). */
+export async function fixLine(env: Env, image: ArrayBuffer, type: ImageType, opts: { parts: string[]; time?: string; key?: string; draft: string }): Promise<LineReading> {
+  const beats = opts.time?.split('/')[0];
+  const prompt = [
+    `Parts, top to bottom: ${opts.parts.join(', ')}.`,
+    opts.time ? `Time ${opts.time}: ${beats} beats in a full bar.` : '',
+    opts.key ? `Doh is ${opts.key}.` : '',
+    `A small model read the line as:\n${opts.draft}`,
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const answer = await askCloudflare(env, image, type, prompt, `${CHECK_SYSTEM}\n\n${FIX_ANSWER}`, 2500);
+  const text = rowsAnswer(answer, opts.parts);
+  if (!text.trim()) throw new AppError(422, 'This line couldn’t be read. Check it by eye.');
+  return { text, doubts: [] };
+}
+
+/** A row of words, as printed (Cloudflare's reader): "All peo-ple that on earth". */
+export async function readWords(env: Env, image: ArrayBuffer, type: ImageType): Promise<string> {
+  const answer = await askCloudflare(env, image, type, WORDS_PROMPT, null, 400);
+  return answer
+    .split('\n')[0]
+    .replace(/^["“'`]+|["”'`]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 400);
+}
+
 /* ---------- Asking Claude ---------- */
 
 function base64(buf: ArrayBuffer): string {
@@ -189,7 +279,7 @@ function base64(buf: ArrayBuffer): string {
 }
 
 async function ask(env: Env, model: string, system: string, schema: Record<string, unknown>, image: ArrayBuffer, type: ImageType, prompt: string): Promise<unknown> {
-  if (!env.ANTHROPIC_API_KEY) throw new AppError(503, 'Scanning isn’t switched on yet.');
+  if (!env.ANTHROPIC_API_KEY) throw new AppError(503, 'Claude isn’t switched on for scanning.');
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, baseURL: env.ANTHROPIC_BASE_URL || undefined, maxRetries: 2 });
   let message;
   try {
@@ -222,9 +312,14 @@ async function ask(env: Env, model: string, system: string, schema: Record<strin
   }
 }
 
-/** Refuses straight away when scanning has no key, before anything is counted. */
+/** Refuses straight away when Claude has no key, before anything is counted. */
 export function scanningReady(env: Env): void {
-  if (!env.ANTHROPIC_API_KEY) throw new AppError(503, 'Scanning isn’t switched on yet.');
+  if (!env.ANTHROPIC_API_KEY) throw new AppError(503, 'Claude isn’t switched on for scanning.');
+}
+
+/** Refuses straight away when Cloudflare's reader isn't there, before anything is counted. */
+export function cloudflareReady(env: Env): void {
+  if (!env.AI) throw new AppError(503, 'Cloudflare’s reader isn’t switched on.');
 }
 
 export function checkImage(type: string, bytes: number): ImageType {
