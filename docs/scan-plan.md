@@ -169,7 +169,7 @@ Details and numbers are in `abu-reader/README.md`.
   - On handwritten pages it boxed the lines well by eye ("Domon Maria", "Vovome", "Laudate Dominum").
   - It costs about 3 US cents a page.
 - **The order of reading (owner's call, 13 November 2026): the app first, AI as the last resort, Cloudflare's before Anthropic's** (the Anthropic key is shared with other projects):
-  1. A typed PDF is read from its own text (`abu-app/src/scan/pdf-text.ts`): free, instant, no AI.
+  1. A typed PDF is read from its own text (`abu-app/src/scan/pdf-text.ts`): free, instant, no AI. Each glyph is placed as pdf.js draws it, leaving out hidden text. Bar lines may be typed (`|`) or drawn: long lines through every row are bar lines and short lines inside a row are half-bar lines; in a line of one row, thick lines are bar lines and thin ones half-bar lines (the owner's Handel *Worthy is the Lamb*: 18 of 19 lines add up).
   2. On photos and scans the lines are found by where the ink is (`page-lines.ts`, straightening a tilted page first), with the number of voice parts the person gives (4 by default), and read by Abụ's own model in the browser.
   3. A line that passes Abụ's checker is kept as read. A free repair is tried first (a column of part names read as notes).
   4. Only a line that still fails goes to Cloudflare's reader (Workers AI, Mistral Small 3.1, `POST /api/scan/fix`), then to Claude if the Worker has an Anthropic key (Haiku checks, Opus reads from scratch). An answer is kept only if it passes the checker; otherwise the person fixes the line.
