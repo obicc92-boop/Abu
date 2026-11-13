@@ -33,7 +33,7 @@ import { PlayButton } from '@/components/player-controls';
 import { Body, Button, Card, Chip, ErrorText, Kicker, MAX_WIDTH, Page, TopBar } from '@/components/ui';
 import { setScanDraft } from '@/scan/draft';
 import { joinLines, timeFor } from '@/scan/join';
-import { joinLine, problemsByPart, splitLine, tidyTitle, withoutNameColumn, withWords, wordsOf, type LineRow, type LineWords } from '@/scan/line-text';
+import { alignedRows, joinLine, problemsByPart, splitLine, tidyNotes, tidyTitle, withoutNameColumn, withWords, wordsOf, type LineRow, type LineWords } from '@/scan/line-text';
 import { findLinesOwn, readLineOwn } from '@/scan/own-reader';
 import { cutLine, loadPages, MAX_PAGES, pageForFinding, scanningHere, takePhoto } from '@/scan/pages';
 import { readTypedSheet, type PageText } from '@/scan/pdf-text';
@@ -602,6 +602,10 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
   const [width, setWidth] = useState(0);
   const [showTimes, setShowTimes] = useState(false);
   const rows = useMemo(() => splitLine(line.text), [line.text]);
+  // The parts' bars lined up in columns, as on the sheet; the row being typed in shows just what's typed.
+  const shown = useMemo(() => alignedRows(rows), [rows]);
+  const [editing, setEditing] = useState<{ id: string; row: number; value: string } | null>(null);
+  const valueOf = (i: number) => (editing && editing.id === line.id && editing.row === i ? editing.value : shown[i]);
   const parsed = useMemo(() => parseSolfa(line.text, { time, key: doh }), [line.text, time, doh]);
   const empty = !rows.some((r) => r.part && r.text.trim());
   const player = useSongPlayer(empty || parsed.errors.length ? null : parsed, doh);
@@ -614,7 +618,7 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
   // The picture: tall enough to read (scroll sideways), or the whole line at once.
   const imgHeight = zoom ? 170 : Math.max(48, ((width || 1) * line.height) / line.width);
   const imgWidth = zoom ? (imgHeight * line.width) / line.height : width;
-  const textWidth = Math.max(width - 44, ...rows.map((r) => r.text.length * CHAR + 28));
+  const textWidth = Math.max(width - 44, ...rows.map((_, i) => valueOf(i).length * CHAR + 28));
 
   // The picture and the rows scroll sideways together, so bars stay roughly lined up.
   const picture = useRef<ScrollViewInstance>(null);
@@ -637,7 +641,7 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
   }
 
   const setRow = (i: number, text: string) => {
-    const next: LineRow[] = rows.map((r, k) => (k === i ? { ...r, text } : r));
+    const next: LineRow[] = rows.map((r, k) => (k === i ? { ...r, text: r.part ? tidyNotes(text) : text } : r));
     update(line.id, { text: joinLine(next), checked: false });
   };
   const go = (i: number) => setCurrent(Math.max(0, Math.min(lines.length - 1, i)));
@@ -747,8 +751,13 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
                 {rows.map((r, i) => (
                   <TextInput
                     key={i}
-                    value={r.text}
-                    onChangeText={(t) => setRow(i, t)}
+                    value={valueOf(i)}
+                    onFocus={() => setEditing({ id: line.id, row: i, value: shown[i] })}
+                    onChangeText={(t) => {
+                      setEditing({ id: line.id, row: i, value: t });
+                      setRow(i, t);
+                    }}
+                    onBlur={() => setEditing(null)}
                     autoCapitalize="none"
                     autoCorrect={false}
                     spellCheck={false}

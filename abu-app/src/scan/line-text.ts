@@ -30,6 +30,51 @@ export function joinLine(rows: LineRow[]): string {
   return rows.map((r) => (r.part ? `${r.part.padEnd(2)} ${r.text.trim()}` : `W  ${r.text.trim()}`)).join('\n');
 }
 
+/** A row of notes tidied: single spaces, none around "." and ",". */
+export function tidyNotes(text: string): string {
+  return text.replace(/\s+/g, ' ').replace(/\s*([.,])\s*/g, '$1').trim();
+}
+
+/**
+ * The rows as shown for checking: each bar of every part starts in the same
+ * column, and so does each beat where the parts agree on how many a bar has,
+ * as on the printed sheet. Rows of words are shown as they are. Only spaces
+ * are added, so a row shown this way reads the same as before.
+ */
+export function alignedRows(rows: LineRow[]): string[] {
+  const split = rows.map((r) => {
+    if (!r.part) return null;
+    const pieces = tidyNotes(r.text).split('|');
+    const closed = pieces.length > 1 && !pieces[pieces.length - 1].trim();
+    const bars = (closed ? pieces.slice(0, -1) : pieces).map((bar) => {
+      const parts = bar.split(/([:/])/);
+      return { beats: parts.filter((_, k) => k % 2 === 0).map((b) => b.trim()), seps: parts.filter((_, k) => k % 2 === 1) };
+    });
+    return { bars, closed };
+  });
+  const most = Math.max(0, ...split.map((s) => s?.bars.length ?? 0));
+  const shown = split.map((s) => (s ? s.bars.map(() => '') : null));
+  for (let j = 0; j < most; j++) {
+    const here = split.flatMap((s, i) => (s && j < s.bars.length ? [{ i, bar: s.bars[j] }] : []));
+    const counts = new Set(here.map((h) => h.bar.beats.length));
+    const write = (bar: { beats: string[]; seps: string[] }, widths: number[]) =>
+      bar.beats.map((b, k) => (k === 0 ? '' : ` ${bar.seps[k - 1]}`) + b.padEnd(widths[k] ?? 0)).join('');
+    let texts: { i: number; text: string }[];
+    if (counts.size === 1) {
+      const widths = here[0].bar.beats.map((_, k) => Math.max(...here.map((h) => h.bar.beats[k].length)));
+      texts = here.map((h) => ({ i: h.i, text: write(h.bar, widths) }));
+    } else texts = here.map((h) => ({ i: h.i, text: write(h.bar, []) }));
+    const width = Math.max(...texts.map((t) => t.text.length));
+    for (const t of texts) (shown[t.i] as string[])[j] = t.text.padEnd(width);
+  }
+  return rows.map((r, i) => {
+    const s = split[i];
+    const bars = shown[i];
+    if (!s || !bars) return r.text;
+    return `${bars.join(' | ')}${s.closed ? ' |' : ''}`.trimEnd();
+  });
+}
+
 /** A line's rows of words, each with the part's row it comes after (0 for the first part). */
 export interface LineWords {
   after: number;
