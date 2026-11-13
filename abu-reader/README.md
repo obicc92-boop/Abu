@@ -18,6 +18,9 @@ Phase 0 of `docs/scan-plan.md`: proving how well Abụ can read a sheet (PDF or 
 | `train/train.py`, `train/rowreader.py` | Trains the row reader (adapted from SonkoMusic's): a CNN, dilated convolutions and a bidirectional LSTM with CTC, 1.1M weights, on the CPU. |
 | `train/pipeline.py` | Reads the answer lines the way the app does: rows found by where the ink is, the rows of notes chosen over the words, table borders as the bars. |
 | `train/export.py` | Writes the model the app runs in the browser (`abu-app/public/reader/rows.onnx` and `rows.json`). |
+| `scripts/pdf-text-ts.ts` | Runs the app's port of the typed-PDF reader (`abu-app/src/scan/pdf-text.ts`) with pdf.js and compares it with `pdf-text.py`. |
+| `train/page_lines.py` | Finds the lines on a page picture without AI (the app's `page-lines.ts`): straightens it, finds rows by ink, tells notes from words with the own model, groups rows into lines. `--told` / `--four` give it the number of parts. |
+| `workers-ai/`, `scripts/workers-ai-check.py`, `scripts/workers-ai-compare.py`, `scripts/gate.ts` | Measure Cloudflare's vision models (Workers AI) through a local measuring Worker (`wrangler dev --port 8791`, never deployed); `gate.ts` applies the app's "only failing lines, kept only if they pass" rule to readings already made. |
 | `scripts/score-readings.ts` | Scores readings against the answers: notes right, bars right, and mistakes the checker would miss. Answer lines found wrong by eye go in `data/<name>/answers-wrong.json`, with the reason, and are left out. |
 
 ```sh
@@ -121,3 +124,29 @@ On the same 50 lines:
 - **Finding the lines with Haiku** instead of Opus: it matched 76 of the 86 lines, with 87% overlap, at about 0.1 US cents a page instead of 2.
 - **In the app:** if Haiku's corrected line still fails Abụ's checker, Opus reads that line. In the browser test (a typed hymn as a PDF and as a photo-like picture), all 48 bars came out right both times. The PDF needed no Opus; the photo needed it for 2 of its 4 lines.
 - **A typed page of 6 lines** now costs about 1 US cent, against about 10 with Opus alone.
+
+**Without AI, and Cloudflare's AI as the next step** (13 November 2026): the owner wants the app to do all it can, with AI as the last resort and Cloudflare's before Anthropic's.
+
+- **Typed PDFs from their own text:** the app's port of `pdf-text.py` matches it on 83 of the owner's typed sheets (1,415 against 1,430 bars passing the checker), and read the browser test's typed hymn 48 of 48 bars in 3 seconds.
+- **Lines found in pictures by ink** (`page_lines.py`), on the 57 test lines drawn as pictures:
+
+| Number of parts | Lines found |
+|---|---|
+| Worked out from the gaps | 42 of 57 |
+| Assumed to be four (the app's default) | 50 of 57 |
+| Told, as the person would | 54 of 57 |
+
+  Read with the own model on the lines found (no AI): 90.5% to 93.4% of notes and about 86% of bars right, against 98.9% and 92.9% when the lines' places come from the PDF's text. A photo-like picture of the test hymn, tilted 1.2°, read 48 of 48 bars once straightened.
+- **Cloudflare's vision models** (Workers AI), correcting the own model's reading of the 57 lines:
+
+| Model | Every line sent: bars right | Lines broken / fixed | Only failing lines, kept if they pass | US cents a line |
+|---|---|---|---|---|
+| Own model alone | 94.6% | | | free |
+| Gemma 4 26B | 60.4% | 28 / 4 | 95.1% | 0.018 |
+| Llama 4 Scout | 84.2% | 15 / 5 | 95.5% | 0.068 |
+| Qwen 3.8 27B | 91.2% | 6 / 5 | 94.9% | 0.135 |
+| **Mistral Small 3.1** | 91.7% | 11 / 7 | **96.3%** | **0.066** |
+| Haiku (for comparison) | 99.2% | | 97.6% | 0.17 |
+
+  (Bars here leave empty bars out for every reader, so the own model shows 94.6% rather than 92.9%.) Every Cloudflare model breaks lines that were right, so the app sends only lines that fail the checker. Mistral then Haiku equals Haiku alone (97.6%) with 7 Anthropic calls instead of 12. Words: Mistral 79% of words right, Qwen 74%, Gemma 62%, Scout 45%. The measurement cost about US$0.21.
+- **The owner's Cloudflare account is on the Workers Free plan:** Workers AI stops at 10,000 neurons a day (about 165 Mistral corrections or 500 rows of words), and GLM 5.3 Flash isn't available on it. The Workers Paid plan ($5 a month) keeps the free 10,000 a day and charges $0.011 per 1,000 neurons after that.

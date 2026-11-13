@@ -168,6 +168,14 @@ Details and numbers are in `abu-reader/README.md`.
   - On typed pages it matched 75 of the 86 lines found from the PDFs' text, with 88% overlap; most of the rest were the text reader's own mistakes.
   - On handwritten pages it boxed the lines well by eye ("Domon Maria", "Vovome", "Laudate Dominum").
   - It costs about 3 US cents a page.
+- **The order of reading (owner's call, 13 November 2026): the app first, AI as the last resort, Cloudflare's before Anthropic's** (the Anthropic key is shared with other projects):
+  1. A typed PDF is read from its own text (`abu-app/src/scan/pdf-text.ts`): free, instant, no AI.
+  2. On photos and scans the lines are found by where the ink is (`page-lines.ts`, straightening a tilted page first), with the number of voice parts the person gives (4 by default), and read by Abụ's own model in the browser.
+  3. A line that passes Abụ's checker is kept as read. A free repair is tried first (a column of part names read as notes).
+  4. Only a line that still fails goes to Cloudflare's reader (Workers AI, Mistral Small 3.1, `POST /api/scan/fix`), then to Claude if the Worker has an Anthropic key (Haiku checks, Opus reads from scratch). An answer is kept only if it passes the checker; otherwise the person fixes the line.
+  5. Rows of words in pictures are read by Cloudflare's reader (`POST /api/scan/words`), since Abụ's model reads only notes. Claude finds the lines on a page only when the app finds none and a key is set.
+  - **Measured** in `abu-reader/README.md`: with no AI at all, the browser test's typed PDF and photo-like picture each read 48 of 48 bars.
+  - **Cloudflare's free plan:** the owner's account is on the Workers Free plan, so Cloudflare's AI stops for the day after 10,000 neurons (about 165 corrections); the scan then carries on without it.
 - **Built:**
   - **Scan a sheet:** a PDF (drawn with pdf.js in the browser) or photos.
   - **Reading:** Haiku finds the lines on each page (`POST /api/scan/page`). Each line is cut out and read in the browser by Abụ's own model (`abu-app/src/scan/own-reader.web.ts`, ONNX Runtime Web), then Haiku checks the reading against the picture (`POST /api/scan/check`). Only if Haiku's line still fails the checker does Opus read it (`POST /api/scan/line`). Lines go 3 at a time, with a daily allowance.
@@ -178,8 +186,7 @@ Details and numbers are in `abu-reader/README.md`.
   - **Results:** as a PDF and as a photo-like JPEG, all 4 lines were found and all 48 bars were read exactly. The song saved with its sheet. With the own reader, the PDF needed only Haiku; the photo sent 2 of its 4 lines on to Opus.
   - **Cost:** a typed page of 6 lines is about 1 US cent, against about 10 with Opus alone.
 - **Not yet:**
-  - typed PDFs read from their text (free and instant, `abu-reader/scripts/pdf-text.py`, to port into the app)
-  - cleanup with corners for photos
+  - cleanup with corners for photos (a tilted page is straightened, but a strongly slanted or curled one isn't flattened)
   - reading in the background (Cloudflare Workflows)
   - phones (Phase 2)
   - keeping corrections as lessons (needs each group's permission)

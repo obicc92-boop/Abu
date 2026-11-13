@@ -29,8 +29,10 @@ Wrangler uses the Cloudflare account it's signed in to on this Mac. Tests never 
 
 ### Scanning sheets
 
-- **The readers** (`src/scan.ts`, Anthropic SDK, answers to fixed JSON schemas): Claude Haiku 5.5 finds the lines on a page and checks the app's own reading of each line; Claude Opus 5.5 reads a line only when Haiku's still fails the checker. The app reads each line first with Abụ's own model, in the browser.
-- **Production secret:** `ANTHROPIC_API_KEY` is a Worker secret, set with `npx wrangler secret put ANTHROPIC_API_KEY`. Without it, scanning answers "Scanning isn't switched on yet" before anything is counted.
+- **The app does most of the reading itself** (typed PDFs from their text, lines in pictures found by ink and read by Abụ's own model). The Worker's readers (`src/scan.ts`) are for what's left, in this order:
+  - **Cloudflare's reader** (the `AI` binding, Workers AI, Mistral Small 3.1, plain-text answers): corrects a line that fails the checker, and reads rows of words in pictures. On the Workers Free plan it stops for the day after 10,000 neurons; that skips it (503) rather than stopping the scan. AI bindings always reach Cloudflare, even in `wrangler dev`, and are billed to the account.
+  - **Claude**, only with a key (Anthropic SDK, fixed JSON schemas): Haiku checks a line, Opus reads it from scratch, and Haiku finds the lines on a page the app couldn't.
+- **Optional secret:** `ANTHROPIC_API_KEY`, set with `npx wrangler secret put ANTHROPIC_API_KEY`. Without it, Claude's routes answer "Claude isn't switched on for scanning" before anything is counted, and scanning works without them.
 - **Optional gateway:** set `ANTHROPIC_BASE_URL` to send the calls through Cloudflare AI Gateway instead of straight to Anthropic.
 - **Local dev:** the key can go in `.dev.vars`. Tests always run without it (`vitest.config.ts`), so they never reach Claude.
 - **Daily allowance** (`src/domain/scan.ts`, table `scan_usage`): 40 pages and 400 lines per person, and 2,000 lines for everyone together, about US$30 at most.
@@ -83,12 +85,14 @@ The database itself guarantees what must never break: a group always keeps a lea
     - `POST /api/scan/page?w=&h=` (body = a JPEG, PNG or WebP of a page, up to 5 MB) finds the lines of music, in the picture's pixels, plus the title, composer, key and time.
     - `POST /api/scan/line?parts=S,A,T,B&time=&key=` (body = a picture of one line) reads it into sol-fa, with the words and the bars to check first.
     - `POST /api/scan/check?parts=S,A,T,B&draft=&time=&key=` (body = a picture of one line; `draft` = the own model's reading, up to 4,000 characters) has Haiku correct the draft against the picture. Same answer as `/scan/line`, and it counts as a line.
-    - `GET /api/scan/allowance` returns what's left today.
+    - `POST /api/scan/fix?parts=S,A,T,B&draft=&time=&key=` (body = a picture of one line) has Cloudflare's reader correct the draft. Same answer as `/scan/line`; counts as a line.
+    - `POST /api/scan/words` (body = a picture of one row of words) returns `{ words }`, read by Cloudflare's reader; counts as a line.
+    - `GET /api/scan/allowance` returns what's left today, and `readers: { cloudflare, anthropic }`, which the app tries in that order.
 - `src/domain/`: groups and people, songs and repertoire, events and replies, attendance and check-in, practice, notices.
 - `src/errors.ts`: errors with an HTTP status and a message safe to show people.
 - `src/auth.ts`: sign-in.
 - Sol-fa: `src/domain/songs.ts` imports the app's reader from `../abu-app/src/solfa`, so a song is checked by the same code on both sides. Keep that module free of app-only imports.
 - Original sheets: R2 bucket `abu-sheets` (binding `SHEETS`), under `sheets/<song id>/`.
 - `migrations/`: D1 migrations, applied by `npm run deploy` (or `npm run db:migrate`).
-- `src/scan.ts`: reading scanned sheets with Claude: the prompts, the answer schemas, and shaping the answers.
+- `src/scan.ts`: the AI help for scanning (Cloudflare's reader, then Claude): the prompts, the answer schemas, and shaping the answers.
 - `test/`: access rules (`rules.test.ts`), sign-in and onboarding over HTTP (`auth.test.ts`), and the public endpoints (`http.test.ts`).
