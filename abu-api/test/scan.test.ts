@@ -110,6 +110,13 @@ describe('reading with Cloudflare’s reader', () => {
     expect(await readWords(withAi, JPEG.buffer, 'image/jpeg')).toBe('All peo-ple that on earth do dwell,');
   });
 
+  it('leaves out a part’s name read from the left edge of a row of words', async () => {
+    const { env: withAi } = cloudflare('S Blessing and honour,');
+    expect(await readWords(withAi, JPEG.buffer, 'image/jpeg')).toBe('Blessing and honour,');
+    const { env: again } = cloudflare('A -men, A -men.');
+    expect(await readWords(again, JPEG.buffer, 'image/jpeg')).toBe('A -men, A -men.');
+  });
+
   it('says when today’s free reading is used up', async () => {
     const { env: withAi } = cloudflare('', '4006: you have used up your daily free allocation of 10,000 neurons');
     await expect(readWords(withAi, JPEG.buffer, 'image/jpeg')).rejects.toMatchObject({ status: 503, message: expect.stringContaining('free AI reading') });

@@ -197,7 +197,7 @@ export function lineText(raw: { rows?: { part?: string; notes?: string }[]; word
 const CLOUDFLARE = '@cf/mistralai/mistral-small-3.1-24b-instruct';
 
 const FIX_ANSWER = `Answer with only the corrected line: one row per part, in order, each as the part name, two spaces and the notes (for example \`S  s1 | d :-.r /m :d |\`), then a row \`W  \` and the words. No other text.`;
-const WORDS_PROMPT = `This picture is one row of words (the lyrics) from a tonic sol-fa choir sheet. Copy the words exactly as printed, left to right, keeping hyphens between syllables. Answer with only those words, nothing else. If there are no words, answer with nothing.`;
+const WORDS_PROMPT = `This picture is one row of words (the lyrics) from a tonic sol-fa choir sheet. Copy the words exactly as printed, left to right, keeping hyphens between syllables. Leave out a part's name printed at the left edge (S, A, T, B, Soprano...) and bar numbers. Answer with only those words, nothing else. If there are no words, answer with nothing.`;
 
 /** Whether each reader can be used: the app tries them in this order. */
 export function scanReaders(env: Env): { cloudflare: boolean; anthropic: boolean } {
@@ -266,6 +266,8 @@ export async function readWords(env: Env, image: ArrayBuffer, type: ImageType): 
     .replace(/^["“'`]+|["”'`]+$/g, '')
     .replace(/\s+/g, ' ')
     .trim()
+    // A part's name read from the left edge anyway ("S Blessing and honour"); a lone "A" may be a word, so it stays.
+    .replace(/^(?:Soprano|Sop\.?|Tenor|Ten\.?|Bass|S|T|B)[.:]?\s+(?=\S)/, '')
     .slice(0, 400);
 }
 
