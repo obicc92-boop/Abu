@@ -350,7 +350,17 @@ export const api = {
     if (o.key) q.set('key', o.key);
     return request<ScanLineReading>(`/scan/check?${q}`, { method: 'POST', body: image, headers: { 'Content-Type': 'image/jpeg' } });
   },
-  scanAllowance: () => request<{ pages: number; lines: number }>('/scan/allowance'),
+  /** Cloudflare's reader corrects a line Abụ's own model read that fails the checker (a JPEG of the line). */
+  scanFix: (image: Blob, o: { parts: string[]; time?: string; key?: string; draft: string }) => {
+    const q = new URLSearchParams({ parts: o.parts.join(','), draft: o.draft });
+    if (o.time) q.set('time', o.time);
+    if (o.key) q.set('key', o.key);
+    return request<ScanLineReading>(`/scan/fix?${q}`, { method: 'POST', body: image, headers: { 'Content-Type': 'image/jpeg' } });
+  },
+  /** Cloudflare's reader reads a row of words (a JPEG of the row). */
+  scanWords: (image: Blob) => request<{ words: string }>('/scan/words', { method: 'POST', body: image, headers: { 'Content-Type': 'image/jpeg' } }),
+  /** Today's allowance, and which AI readers the Worker has (the app tries Cloudflare's, then Claude). */
+  scanAllowance: () => request<{ pages: number; lines: number; readers?: { cloudflare: boolean; anthropic: boolean } }>('/scan/allowance'),
   /** One play-through, on today's date on this phone (for the week and streak on Me). */
   recordPlay: (id: string, day = dayKey()) => request<{ plays: number }>(`/songs/${id}/plays`, json('POST', { day })),
   practiceSummary: () => request<PracticeSummary>(`/me/practice/summary?today=${dayKey()}`),

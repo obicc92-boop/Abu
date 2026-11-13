@@ -2,11 +2,17 @@
  * Scan a sheet (docs/scan-plan.md), in four steps:
  *
  * 1. Choose: take photos of the pages or choose a PDF or photos; the pages
- *    show as thumbnails to add to or remove before reading.
- * 2. Reading: Abụ finds the lines of music on each page (Haiku, through the
- *    Worker), reads every line with its own small model in the browser, and
- *    has Haiku check each reading against the picture; a line that still
- *    doesn't add up is read again by the strong reader (Opus).
+ *    show as thumbnails to add to or remove before reading, with how many
+ *    voice parts the sheet has.
+ * 2. Reading, the app doing all it can before any AI:
+ *    - a typed PDF is read from its own text (free, instant, exact);
+ *    - on photos and scans, the lines are found by where the ink is and read
+ *      by Abụ's own model in the browser, and rows of words are read by
+ *      Cloudflare's reader (Abụ's model reads only notes);
+ *    - a line that passes Abụ's checker is kept as read. Only a line that
+ *      fails goes to an AI: Cloudflare's reader, then Claude if the Worker
+ *      has a key (Haiku checks, Opus reads from scratch), and an AI's answer
+ *      is kept only if it passes. Otherwise the person fixes the line.
  * 3. Check: one line at a time, the picture above each part's row (they
  *    scroll sideways together), problems under the row they're in, play,
  *    read again, leave out, and "Looks right".
@@ -27,9 +33,11 @@ import { PlayButton } from '@/components/player-controls';
 import { Body, Button, Card, Chip, ErrorText, Kicker, MAX_WIDTH, Page, TopBar } from '@/components/ui';
 import { setScanDraft } from '@/scan/draft';
 import { joinLines, timeFor } from '@/scan/join';
-import { joinLine, problemsByPart, splitLine, tidyTitle, type LineRow } from '@/scan/line-text';
-import { readLineOwn } from '@/scan/own-reader';
+import { joinLine, problemsByPart, splitLine, tidyTitle, withoutNameColumn, withWords, wordsOf, type LineRow, type LineWords } from '@/scan/line-text';
+import { findLinesOwn, readLineOwn } from '@/scan/own-reader';
 import { cutLine, loadPages, MAX_PAGES, pageForFinding, scanningHere, takePhoto } from '@/scan/pages';
+import { readTypedSheet, type PageText } from '@/scan/pdf-text';
+import type { Box, FoundLine } from '@/scan/types';
 import { parseKey, parseSolfa, partName } from '@/solfa';
 import { useSession } from '@/state/session';
 import { colors, fonts, partColor, partLetter } from '@/theme/tokens';
@@ -40,25 +48,46 @@ const TIMES = ['2/4', '3/4', '4/4', '6/8'];
 /** Doh names the server accepts, by semitone. */
 const KEY_PARAM = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
 const READING_AT_ONCE = 3;
+/** Voice parts in each line, for photos and scans (0: Abụ works it out). Most choir sheets are SATB. */
+const PART_CHOICES: { n: number; label: string }[] = [
+  { n: 4, label: '4 · SATB' },
+  { n: 3, label: '3' },
+  { n: 2, label: '2' },
+  { n: 1, label: '1' },
+  { n: 0, label: 'Not sure' },
+];
+const BLANK_PAGE: PageText = { width: 1, height: 1, chars: [], segs: [], across: [], music: 0, pictured: 1 };
+
+/** The AI readers the Worker has, in the order they're tried. */
+interface Readers {
+  cloudflare: boolean;
+  anthropic: boolean;
+}
 /** Width of a character in the rows' monospace type, for sizing them so they never wrap. */
 const CHAR = 8.6;
 const ROW_HEIGHT = 42;
 
 interface Line {
   id: string;
+  /** The page it's on, counting from 1 (and from 0 in `pageIndex`). */
   page: number;
+  pageIndex: number;
   parts: string[];
   /** Rows of words in the line, for finding its rows. */
   words: number;
+  /** Where its rows of words are on the page (photos and scans), to read them. */
+  wordRows: FoundLine['wordRows'];
+  /** Its words, kept in place under their parts whoever reads the notes. */
+  wordTexts: LineWords[];
   blob: Blob;
   url: string;
   canvas: unknown;
   width: number;
   height: number;
-  /** Abụ's own model's reading, before Haiku checks it. */
+  /** What the app read itself: from the PDF's text, or with Abụ's own model. */
   draft: string;
-  /** Who read it: Abụ's own reader checked by Haiku, or the strong reader. */
-  via?: 'own' | 'strong';
+  /** Who read it: the PDF's text, Abụ's own reader, or an AI that corrected it. */
+  via?: 'text' | 'own' | 'cloudflare' | 'haiku' | 'strong';
   status: 'waiting' | 'reading' | 'read' | 'failed';
   text: string;
   doubts: { part: string; bar: number }[];
@@ -108,6 +137,8 @@ function Scanner() {
   const [lines, setLines] = useState<Line[]>([]);
   const [current, setCurrent] = useState(0);
   const [time, setTime] = useState('4/4');
+  const [partsWanted, setPartsWanted] = useState(4);
+  const [readers, setReaders] = useState<Readers>({ cloudflare: false, anthropic: false });
   const allowance = useQuery({ queryKey: ['scanAllowance'], queryFn: api.scanAllowance, enabled: phase === 'choose' });
 
   const update = (id: string, patch: Partial<Line>) => setLines((all) => all.map((l) => (l.id === id ? { ...l, ...patch } : l)));
@@ -136,38 +167,56 @@ function Scanner() {
   };
 
   /**
-   * Reads a line: Haiku checks Abụ's own model's reading, and if that still doesn't add up (or there's no
-   * reading, or `strong` is asked for) the strong reader reads it from scratch. Throws only when today's
-   * allowance is used up.
+   * A line's reading, with AI only as the last resort. A reading that passes Abụ's checker is kept as it is
+   * (the AIs broke more right lines than they fixed when sent every line). One that fails, or one the
+   * person asks to read again, goes to Cloudflare's reader, then Claude if the Worker has a key (Haiku
+   * checks it, Opus reads it from scratch); an answer is kept only if it passes. Otherwise the line keeps
+   * the app's own reading for the person to fix. Throws only when today's allowance is used up.
    */
-  const readOne = async (line: Line, head: Heading, songTime: string, strong = false): Promise<string | null> => {
-    update(line.id, { status: 'reading', error: undefined });
-    try {
-      const semitone = parseKey(head.key)?.semitone;
-      const opts = { parts: line.parts, time: songTime || undefined, key: semitone === undefined ? undefined : KEY_PARAM[semitone] };
-      let r: ScanLineReading | null = null;
-      let via: Line['via'] = 'strong';
-      if (!strong && line.draft) {
-        try {
-          r = await api.scanCheck(line.blob, { ...opts, draft: line.draft });
-          via = 'own';
-          if (parseSolfa(r.text, { time: songTime }).errors.length) r = null;
-        } catch (e) {
-          if (e instanceof ApiError && e.status === 429) throw e;
-          r = null; // the check failed: the strong reader reads it instead
-        }
-      }
-      if (!r) {
-        r = await api.scanLine(line.blob, opts);
-        via = 'strong';
-      }
-      update(line.id, { status: 'read', text: r.text, doubts: r.doubts, checked: false, via });
-      return r.text;
-    } catch (e) {
-      update(line.id, { status: 'failed', error: (e as Error).message });
-      if (e instanceof ApiError && e.status === 429) throw e;
-      return null;
+  const readOne = async (line: Line, head: Heading, songTime: string, ai: Readers, again = false): Promise<string> => {
+    const passes = (t: string) => splitLine(t).some((r) => r.part && r.text.trim()) && !parseSolfa(t, { time: songTime }).errors.length;
+    let own = withWords(line.draft, line.wordTexts);
+    // Free repairs first: a column of part names read as notes.
+    const named = !passes(own) && withoutNameColumn(own);
+    if (named && passes(named)) own = named;
+    if (!again && passes(own)) {
+      update(line.id, { status: 'read', text: own, checked: false });
+      return own;
     }
+    update(line.id, { status: 'reading', error: undefined });
+    const semitone = parseKey(head.key)?.semitone;
+    const opts = { parts: line.parts, time: songTime || undefined, key: semitone === undefined ? undefined : KEY_PARAM[semitone] };
+    const draft = (again && line.text) || own;
+    const tries: [NonNullable<Line['via']>, () => Promise<ScanLineReading>][] = [];
+    if (ai.cloudflare && draft.trim()) tries.push(['cloudflare', () => api.scanFix(line.blob, { ...opts, draft })]);
+    if (ai.anthropic && draft.trim()) tries.push(['haiku', () => api.scanCheck(line.blob, { ...opts, draft })]);
+    if (ai.anthropic) tries.push(['strong', () => api.scanLine(line.blob, opts)]);
+    let problem = '';
+    for (const [via, ask] of tries) {
+      try {
+        const r = await ask();
+        const text = withWords(r.text, line.wordTexts);
+        if (passes(text)) {
+          update(line.id, { status: 'read', text, doubts: r.doubts, checked: false, via });
+          return text;
+        }
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 429) {
+          update(line.id, { status: draft.trim() ? 'read' : 'failed', text: draft, error: e.message });
+          throw e;
+        }
+        problem = (e as Error).message;
+      }
+    }
+    // Nothing better: the line keeps the app's own reading, for the person to fix.
+    const text = again ? draft : own;
+    update(line.id, {
+      status: text.trim() ? 'read' : 'failed',
+      text,
+      checked: false,
+      error: text.trim() ? undefined : problem || 'This line couldn’t be read. Type it in, or leave it out.',
+    });
+    return text;
   };
 
   const read = async () => {
@@ -177,21 +226,66 @@ function Scanner() {
     setStage('finding');
     setDone({ n: 0, of: 1 });
     try {
+      const ai: Readers = (await api.scanAllowance().catch(() => null))?.readers ?? { cloudflare: false, anthropic: false };
+      setReaders(ai);
       const blobs = await Promise.all(chosen.map(async (f) => ({ file: f.file ?? (await (await fetch(f.uri)).blob()), type: f.type })));
       const { pages, more } = await loadPages(blobs);
       if (more) setNote(`Only the first ${MAX_PAGES} pages are read at a time.`);
       const found: Line[] = [];
       let head: Heading = { title: '', composer: '', key: '', time: '' };
+      const add = async (p: number, box: Box, l: { parts: string[]; words: number; wordRows?: FoundLine['wordRows']; text?: string }) => {
+        const cut = await cutLine(pages[p], box);
+        const text = l.text ?? '';
+        const wordRows = l.wordRows ?? [];
+        found.push({
+          id: `${p}-${found.length}`,
+          page: p + 1,
+          pageIndex: p,
+          parts: l.parts,
+          words: l.words,
+          wordRows,
+          wordTexts: text ? wordsOf(text) : wordRows.map((w) => ({ after: w.after, text: '' })),
+          ...cut,
+          draft: text,
+          via: text ? 'text' : 'own',
+          status: text ? 'read' : 'waiting',
+          text,
+          doubts: [],
+          checked: false,
+          skipped: false,
+        });
+      };
+
+      // 1. A typed PDF: read from its own text. A page that's one big picture (a scan) is read as a picture.
+      const texts = pages.map((p) => (p.text && p.text.pictured <= 0.5 ? p.text : null));
+      const typed = texts.some(Boolean) ? readTypedSheet(texts.map((t) => t ?? BLANK_PAGE)) : null;
+      const typedLines = typed && !typed.staff ? typed.lines : [];
+      if (typed && typedLines.length) head = { title: typed.title, composer: '', key: typed.key, time: typed.time };
       setDone({ n: 0, of: pages.length });
       for (let p = 0; p < pages.length; p++) {
-        const small = await pageForFinding(pages[p]);
-        const page = await api.scanPage(small.blob, small.width, small.height);
-        // The first page's heading; later pages fill in what it left out.
-        head = { title: head.title || page.title, composer: head.composer || page.composer, key: head.key || page.key, time: head.time || page.time };
-        for (const l of page.lines) {
-          const box = { top: l.top * small.scale, bottom: l.bottom * small.scale, left: l.left * small.scale, right: l.right * small.scale };
-          const cut = await cutLine(pages[p], box);
-          found.push({ id: `${p}-${found.length}`, page: p + 1, parts: l.parts, words: l.words, ...cut, draft: '', status: 'waiting', text: '', doubts: [], checked: false, skipped: false });
+        const onPage = typedLines.filter((l) => l.page === p);
+        if (onPage.length) {
+          const s = pages[p].pointScale ?? 1;
+          for (const l of onPage) await add(p, { left: l.box[0] * s, top: l.box[1] * s, right: l.box[2] * s, bottom: l.box[3] * s }, l);
+        } else {
+          // 2. A photo or scanned page: the lines found by where the ink is, with Abụ's own model.
+          let onPicture: FoundLine[] = [];
+          try {
+            const found = await findLinesOwn(pages[p].canvas, partsWanted);
+            // A tilted photo comes back straightened: its lines are cut from that.
+            pages[p] = { ...pages[p], canvas: found.page };
+            onPicture = found.lines;
+          } catch {
+            // Abụ's reader didn't load: Claude finds the lines if it can.
+          }
+          if (!onPicture.length && ai.anthropic) {
+            // 3. The last resort: Claude finds the lines.
+            const small = await pageForFinding(pages[p]);
+            const page = await api.scanPage(small.blob, small.width, small.height);
+            head = { title: head.title || page.title, composer: head.composer || page.composer, key: head.key || page.key, time: head.time || page.time };
+            onPicture = page.lines.map((l) => ({ box: { top: l.top * small.scale, bottom: l.bottom * small.scale, left: l.left * small.scale, right: l.right * small.scale }, parts: l.parts, words: l.words, wordRows: [] }));
+          }
+          for (const l of onPicture) await add(p, l.box, l);
         }
         setLines([...found]);
         setDone({ n: p + 1, of: pages.length });
@@ -201,32 +295,53 @@ function Scanner() {
         return setError('No lines of sol-fa were found on this sheet. Try a clearer, straighter photo of the whole page.');
       }
       setHeading(head);
-      // Abụ's own reader first, on the phone (free); if it can't load, the strong reader reads every line.
+
+      // Abụ's own model reads the lines found in pictures, in the browser (free).
       setStage('reading');
-      for (let i = 0; i < found.length; i++) {
-        setDone({ n: i, of: found.length });
+      const waiting = found.filter((l) => l.status === 'waiting');
+      for (let i = 0; i < waiting.length; i++) {
+        setDone({ n: i, of: waiting.length });
         try {
-          found[i].draft = (await readLineOwn(found[i].canvas, found[i].parts, found[i].words)).text;
+          waiting[i].draft = (await readLineOwn(waiting[i].canvas, waiting[i].parts, waiting[i].words)).text;
         } catch {
-          found[i].draft = '';
+          waiting[i].draft = '';
         }
       }
-      // The time, as printed or from the bars Abụ's reader found.
+      // Rows of words in pictures: Abụ's model reads only notes, so Cloudflare's reader reads them.
+      if (ai.cloudflare) {
+        const rows = waiting.flatMap((l) => l.wordRows.map((w, k) => ({ l, w, k })));
+        let next = 0;
+        const worker = async () => {
+          while (next < rows.length) {
+            const { l, w, k } = rows[next++];
+            try {
+              const cut = await cutLine(pages[l.pageIndex], w.box);
+              URL.revokeObjectURL(cut.url);
+              l.wordTexts[k] = { after: w.after, text: (await api.scanWords(cut.blob)).words };
+            } catch {
+              // No words for this row: the person can type them.
+            }
+          }
+        };
+        await Promise.all(Array.from({ length: READING_AT_ONCE }, worker));
+      }
+
+      // The time, as printed or from the bars read; then lines that fail the checker get AI help.
       const songTime = timeFor(head.time, found.map((l) => l.draft).filter(Boolean));
       setStage('checking');
       setDone({ n: 0, of: found.length });
       let next = 0;
       let finished = 0;
       let stopped = false;
-      const texts: string[] = [];
+      const read: string[] = [];
       const worker = async () => {
         while (!stopped && next < found.length) {
           const line = found[next++];
           try {
-            const text = await readOne(line, head, songTime);
-            if (text) texts.push(text);
+            const text = await readOne(line, head, songTime, ai);
+            if (text) read.push(text);
           } catch (e) {
-            // Out of today's allowance: no use trying the other lines.
+            // Out of today's allowance: the other lines keep what the app read.
             stopped = true;
             setNote((e as Error).message);
           }
@@ -234,7 +349,8 @@ function Scanner() {
         }
       };
       await Promise.all(Array.from({ length: READING_AT_ONCE }, worker));
-      setTime(timeFor(head.time, texts.length ? texts : found.map((l) => l.draft)));
+      if (stopped) for (const l of found.slice(next)) update(l.id, { status: l.draft.trim() ? 'read' : 'failed', text: withWords(l.draft, l.wordTexts) });
+      setTime(timeFor(head.time, read.length ? read : found.map((l) => l.draft)));
       setCurrent(0);
       setPhase('check');
     } catch (e) {
@@ -256,6 +372,8 @@ function Scanner() {
         hasPdf={hasPdf}
         error={error}
         pagesLeft={allowance.data?.pages}
+        partsWanted={partsWanted}
+        setPartsWanted={setPartsWanted}
         onPhoto={photo}
         onChoose={choose}
         onRemove={(i) => setChosen(chosen.filter((_, k) => k !== i))}
@@ -290,7 +408,8 @@ function Scanner() {
       doh={doh}
       note={note}
       update={update}
-      readAgain={(l) => readOne(l, heading, time, true).catch(() => null)}
+      canReadAgain={readers.cloudflare || readers.anthropic}
+      readAgain={(l) => readOne(l, heading, time, readers, true).catch(() => null)}
       onFinish={() => setPhase('finish')}
     />
   );
@@ -303,6 +422,8 @@ function ChooseStep(props: {
   hasPdf: boolean;
   error: string | null;
   pagesLeft?: number;
+  partsWanted: number;
+  setPartsWanted(n: number): void;
   onPhoto(): void;
   onChoose(): void;
   onRemove(i: number): void;
@@ -367,9 +488,18 @@ function ChooseStep(props: {
               ) : null}
             </View>
           </Card>
+          <Card>
+            <Kicker>Voice parts in each line</Kicker>
+            <View style={styles.wrap}>
+              {PART_CHOICES.map((c) => (
+                <Chip key={c.n} label={c.label} on={props.partsWanted === c.n} onPress={() => props.setPartsWanted(c.n)} />
+              ))}
+            </View>
+            <Text style={styles.small}>For photos and scans. A typed PDF is read from its own text.</Text>
+          </Card>
           {error ? <ErrorText message={error} /> : null}
           <Button label="Read the sheet" onPress={props.onRead} />
-          <Text style={styles.tip}>Reading takes about a minute. Then you check each line before anything is saved.</Text>
+          <Text style={styles.tip}>Abụ reads the sheet itself, and asks an AI only about lines it can’t get right. Then you check each line before anything is saved.</Text>
         </>
       )}
       {pagesLeft !== undefined ? <Text style={[styles.tip, { textAlign: 'center' }]}>You can scan {pagesLeft} more page{pagesLeft === 1 ? '' : 's'} today.</Text> : null}
@@ -453,11 +583,20 @@ interface CheckProps {
   doh: number;
   note: string | null;
   update(id: string, patch: Partial<Line>): void;
+  canReadAgain: boolean;
   readAgain(line: Line): Promise<string | null>;
   onFinish(): void;
 }
 
-function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, update, readAgain, onFinish }: CheckProps) {
+const READ_BY: Record<NonNullable<Line['via']>, string> = {
+  text: 'Read from the PDF’s own text.',
+  own: 'Read by Abụ’s own reader.',
+  cloudflare: 'Read by Abụ’s own reader, corrected by Cloudflare’s AI.',
+  haiku: 'Read by Abụ’s own reader, corrected by Claude.',
+  strong: 'Read by Claude.',
+};
+
+function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, update, canReadAgain, readAgain, onFinish }: CheckProps) {
   const line = lines[current];
   const [zoom, setZoom] = useState(true);
   const [width, setWidth] = useState(0);
@@ -652,16 +791,18 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
             {player.message ? <Text style={styles.small}>{player.message}</Text> : null}
           </View>
           <View style={[styles.toolbar, styles.pad]}>
-            <Pressable onPress={() => readAgain(line)} disabled={line.status === 'reading'} accessibilityRole="button" accessibilityLabel="Read it again" style={styles.tool}>
-              {line.status === 'reading' ? <ActivityIndicator size="small" color={colors.muted} /> : <AgainIcon color={colors.muted} />}
-              <Text style={styles.toolText}>{line.status === 'reading' ? 'Reading…' : 'Read it again'}</Text>
-            </Pressable>
+            {canReadAgain ? (
+              <Pressable onPress={() => readAgain(line)} disabled={line.status === 'reading'} accessibilityRole="button" accessibilityLabel="Ask the AI to read it again" style={styles.tool}>
+                {line.status === 'reading' ? <ActivityIndicator size="small" color={colors.muted} /> : <AgainIcon color={colors.muted} />}
+                <Text style={styles.toolText}>{line.status === 'reading' ? 'Reading…' : 'Ask the AI'}</Text>
+              </Pressable>
+            ) : null}
             <Pressable onPress={() => update(line.id, { skipped: !line.skipped, checked: false })} accessibilityRole="button" style={styles.tool}>
               <CloseIcon color={colors.muted} size={14} />
               <Text style={styles.toolText}>{line.skipped ? 'Keep this line' : 'Leave this line out'}</Text>
             </Pressable>
           </View>
-          {line.via ? <Text style={[styles.small, styles.pad, { paddingTop: 0 }]}>{line.via === 'own' ? 'Read by Abụ’s own reader, checked by Haiku.' : 'Read by the strong reader.'}</Text> : null}
+          {line.via ? <Text style={[styles.small, styles.pad, { paddingTop: 0 }]}>{READ_BY[line.via]}</Text> : null}
         </Card>
       </ScrollView>
 
