@@ -27,8 +27,8 @@ export interface PdfChar {
   mark: string;
 }
 
-/** A drawn vertical line: x, top, bottom. */
-export type Seg = [number, number, number];
+/** A drawn vertical line: x, top, bottom, and how thick it's drawn (when known). */
+export type Seg = [number, number, number, number?];
 
 export interface PageText {
   width: number;
@@ -105,22 +105,218 @@ const compose = (outer: Matrix, inner: number[]): Matrix => [
 ];
 const apply = (m: Matrix, x: number, y: number): [number, number] => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
 
-/** The page's characters (in reading fonts), drawn lines and staff-font count, from pdf.js. */
+/** A glyph as pdf.js's operator list gives it in a showText. */
+interface PdfGlyph {
+  unicode?: string;
+  width?: number;
+  isSpace?: boolean;
+}
+
+/** The graphics state that matters here, saved and restored with the page's "q" and "Q". */
+interface Gfx {
+  ctm: Matrix;
+  lineWidth: number;
+  /** What can be seen, on the page: left, top, right, bottom. */
+  clip: [number, number, number, number];
+  font: { size: number; dir: number; matrix: number[]; music: boolean };
+  charSpacing: number;
+  wordSpacing: number;
+  hScale: number;
+  rise: number;
+  leading: number;
+  invisible: boolean;
+}
+
+/**
+ * The page's characters (in reading fonts), drawn lines and staff-font count, from pdf.js.
+ *
+ * The characters come from the drawing operations, as the page is painted:
+ * each glyph where it's drawn and as wide as its font makes it, leaving out
+ * what's hidden (clipped away, or invisible text). When that finds nothing,
+ * pdf.js's text content is used instead, each run of text split evenly.
+ */
 export async function pageText(page: PdfJsPage, OPS: PdfOps): Promise<PageText> {
   const vp = page.getViewport({ scale: 1 });
   const at = (x: number, y: number) => vp.convertToViewportPoint(x, y) as [number, number];
   // The operator list first: it loads the fonts, whose names tell staff-notation fonts apart.
   const ops = await page.getOperatorList();
+  const fontOf = (id: string): { name: string; matrix?: number[] } => {
+    try {
+      const f = page.commonObjs.has(id) ? (page.commonObjs.get(id) as { name?: string; fontMatrix?: number[] } | undefined) : undefined;
+      return { name: f?.name ?? '', matrix: f?.fontMatrix ? Array.from(f.fontMatrix) : undefined };
+    } catch {
+      return { name: '' };
+    }
+  };
+
+  // Drawn lines: the table's bar lines and the rules between lines of music.
+  const segs: Seg[] = [];
+  const across: number[] = [];
+  const long = 0.3 * vp.width;
+  let pictured = 0;
+  const chars: PdfChar[] = [];
+  let music = 0;
+  const stack: Gfx[] = [];
+  let g: Gfx = {
+    ctm: IDENTITY,
+    lineWidth: 1,
+    clip: [-Infinity, -Infinity, Infinity, Infinity],
+    font: { size: 0, dir: 1, matrix: [0.001, 0, 0, 0.001, 0, 0], music: false },
+    charSpacing: 0,
+    wordSpacing: 0,
+    hScale: 1,
+    rise: 0,
+    leading: 0,
+    invisible: false,
+  };
+  let clipNext = false;
+  // The text matrix, and where the next glyph goes in it (pdf.js's current.x, y and lineX, Y).
+  let tm: Matrix = IDENTITY;
+  let tx = 0;
+  let ty = 0;
+  let lx = 0;
+  let ly = 0;
+  const scale = () => Math.sqrt(Math.abs(g.ctm[0] * g.ctm[3] - g.ctm[1] * g.ctm[2]));
+  /** Narrows what can be seen to a box drawn in user space. */
+  const clipTo = (x0: number, y0: number, x1: number, y1: number) => {
+    const pts = [apply(g.ctm, x0, y0), apply(g.ctm, x1, y0), apply(g.ctm, x0, y1), apply(g.ctm, x1, y1)].map(([px, py]) => at(px, py));
+    const xs = pts.map((p) => p[0]);
+    const ys = pts.map((p) => p[1]);
+    const [l, t, r, b] = g.clip;
+    g.clip = [Math.max(l, Math.min(...xs)), Math.max(t, Math.min(...ys)), Math.min(r, Math.max(...xs)), Math.min(b, Math.max(...ys))];
+  };
+  const moveText = (x: number, y: number) => {
+    lx += x;
+    ly += y;
+    tx = lx;
+    ty = ly;
+  };
+  const fills = new Set([OPS.fill, OPS.eoFill]);
+  const strokes = new Set([OPS.stroke, OPS.closeStroke, OPS.fillStroke, OPS.eoFillStroke, OPS.closeFillStroke, OPS.closeEOFillStroke]);
+
+  /** Places a showText's glyphs on the page, as pdf.js's canvas does, and moves on past them. */
+  const show = (glyphs: (PdfGlyph | number)[]) => {
+    const { size, dir, matrix } = g.font;
+    const m = compose(g.ctm, tm);
+    const hScale = g.hScale * dir;
+    let x = 0;
+    for (const glyph of glyphs) {
+      if (typeof glyph === 'number') {
+        x -= (glyph * size) / 1000;
+        continue;
+      }
+      const advance = (Number(glyph.width) || 0) * size * matrix[0];
+      const start = x;
+      x += advance + ((glyph.isSpace ? g.wordSpacing : 0) + g.charSpacing) * dir;
+      const text = glyph.unicode ?? '';
+      if (!text || g.invisible) continue;
+      if (g.font.music) {
+        music += Array.from(text).length;
+        continue;
+      }
+      const [ox, oy] = at(...apply(m, tx + start * hScale, ty + g.rise));
+      const [ex, ey] = at(...apply(m, tx + (start + advance) * hScale, ty + g.rise));
+      const len = Math.hypot(ex - ox, ey - oy);
+      if (len && Math.abs(ey - oy) > 0.1 * len) continue; // sideways text (labels down the margin)
+      const [ux, uy] = at(...apply(m, tx + start * hScale, ty + g.rise + size));
+      const height = Math.hypot(ux - ox, uy - oy);
+      // Hidden by a clip when hardly any of it shows (a glyph cut part way, as some sheets' table cells do, still reads).
+      const [l, t, r, b] = g.clip;
+      const shown = Math.min(r, Math.max(ox, ex)) - Math.max(l, Math.min(ox, ex));
+      const [top, bottom] = [oy - 0.7 * height, oy];
+      if (shown < 0.2 * Math.max(0.1, Math.abs(ex - ox)) || Math.min(b, bottom) - Math.max(t, top) < 0.1 * height) continue;
+      const pieces = Array.from(text);
+      const step = (ex - ox) / pieces.length;
+      pieces.forEach((c, k) => chars.push({ c: /\s/.test(c) ? ' ' : c, x0: ox + k * step, x1: ox + (k + 1) * step, y: oy, size: height, mark: '' }));
+    }
+    tx += x * hScale;
+  };
+
+  ops.fnArray.forEach((fn, i) => {
+    const args = ops.argsArray[i] as unknown[];
+    if (fn === OPS.save) stack.push({ ...g, font: { ...g.font } });
+    else if (fn === OPS.restore) g = stack.pop() ?? g;
+    else if (fn === OPS.transform) g.ctm = compose(g.ctm, args as number[]);
+    else if (fn === OPS.setLineWidth) g.lineWidth = Number(args?.[0]) || 0;
+    else if (fn === OPS.setGState) {
+      for (const [key, value] of (args?.[0] as [string, unknown][] | undefined) ?? []) if (key === 'LW') g.lineWidth = Number(value) || 0;
+    } else if (fn === OPS.clip || fn === OPS.eoClip) clipNext = true;
+    else if (fn === OPS.paintFormXObjectBegin) {
+      stack.push({ ...g, font: { ...g.font } });
+      if (Array.isArray(args?.[0]) || ArrayBuffer.isView(args?.[0])) g.ctm = compose(g.ctm, Array.from(args[0] as ArrayLike<number>));
+      const box = args?.[1] as ArrayLike<number> | null | undefined;
+      if (box && box.length === 4) clipTo(box[0], box[1], box[2], box[3]);
+    } else if (fn === OPS.paintFormXObjectEnd) g = stack.pop() ?? g;
+    else if (fn === OPS.beginText) {
+      tm = IDENTITY;
+      tx = ty = lx = ly = 0;
+    } else if (fn === OPS.setTextMatrix) {
+      tm = Array.from(args[0] as ArrayLike<number>) as Matrix;
+      tx = ty = lx = ly = 0;
+    } else if (fn === OPS.moveText) moveText(Number(args[0]), Number(args[1]));
+    else if (fn === OPS.setLeadingMoveText) {
+      g.leading = Number(args[1]);
+      moveText(Number(args[0]), Number(args[1]));
+    } else if (fn === OPS.setLeading) g.leading = -Number(args[0]);
+    else if (fn === OPS.nextLine) moveText(0, g.leading);
+    else if (fn === OPS.setFont) {
+      const size = Number(args[1]) || 0;
+      const f = fontOf(String(args[0]));
+      g.font = { size: Math.abs(size), dir: size < 0 ? -1 : 1, matrix: f.matrix ?? [0.001, 0, 0, 0.001, 0, 0], music: MUSIC_FONT.test(f.name) };
+    } else if (fn === OPS.setCharSpacing) g.charSpacing = Number(args[0]) || 0;
+    else if (fn === OPS.setWordSpacing) g.wordSpacing = Number(args[0]) || 0;
+    else if (fn === OPS.setHScale) g.hScale = (Number(args[0]) || 100) / 100;
+    else if (fn === OPS.setTextRise) g.rise = Number(args[0]) || 0;
+    else if (fn === OPS.setTextRenderingMode) g.invisible = (Number(args[0]) & 3) === 3;
+    else if (fn === OPS.showText) show((args[0] as (PdfGlyph | number)[]) ?? []);
+    else if (fn === OPS.paintImageXObject || fn === OPS.paintInlineImageXObject || fn === OPS.paintImageMaskXObject || fn === OPS.paintJpegXObject) {
+      // A picture fills the unit square, mapped onto the page by the current matrix.
+      const corners = [apply(g.ctm, 0, 0), apply(g.ctm, 1, 0), apply(g.ctm, 0, 1), apply(g.ctm, 1, 1)].map(([px, py]) => at(px, py));
+      const xs = corners.map((c) => Math.min(vp.width, Math.max(0, c[0])));
+      const ys = corners.map((c) => Math.min(vp.height, Math.max(0, c[1])));
+      pictured = Math.max(pictured, ((Math.max(...xs) - Math.min(...xs)) * (Math.max(...ys) - Math.min(...ys))) / (vp.width * vp.height));
+    } else if (fn === OPS.constructPath) {
+      const paint = args[0] as number;
+      const data = (args[1] as ArrayLike<number>[] | undefined)?.[0];
+      const box = args[2] as ArrayLike<number> | null | undefined;
+      if (clipNext) {
+        clipNext = false;
+        if (box && box.length === 4 && Number.isFinite(box[0])) clipTo(box[0], box[1], box[2], box[3]);
+      }
+      const isFill = fills.has(paint);
+      const isStroke = strokes.has(paint);
+      if ((!isFill && !isStroke) || !data) return; // a clip, not a drawing
+      for (const poly of subpaths(data)) {
+        const pts = poly.map(([px, py]) => at(...apply(g.ctm, px, py)));
+        if (isStroke || paint === OPS.fillStroke || paint === OPS.eoFillStroke) {
+          for (let k = 1; k < pts.length; k++) {
+            const [p, q] = [pts[k - 1], pts[k]];
+            if (Math.abs(p[0] - q[0]) < 1 && Math.abs(p[1] - q[1]) > 4) segs.push([(p[0] + q[0]) / 2, Math.min(p[1], q[1]), Math.max(p[1], q[1]), g.lineWidth * scale()]);
+            else if (Math.abs(p[1] - q[1]) < 1 && Math.abs(p[0] - q[0]) > long) across.push((p[1] + q[1]) / 2);
+          }
+        }
+        if (isFill) {
+          // A filled thin box is a drawn line.
+          const xs = pts.map((p) => p[0]);
+          const ys = pts.map((p) => p[1]);
+          const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+          if (x1 - x0 < 2.5 && y1 - y0 > 4) segs.push([(x0 + x1) / 2, y0, y1, x1 - x0]);
+          else if (y1 - y0 < 2.5 && x1 - x0 > long) across.push((y0 + y1) / 2);
+        }
+      }
+    }
+  });
+
+  const result = { width: vp.width, height: vp.height, segs, across: across.sort((a, b) => a - b), pictured };
+  if (chars.some((c) => c.c !== ' ') || music) return { ...result, chars, music };
+  return { ...result, ...(await textItems(page, at, fontOf)) };
+}
+
+/** The page's characters from pdf.js's text content, each run of text split evenly (when the drawing operations gave none). */
+async function textItems(page: PdfJsPage, at: (x: number, y: number) => [number, number], fontOf: (id: string) => { name: string }) {
   const content = await page.getTextContent({ disableNormalization: true });
   const chars: PdfChar[] = [];
   let music = 0;
-  const fontName = (id: string) => {
-    try {
-      return page.commonObjs.has(id) ? ((page.commonObjs.get(id) as { name?: string } | undefined)?.name ?? '') : '';
-    } catch {
-      return '';
-    }
-  };
   for (const raw of content.items) {
     const it = raw as PdfTextItem;
     if (typeof it.str !== 'string' || !it.str) continue;
@@ -130,7 +326,7 @@ export async function pageText(page: PdfJsPage, OPS: PdfOps): Promise<PageText> 
     const len = Math.hypot(ax - x, ay - y);
     if (!len || Math.abs(ay - y) > 0.1 * len) continue; // sideways text (labels down the margin)
     const glyphs = Array.from(it.str);
-    if (MUSIC_FONT.test(fontName(it.fontName))) {
+    if (MUSIC_FONT.test(fontOf(it.fontName).name)) {
       music += glyphs.length;
       continue;
     }
@@ -138,60 +334,7 @@ export async function pageText(page: PdfJsPage, OPS: PdfOps): Promise<PageText> 
     const step = it.width / glyphs.length;
     glyphs.forEach((g, i) => chars.push({ c: /\s/.test(g) ? ' ' : g, x0: x + i * step, x1: x + (i + 1) * step, y, size, mark: '' }));
   }
-
-  // Drawn lines: the table's bar lines and the rules between lines of music.
-  const segs: Seg[] = [];
-  const across: number[] = [];
-  const long = 0.3 * vp.width;
-  let pictured = 0;
-  const stack: Matrix[] = [];
-  let ctm: Matrix = IDENTITY;
-  const fills = new Set([OPS.fill, OPS.eoFill]);
-  const strokes = new Set([OPS.stroke, OPS.closeStroke, OPS.fillStroke, OPS.eoFillStroke, OPS.closeFillStroke, OPS.closeEOFillStroke]);
-  ops.fnArray.forEach((fn, i) => {
-    const args = ops.argsArray[i] as unknown[];
-    if (fn === OPS.save) stack.push(ctm);
-    else if (fn === OPS.restore) ctm = stack.pop() ?? IDENTITY;
-    else if (fn === OPS.transform) ctm = compose(ctm, args as number[]);
-    else if (fn === OPS.paintFormXObjectBegin) {
-      stack.push(ctm);
-      if (Array.isArray(args?.[0]) || ArrayBuffer.isView(args?.[0])) ctm = compose(ctm, Array.from(args[0] as ArrayLike<number>));
-    } else if (fn === OPS.paintFormXObjectEnd) ctm = stack.pop() ?? IDENTITY;
-    else if (fn === OPS.paintImageXObject || fn === OPS.paintInlineImageXObject || fn === OPS.paintImageMaskXObject || fn === OPS.paintJpegXObject) {
-      // A picture fills the unit square, mapped onto the page by the current matrix.
-      const corners = [apply(ctm, 0, 0), apply(ctm, 1, 0), apply(ctm, 0, 1), apply(ctm, 1, 1)].map(([px, py]) => at(px, py));
-      const xs = corners.map((c) => Math.min(vp.width, Math.max(0, c[0])));
-      const ys = corners.map((c) => Math.min(vp.height, Math.max(0, c[1])));
-      pictured = Math.max(pictured, ((Math.max(...xs) - Math.min(...xs)) * (Math.max(...ys) - Math.min(...ys))) / (vp.width * vp.height));
-    }
-    else if (fn === OPS.constructPath) {
-      const paint = args[0] as number;
-      const isFill = fills.has(paint);
-      const isStroke = strokes.has(paint);
-      if (!isFill && !isStroke) return; // a clip, not a drawing
-      const data = (args[1] as ArrayLike<number>[] | undefined)?.[0];
-      if (!data) return;
-      for (const poly of subpaths(data)) {
-        const pts = poly.map(([px, py]) => at(...apply(ctm, px, py)));
-        if (isStroke || paint === OPS.fillStroke || paint === OPS.eoFillStroke) {
-          for (let k = 1; k < pts.length; k++) {
-            const [p, q] = [pts[k - 1], pts[k]];
-            if (Math.abs(p[0] - q[0]) < 1 && Math.abs(p[1] - q[1]) > 4) segs.push([(p[0] + q[0]) / 2, Math.min(p[1], q[1]), Math.max(p[1], q[1])]);
-            else if (Math.abs(p[1] - q[1]) < 1 && Math.abs(p[0] - q[0]) > long) across.push((p[1] + q[1]) / 2);
-          }
-        }
-        if (isFill) {
-          // A filled thin box is a drawn line.
-          const xs = pts.map((p) => p[0]);
-          const ys = pts.map((p) => p[1]);
-          const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
-          if (x1 - x0 < 2.5 && y1 - y0 > 4) segs.push([(x0 + x1) / 2, y0, y1]);
-          else if (y1 - y0 < 2.5 && x1 - x0 > long) across.push((y0 + y1) / 2);
-        }
-      }
-    }
-  });
-  return { width: vp.width, height: vp.height, chars, segs, across: across.sort((a, b) => a - b), music, pictured };
+  return { chars, music };
 }
 
 /** A path's pieces as lists of points (pdf.js 5's path data: 0 move, 1 line, 2 curve, 3 quadratic curve, 4 close). */
@@ -227,7 +370,8 @@ const NOTE = "(?:de|re|fe|se|le|ra|ma|lo|ta|ba|d|r|m|f|s|l|t)(?:'{1,2}|[12])?";
 const RAISED: Record<string, string> = { '¹': "'", '²': "''" };
 const LOWERED: Record<string, string> = { '₁': '1', '₂': '2' };
 const MARKISH = new Set(['1', '2', '|', 'l', 'I', "'", '’', 'ʼ']);
-const isLetter = (c: string) => c.toLowerCase() !== c.toUpperCase();
+/** A small letter, as notes are (a capital beside the music is a part's name, which takes no octave mark). */
+const isSmallLetter = (c: string) => c !== c.toUpperCase();
 
 function median(values: number[]): number {
   const s = [...values].sort((a, b) => a - b);
@@ -235,11 +379,15 @@ function median(values: number[]): number {
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 }
 
-/** Rows by baseline, each sorted left to right, with its baseline and type size. */
+/**
+ * Rows by baseline, each sorted left to right, with its baseline and type
+ * size. Rows are made from the visible characters; each space then joins
+ * the row it sits on (spaces can be set tiny, between two rows).
+ */
 function cluster(chars: PdfChar[]): { rows: PdfChar[][]; base: number[]; size: number[] } {
   let rows: PdfChar[][] = [];
   let cur: PdfChar[] = [];
-  for (const c of [...chars].sort((a, b) => a.y - b.y)) {
+  for (const c of chars.filter((ch) => ch.c !== ' ').sort((a, b) => a.y - b.y)) {
     if (cur.length && c.y - cur[cur.length - 1].y > 0.3 * Math.min(c.size, cur[cur.length - 1].size)) {
       rows.push(cur);
       cur = [];
@@ -247,26 +395,42 @@ function cluster(chars: PdfChar[]): { rows: PdfChar[][]; base: number[]; size: n
     cur.push(c);
   }
   if (cur.length) rows.push(cur);
-  rows = rows.filter((r) => r.some((c) => c.c !== ' ')).map((r) => [...r].sort((a, b) => a.x0 - b.x0));
-  const ink = (r: PdfChar[]) => r.filter((c) => c.c !== ' ');
-  return { rows, base: rows.map((r) => median(ink(r).map((c) => c.y))), size: rows.map((r) => median(ink(r).map((c) => c.size))) };
+  const base = rows.map((r) => median(r.map((c) => c.y)));
+  const size = rows.map((r) => median(r.map((c) => c.size)));
+  for (const c of chars) {
+    if (c.c !== ' ' || !rows.length) continue;
+    let best = 0;
+    for (let k = 1; k < rows.length; k++) if (Math.abs(base[k] - c.y) < Math.abs(base[best] - c.y)) best = k;
+    if (Math.abs(base[best] - c.y) <= 0.5 * size[best]) rows[best].push(c);
+  }
+  rows = rows.map((r) => [...r].sort((a, b) => a.x0 - b.x0));
+  return { rows, base, size };
 }
 
 const SOLFA_CHARS = new RegExp(`${NOTE}|[|¦:.,\\-–—/x!]`, 'g');
 const NOTES = new RegExp(NOTE, 'g');
 
-/** Whether a row's text is sol-fa: almost all notes and marks, with at least two notes or holds. */
+/**
+ * Whether a row's text is sol-fa: almost all notes and marks, with at least
+ * two notes or holds; or a part resting the whole line (only beat marks).
+ */
 export function isSolfa(text: string): boolean {
   const t = text.replace(/ /g, '');
   if (!t) return false;
+  const colons = t.match(/:/g)?.length ?? 0;
+  if (/^[:|¦/]+$/.test(t) && colons >= 2) return true;
   const rest = t.replace(SOLFA_CHARS, '');
-  return (t.length - rest.length) / t.length > 0.85 && (t.match(NOTES)?.length ?? 0) + (t.match(/-/g)?.length ?? 0) >= 2;
+  return (t.length - rest.length) / t.length > 0.85 && ((t.match(NOTES)?.length ?? 0) + (t.match(/-/g)?.length ?? 0) >= 2 || colons >= 3);
 }
 
-/** Finds the rows, then octave marks: small figures or ticks just after a note in a row of notes. */
-export function rowsOf(chars: PdfChar[]) {
-  if (!chars.some((c) => c.c !== ' ')) return { rows: [] as PdfChar[][], base: [] as number[], size: [] as number[] };
-  const letters = chars.filter((c) => isLetter(c.c));
+/**
+ * Finds the rows, then octave marks: small figures or ticks just after a note
+ * in a row of notes. Works on copies, so the page's characters can be read again.
+ */
+export function rowsOf(input: PdfChar[]) {
+  if (!input.some((c) => c.c !== ' ')) return { rows: [] as PdfChar[][], base: [] as number[], size: [] as number[] };
+  const chars = input.map((c) => ({ ...c }));
+  const letters = chars.filter((c) => isSmallLetter(c.c));
   const near = (m: PdfChar, n: PdfChar) => m.x0 - n.x1 >= -1.5 && m.x0 - n.x1 < 0.5 * n.size && Math.abs(n.y - m.y) < 0.8 * n.size;
   // A small figure or tick right after a bigger letter (judged against that letter, not the page: some
   // sheets set their words smaller than their notes).
@@ -275,8 +439,10 @@ export function rowsOf(chars: PdfChar[]) {
   const others = chars.filter((c) => !isCand(c));
   const notes = cluster(others)
     .rows.filter((r) => isSolfa(r.map((c) => c.c).join('')))
-    .flatMap((r) => r.filter((c) => isLetter(c.c)));
+    .flatMap((r) => r.filter((c) => isSmallLetter(c.c)));
   const leftovers: PdfChar[] = [];
+  // A note with a mark reaches to the mark's right edge, so no gap is left where the mark was.
+  const reach = new Map<PdfChar, number>();
   for (const m of cands) {
     const uni = m.c in RAISED || m.c in LOWERED;
     const close = notes.filter((n) => near(m, n) && (uni || m.size < 0.85 * n.size));
@@ -295,22 +461,30 @@ export function rowsOf(chars: PdfChar[]) {
       const up = m.y < note.y - 0.12 * note.size;
       note.mark += up ? (two ? "''" : "'") : two ? '2' : '1';
     }
+    reach.set(note, Math.max(reach.get(note) ?? note.x1, m.x1));
   }
+  for (const [note, x1] of reach) note.x1 = x1;
   return cluster([...others, ...leftovers]);
 }
 
-const crosses = ([, top, bottom]: Seg, y: number, main: number) => top <= y - 0.55 * main && bottom >= y - 0.15 * main;
+// A drawn line goes through a row when it reaches from the row's letters (some
+// sheets start their bar lines a little below the tops of the top row's letters) to its baseline.
+const crosses = ([, top, bottom]: Seg, y: number, main: number) => top <= y - 0.4 * main && bottom >= y - 0.15 * main;
 
-/** The row as typed, with drawn lines through it as "¦" and gaps as spaces. */
-function rowText(row: PdfChar[], y: number, main: number, segs: Seg[]): string {
+/** A drawn line through a row of notes: a bar line ("¦"), or a medium accent ("┆", a short line inside a bar). */
+type Drawn = [number, number, number, '¦' | '┆'];
+
+/** The row as typed, with drawn lines through it as "¦" (or "┆") and gaps as spaces. */
+function rowText(row: PdfChar[], y: number, main: number, drawn: Drawn[]): string {
   const items: [number, number, string][] = row.map((c) => [c.x0, c.x1, c.c + c.mark]);
-  for (const s of segs) if (crosses(s, y, main)) items.push([s[0] - 0.01, s[0] + 0.01, '¦']);
-  items.sort((a, b) => a[0] - b[0]);
+  for (const s of drawn) if (crosses([s[0], s[1], s[2]], y, main)) items.push([s[0] - 0.01, s[0] + 0.01, s[3]]);
+  // By the middle of each character: a line drawn right at a letter's left edge comes before it.
+  items.sort((a, b) => a[0] + a[1] - (b[0] + b[1]));
   let out = '';
   let prev: number | null = null;
   let lastBar: number | null = null;
   for (const [x0, x1, s] of items) {
-    if (s === '¦') {
+    if (s === '¦' || s === '┆') {
       if (lastBar !== null && x0 - lastBar < 4) continue; // a double line
       lastBar = x0;
     }
@@ -333,7 +507,8 @@ export function toAbu(text: string, drawnBars: boolean): string {
   let t = text.replace(/[–—−‒’ʼ]/g, (c) => DASHES[c]);
   // A part's name printed before its row ("S", "Alto:", "Ten."), in capitals: a small "s" is a note.
   t = t.replace(/^\s*(?:¦\s*)?(?:Solo|Soprano|Sop|Alto|Tenor|Ten|Bass|S|A|T|B)\b[.:]?\s*/, '');
-  t = t.replace(/\|/g, drawnBars ? '/' : '|').replace(/¦/g, '|');
+  t = t.replace(/\|/g, drawnBars ? '/' : '|').replace(/¦/g, '|').replace(/┆/g, '/');
+  t = t.replace(/\.{2,}/g, '.').replace(/,{2,}/g, ','); // a dot or comma printed several times over
   t = t.replace(/\s+'/g, "'"); // "d '" is d'
   t = t.replace(/([a-z]),(?=[\s:./|]|$)/g, (_, n: string) => `${n}1`); // "t," (a comma after a note, not before one) is the low t1
   t = t.replace(DYNAMICS, '$1 ');
@@ -341,7 +516,7 @@ export function toAbu(text: string, drawnBars: boolean): string {
   t = t.replace(/-{2,}/g, '-');
   t = t.replace(/\b([dfrlstm])\s+([ae])\b/g, '$1$2'); // "t a" spaced out is ta
   t = t.replace(/\b([a-z]{1,2})11(?![\d'])/g, (_, n: string) => `${n}2`); // two low marks: two octaves down
-  t = t.replace(/\s*\|\s*/g, ' | ').trim();
+  t = t.replace(/\s*\|\s*/g, ' | ').replace(/\s*\/\s*/g, ' / ').trim();
   t = t.replace(/^(\|\s*)+/, ''); // double borders at the start
   t = t.replace(/(\|\s*)+$/, '').trim();
   return t ? `${t} |` : t;
@@ -459,6 +634,62 @@ function mergeUpbeats(systems: System[]): void {
 
 const PARTS: Record<number, string[]> = { 1: ['S'], 2: ['S', 'A'], 3: ['S', 'A', 'B'], 4: ['S', 'A', 'T', 'B'], 5: ['Solo', 'S', 'A', 'T', 'B'] };
 const WORDISH = /[A-Za-zÀ-ÖØ-öø-ɏḀ-ỿ]/;
+// A tempo or metronome mark printed between lines ("Andante. M. 70"): not words.
+const TEMPO = /\b(?:Largo|Larghetto|Lento|Adagio|Andante|Andantino|Moderato|Allegretto|Allegro|Vivace|Presto|Maestoso|Grave)\b|\bM\.\s*M?\.?\s*=?\s*\d{2,3}\b/;
+const PART_LABEL = /^(?:Solo|Soprano|Sop|Alto|Tenor|Ten|Bass|S|A|T|B)[.:]?$/;
+
+/**
+ * How many characters at the start of a row are a part's name printed beside
+ * the music ("S", "Alto:"), set bigger than the row or standing left of where
+ * the music starts (`x0`); -1 when that's all the row has, 0 when there's none.
+ */
+function labelAt(row: PdfChar[], x0: number | null): number {
+  let i = 0;
+  while (i < row.length && row[i].c === ' ') i++;
+  let j = i;
+  // The name ends at a gap or a change of type size (a big "B" set tight against the bass's first note).
+  while (j < row.length && row[j].c !== ' ' && (j === i || (row[j].x0 - row[j - 1].x1 < 0.3 * row[j].size && Math.abs(row[j].size - row[i].size) <= 0.15 * row[i].size))) j++;
+  const token = row.slice(i, j);
+  if (!token.length || !PART_LABEL.test(token.map((c) => c.c).join(''))) return 0;
+  const rest = row.slice(j).filter((c) => c.c !== ' ');
+  if (!rest.length) return -1;
+  const end = token[token.length - 1].x1;
+  const big = median(token.map((c) => c.size)) >= 1.15 * median(rest.map((c) => c.size));
+  const apart = x0 !== null && end <= x0 - 1 && rest[0].x0 - end >= 0.5 * rest[0].size;
+  return big || apart ? j : 0;
+}
+
+/**
+ * The drawn lines through a line of music's rows of notes, as bar lines or
+ * medium accents (a 4/4 bar's half-bar line). Where long lines run down
+ * through several rows and short ones are drawn inside single rows between
+ * them, the long ones are the bar lines; in a line of one row, the thick
+ * ones are (thin ones between them are the accents).
+ */
+function drawnLines(notes: { y: number; main: number }[], segs: Seg[], x0: number, x1: number, main: number): Drawn[] {
+  const through = segs.map((s) => [s, notes.filter((n) => crosses(s, n.y, n.main)).length] as const).filter(([, k]) => k > 0);
+  const places = (list: Seg[]) =>
+    list
+      .map((s) => s[0])
+      .sort((a, b) => a - b)
+      .filter((x, i, xs) => i === 0 || x - xs[i - 1] >= 2);
+  /** The accents, when `isBar` splits the lines the way a sheet would: bar lines inside the music with a few lines between them. */
+  const accentsBy = (isBar: (s: Seg, k: number) => boolean): Set<Seg> | null => {
+    const bars = places(through.filter(([s, k]) => isBar(s, k)).map(([s]) => s));
+    const inside = bars.filter((x) => x > x0 + main && x < x1 - main);
+    // Lines within the music only: a brace or bracket drawn at the edges isn't one.
+    const between = places(through.filter(([s, k]) => !isBar(s, k)).map(([s]) => s)).filter((x) => x > x0 && x < x1 && !bars.some((b) => Math.abs(b - x) < 2));
+    if (!inside.length || !between.length) return null;
+    // A medium accent in most bars and never two in one, as on a sheet in 4/4 or 6/8 (a stray short line isn't one).
+    const edges = [x0, ...inside, x1];
+    const perBar = edges.slice(1).map((end, k) => between.filter((x) => x > edges[k] && x < end).length);
+    if (perBar.some((n) => n > 1) || perBar.filter((n) => n === 1).length < 0.6 * perBar.length) return null;
+    return new Set(through.filter(([s, k]) => !isBar(s, k) && between.some((x) => Math.abs(x - s[0]) < 2)).map(([s]) => s));
+  };
+  const heaviest = Math.max(0, ...through.map(([s]) => s[3] ?? 0));
+  const accents = accentsBy((_, k) => k >= 2) ?? (heaviest > 0 ? accentsBy((s) => (s[3] ?? 0) > 0.5 * heaviest) : null) ?? new Set<Seg>();
+  return through.map(([s]) => [s[0], s[1], s[2], accents.has(s) ? '┆' : '¦']);
+}
 
 /** The heading lines and each line of music (rows of notes and words), page by page. */
 export function readSystems(pages: PageText[]): { header: string[]; systems: System[]; printed: TypedLine[]; music: number } {
@@ -473,24 +704,32 @@ export function readSystems(pages: PageText[]): { header: string[]; systems: Sys
     let cur: System | null = null;
     let lastY: number | null = null;
     const pageSystems: System[] = [];
-    rows.forEach((r, i) => {
+    // Each system's rows of notes, written out once all its rows are known (the drawn lines depend on them all).
+    const noteRows = new Map<System, { at: number; row: PdfChar[]; y: number; main: number }[]>();
+    rows.forEach((whole, i) => {
       const y = base[i];
       const main = size[i];
+      const label = labelAt(whole, cur ? cur.x0 : null);
+      if (label < 0) return; // a part's name on a row of its own
+      const r = label ? whole.slice(label) : whole;
       const plain = rowText(r, y, main, []);
       const gap = lastY !== null ? y - lastY : 1e9;
-      if (isSolfa(plain)) {
-        const drawn = segs.some((s) => crosses(s, y, main));
+      const ink = r.filter((c) => c.c !== ' ');
+      const solfa = isSolfa(plain);
+      if (cur && !solfa && ink.length <= 3 && main < 0.7 * cur.main) return; // a stray small figure
+      if (solfa) {
         if (!cur || gap > 2.6 * main) {
           cur = { rows: [], ys: [], main, page: number, x0: 1e9, x1: 0 };
           pageSystems.push(cur);
+          noteRows.set(cur, []);
         }
-        const ink = r.filter((c) => c.c !== ' ');
         cur.x0 = Math.min(cur.x0, ink[0].x0);
         cur.x1 = Math.max(cur.x1, ink[ink.length - 1].x1);
-        cur.rows.push(['n', toAbu(drawn ? rowText(r, y, main, segs) : plain, drawn)]);
+        noteRows.get(cur)?.push({ at: cur.rows.length, row: r, y, main });
+        cur.rows.push(['n', '']);
         cur.ys.push(y);
         lastY = y;
-      } else if (cur && gap <= 2.6 * main && WORDISH.test(plain) && !/^[\d\s]+$/.test(plain)) {
+      } else if (cur && gap <= 2.6 * main && WORDISH.test(plain) && !/^[\d\s]+$/.test(plain) && !TEMPO.test(plain)) {
         cur.rows.push(['w', plain]);
         cur.ys.push(y);
         lastY = y;
@@ -499,7 +738,15 @@ export function readSystems(pages: PageText[]): { header: string[]; systems: Sys
         if (gap > 2.6 * main) cur = null;
       }
     });
-    for (const s of pageSystems) systems.push(...splitTall(s, across));
+    for (const s of pageSystems) {
+      const notes = noteRows.get(s) ?? [];
+      const drawn = drawnLines(notes, segs, s.x0, s.x1, s.main);
+      for (const n of notes) {
+        const ruled = drawn.some((d) => crosses([d[0], d[1], d[2]], n.y, n.main));
+        s.rows[n.at] = ['n', toAbu(ruled ? rowText(n.row, n.y, n.main, drawn) : rowText(n.row, n.y, n.main, []), ruled)];
+      }
+      systems.push(...splitTall(s, across));
+    }
   });
   const printed: TypedLine[] = systems.map((s) => ({
     page: s.page,
