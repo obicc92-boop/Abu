@@ -1,0 +1,8 @@
+// A measuring tool only: runs Workers AI models on the test lines from
+// scripts/workers-ai-check.py through `wrangler dev`. Never deployed.
+{
+  "name": "abu-ai-probe",
+  "main": "src/index.js",
+  "compatibility_date": "2026-11-01",
+  "ai": { "binding": "AI" }
+}
