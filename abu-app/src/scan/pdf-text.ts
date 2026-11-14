@@ -372,6 +372,8 @@ const NOTE = "(?:de|re|fe|se|le|ra|ma|lo|ta|ba|d|r|m|f|s|l|t)(?:'{1,2}|[12])?";
 const RAISED: Record<string, string> = { '¹': "'", '²': "''" };
 const LOWERED: Record<string, string> = { '₁': '1', '₂': '2' };
 const MARKISH = new Set(['1', '2', '|', 'l', 'I', "'", '’', 'ʼ']);
+/** Box-drawing and other vertical bars some typists use for "|". (The click letter "ǀ" is handled in `toAbu`.) */
+const LOOKALIKES: Readonly<Record<string, string>> = { '│': '|', '┃': '|', '∣': '|', '｜': '|' };
 /** A small letter, as notes are (a capital beside the music is a part's name, which takes no octave mark). */
 const isSmallLetter = (c: string) => c !== c.toUpperCase();
 
@@ -409,7 +411,7 @@ function cluster(chars: PdfChar[]): { rows: PdfChar[][]; base: number[]; size: n
   return { rows, base, size };
 }
 
-const SOLFA_CHARS = new RegExp(`${NOTE}|[|¦:.,\\-–—/x!]`, 'g');
+const SOLFA_CHARS = new RegExp(`${NOTE}|[|¦:.,\\-–—/x!ǀ]`, 'g');
 const NOTES = new RegExp(NOTE, 'g');
 
 /**
@@ -431,7 +433,7 @@ export function isSolfa(text: string): boolean {
  */
 export function rowsOf(input: PdfChar[]) {
   if (!input.some((c) => c.c !== ' ')) return { rows: [] as PdfChar[][], base: [] as number[], size: [] as number[] };
-  const chars = input.map((c) => ({ ...c }));
+  const chars = input.map((c) => ({ ...c, c: LOOKALIKES[c.c] ?? c.c }));
   const letters = chars.filter((c) => isSmallLetter(c.c));
   const near = (m: PdfChar, n: PdfChar) => m.x0 - n.x1 >= -1.5 && m.x0 - n.x1 < 0.5 * n.size && Math.abs(n.y - m.y) < 0.8 * n.size;
   // A small figure or tick right after a bigger letter (judged against that letter, not the page: some
@@ -522,8 +524,9 @@ function bridgesOf(chars: PdfChar[], notes: PdfChar[]): Set<PdfChar> {
 }
 
 // A drawn line goes through a row when it reaches from the row's letters (some
-// sheets start their bar lines a little below the tops of the top row's letters) to its baseline.
-const crosses = ([, top, bottom]: Seg, y: number, main: number) => top <= y - 0.4 * main && bottom >= y - 0.15 * main;
+// sheets start their bar lines a little below the tops of the top row's letters)
+// to at least halfway down them (some stop just above a row of dots and colons).
+const crosses = ([, top, bottom]: Seg, y: number, main: number) => top <= y - 0.4 * main && bottom >= y - 0.5 * main;
 
 /** A drawn line through a row of notes: a bar line ("¦"), or a medium accent ("┆", a short line inside a bar). */
 type Drawn = [number, number, number, '¦' | '┆'];
@@ -556,9 +559,14 @@ function rowText(row: PdfChar[], y: number, main: number, drawn: Drawn[]): strin
 const DASHES: Record<string, string> = { '–': '-', '—': '-', '−': '-', '‒': '-', '’': "'", 'ʼ': "'" };
 const DYNAMICS = /(^|[^a-z'])(?:mf|mp|pp|ff|fff|ppp|p|sfz|cresc\.?|dim\.?|rit\.?|rall\.?|accel\.?)(?![a-z])/g;
 
+/** Labels printed among the notes ("CH", "Refrain", "Bars", a part's letter): never notes, which are small letters. */
+const LABELS = /(^|[\s|:/¦┆])(?:CHR?|CHORUS|Chorus|VERSE|Verse|REFRAIN|Refrain|Ref\.|SOLO|Tutti|TUTTI|ALL|Unison|UNISON|Bars|bars|Organ|organ|Interlude|interlude|Intro|INTRO|[SATB])(?:\.|:)?(?=[\s|:/¦┆]|$)/g;
+
 /** A row of notes as typed, in Abụ's format. */
 export function toAbu(text: string, drawnBars: boolean): string {
   let t = text.replace(/[–—−‒’ʼ]/g, (c) => DASHES[c]);
+  // The click letter "ǀ" right after a note is a low octave mark ("sǀ" is s1); on its own, a bar line.
+  t = t.replace(/([a-z])ǀ/g, (_, n: string) => `${n}1`).replace(/ǀ/g, '|');
   // A part's name printed before its row ("S", "Alto:", "Ten."), in capitals: a small "s" is a note.
   t = t.replace(/^\s*(?:¦\s*)?(?:Solo|Soprano|Sop|Alto|Tenor|Ten|Bass|S|A|T|B)\b[.:]?\s*/, '');
   t = t.replace(/\|/g, drawnBars ? '/' : '|').replace(/¦/g, '|').replace(/┆/g, '/');
@@ -566,6 +574,7 @@ export function toAbu(text: string, drawnBars: boolean): string {
   t = t.replace(/\s+'/g, "'"); // "d '" is d'
   t = t.replace(/([a-z]),(?=[\s:./|]|$)/g, (_, n: string) => `${n}1`); // "t," (a comma after a note, not before one) is the low t1
   t = t.replace(DYNAMICS, '$1 ');
+  t = t.replace(LABELS, '$1 '); // "CH", "Verse", a part's letter: never notes, which are small letters
   t = t.replace(/(^|[^\w'])\d+(?![\w'])/g, '$1 '); // bar numbers
   t = t.replace(/-{2,}/g, '-');
   t = t.replace(/\b([dfrlstm])\s+([ae])\b/g, '$1$2'); // "t a" spaced out is ta

@@ -166,6 +166,26 @@ describe('bridge notes', () => {
   });
 });
 
+describe('how typists write', () => {
+  it('reads box-drawing bars as typed bars, and "ǀ" after a note as a low octave mark', () => {
+    const sheet = readTypedSheet([page([...typed('r :- │m :m | f :m │r :- |', 100, 150), ...typed('sǀ :- │- :s | sǀ :m │r :- |', 100, 164)])]);
+    expect(sheet.lines[0].text.split('\n')).toEqual(['S  r :- | m :m | f :m | r :- |', 'A  s1 :- | - :s | s1 :m | r :- |']);
+  });
+
+  it('leaves out labels printed among the notes', () => {
+    expect(toAbu('d :r |m :f | CH |', false)).toBe('d :r | m :f |');
+    expect(toAbu('A d1 :r1 |Verse m :f', false)).toBe('d1 :r1 | m :f |');
+  });
+
+  it('takes a bar line that stops just above a row of dots as going through it', () => {
+    const dots = (y: number) => [...typed('. : . : .', 106, y), ...typed('. : . : .', 166, y)];
+    // The bass row is only dots and colons; the bar lines end 3 points above its baseline.
+    const long: Seg[] = [100, 160, 220].map((x) => [x, 138, 175]);
+    const [line] = readTypedSheet([page([...typed('d :r :m', 106, 150), ...typed('f :s :l', 166, 150), ...dots(178)], long)]).lines;
+    expect(line.text.split('\n')).toEqual(['S  d :r :m | f :s :l |', 'A  . : . : . | . : . : . |']);
+  });
+});
+
 describe('what isn’t music', () => {
   it('leaves out the parts’ names printed beside the music, but not a word that looks like one', () => {
     const big = (c: string, y: number): PdfChar => ({ c, x0: 80, x1: 92, y, size: 20, mark: '' });
