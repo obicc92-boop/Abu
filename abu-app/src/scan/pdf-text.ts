@@ -62,8 +62,11 @@ export interface TypedSheet {
   title: string;
   key: string;
   time: string;
-  /** Each line as Abụ text (S, A, T, B rows with W rows of words), with its parts and where it's printed. */
-  lines: { page: number; box: TypedLine['box']; parts: string[]; words: number; text: string }[];
+  /**
+   * Each line as Abụ text (S, A, T, B rows with W rows of words), with its parts and where it's printed;
+   * `lined` is the same with the parts' bar lines lined up by where they're printed, when that differs.
+   */
+  lines: { page: number; box: TypedLine['box']; parts: string[]; words: number; text: string; lined?: string }[];
   /** A staff score with sol-fa printed with it: its text is only part of the music. */
   staff: boolean;
 }
@@ -532,11 +535,23 @@ const crosses = ([, top, bottom]: Seg, y: number, main: number) => top <= y - 0.
 type Drawn = [number, number, number, '¦' | '┆'];
 
 /** The row as typed, with drawn lines through it as "¦" (or "┆") and gaps as spaces. */
-function rowText(row: PdfChar[], y: number, main: number, drawn: Drawn[]): string {
-  const items: [number, number, string][] = row.map((c) => [c.x0, c.x1, (c.pre ?? '') + c.c + c.mark]);
+/** Something placed along a row: left and right edges, and its text (a character, or a drawn line as "¦" or "┆"). */
+type Item = [number, number, string];
+
+/** A row's characters and the drawn lines through it, left to right. */
+function rowItems(row: PdfChar[], y: number, main: number, drawn: Drawn[]): Item[] {
+  const items: Item[] = row.map((c) => [c.x0, c.x1, (c.pre ?? '') + c.c + c.mark]);
   for (const s of drawn) if (crosses([s[0], s[1], s[2]], y, main)) items.push([s[0] - 0.01, s[0] + 0.01, s[3]]);
   // By the middle of each character: a line drawn right at a letter's left edge comes before it.
-  items.sort((a, b) => a[0] + a[1] - (b[0] + b[1]));
+  return items.sort((a, b) => a[0] + a[1] - (b[0] + b[1]));
+}
+
+function rowText(row: PdfChar[], y: number, main: number, drawn: Drawn[]): string {
+  return itemsText(rowItems(row, y, main, drawn), main);
+}
+
+/** The row's items as text, with spaces where the gaps are. */
+function itemsText(items: Item[], main: number): string {
   let out = '';
   let prev: number | null = null;
   let lastBar: number | null = null;
@@ -556,11 +571,94 @@ function rowText(row: PdfChar[], y: number, main: number, drawn: Drawn[]): strin
   return out.trim();
 }
 
+/** Marks a bar a part rests through with nothing printed; `withRests` fills it in. */
+const REST = '∅';
+
+/**
+ * A line's rows of notes with their bar lines lined up by where they sit on
+ * the page: where at least two parts have a bar line at the same place (a
+ * column), a part with notes running across it gets one, and a part with
+ * nothing printed between two columns where others have notes rests there
+ * (sheets print a resting bar as nothing). Only when the parts' bar lines do
+ * line up; otherwise null, as when nothing changes. `isBar` says which items
+ * are bar lines in each row.
+ */
+function alignBars(rows: Item[][], isBar: ((s: string) => boolean)[], main: number): Item[][] | null {
+  if (rows.length < 2) return null;
+  const mid = (it: Item) => (it[0] + it[1]) / 2;
+  const ink = rows.map((items, r) => items.filter((it) => it[2].trim() && !isBar[r](it[2]) && it[2] !== '┆'));
+  const bars = rows.map((items, r) => items.filter((it) => isBar[r](it[2])).map(mid));
+  const tol = 0.6 * main;
+  // Bar lines at the same place in different rows make a column.
+  const all = bars.flatMap((xs, r) => xs.map((x) => ({ x, r }))).sort((a, b) => a.x - b.x);
+  const groups: { x: number; rows: Set<number> }[] = [];
+  for (const b of all) {
+    const g = groups[groups.length - 1];
+    if (g && b.x - g.x <= tol) {
+      g.x = (g.x * g.rows.size + b.x) / (g.rows.size + 1);
+      g.rows.add(b.r);
+    } else groups.push({ x: b.x, rows: new Set([b.r]) });
+  }
+  const columns = groups.filter((g) => g.rows.size >= Math.max(2, Math.ceil(rows.length / 2))).map((g) => g.x);
+  if (columns.length < 2) return null;
+  const onColumn = (x: number) => columns.some((c) => Math.abs(c - x) <= tol);
+  // Only where the parts' bar lines line up: almost all of each row's bar lines are on a column.
+  if (bars.some((xs) => xs.filter(onColumn).length < 0.8 * xs.length)) return null;
+  let changed = false;
+  const out = rows.map((items, r) => {
+    const own = ink[r];
+    if (!own.length) return items;
+    const added: Item[] = [];
+    const first = mid(own[0]);
+    const last = mid(own[own.length - 1]);
+    for (const c of columns) {
+      if (bars[r].some((x) => Math.abs(x - c) <= tol) || c > last) continue;
+      // A bar line where the part has notes running across a column (never through a character).
+      if (c < first || !own.some((it) => it[0] < c - 0.5 && it[1] > c + 0.5)) added.push([c - 0.01, c + 0.01, '¦']);
+    }
+    const lines = [...bars[r], ...added.map(mid)].sort((a, b) => a - b);
+    // A bar with nothing printed for this part, where other parts have notes, is a rest; but only before
+    // some of its own notes (a row that simply stops may have lost its notes to another row: left to check).
+    lines.forEach((x, k) => {
+      const from = k ? lines[k - 1] : -Infinity;
+      const inBar = (list: Item[]) => list.some((it) => mid(it) > from && mid(it) < x);
+      if (x < last && !inBar(own) && ink.some((other, o) => o !== r && inBar(other))) added.push([x - 0.4, x - 0.3, REST]);
+    });
+    // Never more rests than bars it has notes in: a row with a bar or two of notes is more likely a stray line.
+    const rests = added.filter((it) => it[2] === REST).length;
+    const sung = [...lines, Infinity].filter((x, k) => own.some((it) => mid(it) > (k ? lines[k - 1] : -Infinity) && mid(it) < x)).length;
+    if (rests > sung) return items;
+    if (!added.length) return items;
+    changed = true;
+    // A row's own bar lines all count as bar lines here, written as "¦".
+    return [...items.map((it): Item => (isBar[r](it[2]) ? [it[0], it[1], '¦'] : it)), ...added].sort((a, b) => a[0] + a[1] - (b[0] + b[1]));
+  });
+  return changed ? out : null;
+}
+
+/** Each rest marked by `alignBars` as a bar of rests as long as the other parts' bar there. */
+function withRests(texts: string[]): string[] {
+  const bars = texts.map((t) => t.split('|'));
+  return bars.map((row) =>
+    row
+      .map((bar, j) => {
+        if (bar.trim() !== REST) return bar;
+        const counts = bars.map((b) => b[j]).filter((b) => b !== undefined && b.trim() && b.trim() !== REST).map((b) => b.split(/[:/]/).length);
+        const beats = counts.sort((a, b) => counts.filter((c) => c === b).length - counts.filter((c) => c === a).length)[0] ?? 1;
+        return beats <= 1 ? ' x ' : ` ${Array.from({ length: beats }, () => '').join(' : ')} `;
+      })
+      .join('|'),
+  );
+}
+
 const DASHES: Record<string, string> = { '–': '-', '—': '-', '−': '-', '‒': '-', '’': "'", 'ʼ': "'" };
 const DYNAMICS = /(^|[^a-z'])(?:mf|mp|pp|ff|fff|ppp|p|sfz|cresc\.?|dim\.?|rit\.?|rall\.?|accel\.?)(?![a-z])/g;
 
 /** Labels printed among the notes ("CH", "Refrain", "Bars", a part's letter): never notes, which are small letters. */
 const LABELS = /(^|[\s|:/¦┆])(?:CHR?|CHORUS|Chorus|VERSE|Verse|REFRAIN|Refrain|Ref\.|SOLO|Tutti|TUTTI|ALL|Unison|UNISON|Bars|bars|Organ|organ|Interlude|interlude|Intro|INTRO|[SATB])(?:\.|:)?(?=[\s|:/¦┆]|$)/g;
+
+/** A run of letters that sol-fa syllables can make ("rm", "d't"): anything else in a row of notes is a word. */
+const NOTE_RUN = new RegExp(`^(?:${NOTE})+$`);
 
 /** A row of notes as typed, in Abụ's format. */
 export function toAbu(text: string, drawnBars: boolean): string {
@@ -575,6 +673,8 @@ export function toAbu(text: string, drawnBars: boolean): string {
   t = t.replace(/([a-z]),(?=[\s:./|]|$)/g, (_, n: string) => `${n}1`); // "t," (a comma after a note, not before one) is the low t1
   t = t.replace(DYNAMICS, '$1 ');
   t = t.replace(LABELS, '$1 '); // "CH", "Verse", a part's letter: never notes, which are small letters
+  // Words printed among the notes ("4 bars for organ"): letters no sol-fa syllables make.
+  t = t.replace(/(^|[\s|:/])([A-Za-z']{2,})(?=[\s|:/]|$)/g, (m, pre: string, w: string) => (NOTE_RUN.test(w) ? m : `${pre} `));
   t = t.replace(/(^|[^\w'])\d+(?![\w'])/g, '$1 '); // bar numbers
   t = t.replace(/-{2,}/g, '-');
   t = t.replace(/\b([dfrlstm])\s+([ae])\b/g, '$1$2'); // "t a" spaced out is ta
@@ -605,7 +705,8 @@ export function headerInfo(lines: string[]): { key: string; time: string } {
 }
 
 interface System {
-  rows: ['n' | 'w', string][];
+  /** Each row: notes ("n") or words ("w"), its text, and for notes, the text with its bar lines lined up with the other parts' (when that differs). */
+  rows: ['n' | 'w', string, string?][];
   ys: number[];
   main: number;
   page: number;
@@ -805,10 +906,13 @@ export function readSystems(pages: PageText[]): { header: string[]; systems: Sys
     for (const s of pageSystems) {
       const notes = noteRows.get(s) ?? [];
       const drawn = drawnLines(notes, segs, s.x0, s.x1, s.main);
-      for (const n of notes) {
-        const ruled = drawn.some((d) => crosses([d[0], d[1], d[2]], n.y, n.main));
-        s.rows[n.at] = ['n', toAbu(ruled ? rowText(n.row, n.y, n.main, drawn) : rowText(n.row, n.y, n.main, []), ruled)];
-      }
+      const ruled = notes.map((n) => drawn.some((d) => crosses([d[0], d[1], d[2]], n.y, n.main)));
+      const items = notes.map((n, k) => rowItems(n.row, n.y, n.main, ruled[k] ? drawn : []));
+      const texts = notes.map((n, k) => toAbu(itemsText(items[k], n.main), ruled[k]));
+      // In a ruled row a typed "|" is a half-bar line; in a plain one it's a bar line.
+      const aligned = alignBars(items, ruled.map((r) => (r ? (x: string) => x === '¦' : (x: string) => x === '|')), s.main);
+      const lined = aligned ? withRests(aligned.map((it, k) => toAbu(itemsText(it, notes[k].main), ruled[k]))) : null;
+      notes.forEach((n, k) => (s.rows[n.at] = lined && lined[k] !== texts[k] ? ['n', texts[k], lined[k]] : ['n', texts[k]]));
       systems.push(...splitTall(s, across));
     }
   });
@@ -830,19 +934,25 @@ export function readTypedSheet(pages: PageText[]): TypedSheet {
     const n = s.rows.filter(([k]) => k === 'n').length;
     const names = PARTS[n] ?? Array.from({ length: n }, (_, k) => `P${k + 1}`);
     const out: string[] = [];
+    const alt: string[] = [];
     let k = 0;
     let part: string | null = null;
     let words = 0;
-    for (const [kind, text] of s.rows) {
+    for (const [kind, text, lined] of s.rows) {
       if (kind === 'n') {
         part = names[k++];
         out.push(`${part.padEnd(2)} ${text.replace(/ {2,}/g, ' ')}`);
+        alt.push(`${part.padEnd(2)} ${(lined ?? text).replace(/ {2,}/g, ' ').trim()}`);
       } else if (part) {
-        out.push(`W  ${text.replace(/-\s+/g, '-').trim()}`);
+        const w = `W  ${text.replace(/-\s+/g, '-').trim()}`;
+        out.push(w);
+        alt.push(w);
         words++;
       }
     }
-    return { page: s.page, box: printed[i].box, parts: names, words, text: out.join('\n') };
+    const text = out.join('\n');
+    const lined = alt.join('\n');
+    return { page: s.page, box: printed[i].box, parts: names, words, text, ...(lined !== text ? { lined } : {}) };
   });
   return { title, key, time, lines, staff: music > 50 };
 }

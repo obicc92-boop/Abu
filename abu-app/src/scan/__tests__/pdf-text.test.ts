@@ -166,6 +166,30 @@ describe('bridge notes', () => {
   });
 });
 
+describe('bar lines lined up by where they are printed', () => {
+  it('gives a part with nothing printed in a bar a rest there (as an alternative reading)', () => {
+    const long: Seg[] = [100, 160, 220, 280].map((x) => [x, 138, 186]);
+    const rows = [...typed('d :r', 116, 150), ...typed('m :f', 176, 150), ...typed('s :l', 236, 150), ...typed('m :f', 176, 178), ...typed('s :l', 236, 178)];
+    const [line] = readTypedSheet([page(rows, long)]).lines;
+    expect(line.text.split('\n')).toEqual(['S  d :r | m :f | s :l |', 'A  m :f | s :l |']);
+    expect(line.lined?.split('\n')).toEqual(['S  d :r | m :f | s :l |', 'A  : | m :f | s :l |']);
+  });
+
+  it('puts in a bar line where a part’s notes run across one the other parts have', () => {
+    const row = (y: number, a: string, b: string, c: string, mid: boolean) => [...typed(a, 100, y), ...(mid ? typed('|', 140, y) : []), ...typed(b, 150, y), ...typed('|', 190, y), ...typed(c, 200, y), ...typed('|', 230, y)];
+    const [line] = readTypedSheet([page([...row(150, 'd :r', 'm :f', 's :l', true), ...row(178, 'd :t1', 'm :r', 'd :-', false), ...row(206, 'm :s', 's :l', 'm :-', true)])]).lines;
+    expect(line.text.split('\n')[1]).toBe('A  d :t1 m :r | d :- |');
+    expect(line.lined?.split('\n')[1]).toBe('A  d :t1 | m :r | d :- |');
+  });
+
+  it('never pads a part that stops early, or one with a bar of notes, with rests', () => {
+    const long: Seg[] = [100, 160, 220, 280].map((x) => [x, 138, 186]);
+    // The alto has notes only in the first bar (another row may have taken the rest of its notes).
+    const rows = [...typed('d :r', 116, 150), ...typed('m :f', 176, 150), ...typed('s :l', 236, 150), ...typed('d :t1', 116, 178)];
+    expect(readTypedSheet([page(rows, long)]).lines[0].lined).toBeUndefined();
+  });
+});
+
 describe('how typists write', () => {
   it('reads box-drawing bars as typed bars, and "ǀ" after a note as a low octave mark', () => {
     const sheet = readTypedSheet([page([...typed('r :- │m :m | f :m │r :- |', 100, 150), ...typed('sǀ :- │- :s | sǀ :m │r :- |', 100, 164)])]);
