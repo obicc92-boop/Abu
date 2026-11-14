@@ -278,6 +278,7 @@ function Help({ onExample }: { onExample: () => void }) {
     '- holds a note on; an empty beat or x is a rest.',
     'd\' is the high doh and t1 the low ti (d¹ and t₁ work too).',
     '[Verse] or [Chorus] on its own line starts a section.',
+    'Key change: key: D on its own line before the bar, or the bridge note as printed, old name = new name (s=d).',
     'Write tenor as on the sheet; Abụ plays it an octave lower.',
   ];
   return (

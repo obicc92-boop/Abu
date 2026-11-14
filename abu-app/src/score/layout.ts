@@ -6,7 +6,7 @@
  *
  * Pure module: no React.
  */
-import { octaveOf, SYLLABLE_PATTERN, type ParsedSong } from '@/solfa';
+import { dohTimeline, octaveOf, SYLLABLE_PATTERN, type ParsedSong } from '@/solfa';
 
 export interface ScoreCell {
   /** Absolute beat this column plays on. */
@@ -42,6 +42,8 @@ export interface ScoreSystem {
   /** Relative width of each beat column: wider where a beat holds more notes ("d.,r"). */
   widths: number[];
   rows: ScoreRow[];
+  /** Key changes starting on this line: the beat, and the new doh (semitones above C, before any transpose). */
+  keys: { beat: number; semitone: number }[];
 }
 
 export interface LayoutOptions {
@@ -57,6 +59,8 @@ const MIN_COLUMN = 3;
 export function layoutScore(song: ParsedSong, opts: LayoutOptions = {}): ScoreSystem[] {
   const maxBeats = opts.maxBeats ?? 12;
   const systems: ScoreSystem[] = [];
+  // Where each key change starts (for one part, where that part changes).
+  const changes = dohTimeline(song, 0, opts.only ?? undefined).slice(1);
 
   song.sections.forEach((sec, si) => {
     const first = sec.order[0];
@@ -100,6 +104,7 @@ export function layoutScore(song: ParsedSong, opts: LayoutOptions = {}): ScoreSy
         beats: n,
         widths: columnWidths(lineRows, start, n),
         rows: lineRows,
+        keys: changes.filter((c) => c.beat >= start - 1e-6 && c.beat < start + n - 1e-6).map((c) => ({ beat: c.beat, semitone: c.semitone })),
       });
       beatAt += n;
       i += take.length;
@@ -145,16 +150,25 @@ export function lyricSegments(lyrics: Record<number, string>, from: number, coun
 }
 
 const OCTAVE_MARK_RE = new RegExp(`(${SYLLABLE_PATTERN})(['’′ʼ¹²″]+|[12₁₂])`, 'g');
+const BRIDGE_RE = new RegExp(`(${SYLLABLE_PATTERN})(['’′ʼ¹²″]+|[12₁₂])?=`, 'g');
 const SUP = ['', '¹', '²', '³'];
 const SUB = ['', '₁', '₂', '₃'];
+/** Small raised letters, for a bridge note's name in the old key as sheets print it. */
+const SMALL: Readonly<Record<string, string>> = { d: 'ᵈ', r: 'ʳ', m: 'ᵐ', f: 'ᶠ', s: 'ˢ', l: 'ˡ', t: 'ᵗ', e: 'ᵉ', a: 'ᵃ', i: 'ⁱ', o: 'ᵒ', b: 'ᵇ' };
 
-/** How a beat is shown: octave marks as small raised or lowered digits (d' → d¹, t1 → t₁), holds as "–". */
+const octave = (mark: string | undefined) => {
+  const v = octaveOf(mark);
+  return v > 0 ? SUP[Math.min(v, 3)] : v < 0 ? SUB[Math.min(-v, 3)] : '';
+};
+
+/**
+ * How a beat is shown: octave marks as small raised or lowered digits (d' → d¹,
+ * t1 → t₁), holds as "–", and a bridge note as the sheet prints it, its old
+ * name small and raised before its new one (s=d → ˢd).
+ */
 export function displayBeat(text: string): string {
   if (text === '-') return '–';
-  return text.replace(OCTAVE_MARK_RE, (_m, syl: string, mark: string) => {
-    const v = octaveOf(mark);
-    if (v > 0) return syl + SUP[Math.min(v, 3)];
-    if (v < 0) return syl + SUB[Math.min(-v, 3)];
-    return syl;
-  });
+  return text
+    .replace(BRIDGE_RE, (_m, syl: string, mark?: string) => [...syl].map((c) => SMALL[c] ?? c).join('') + octave(mark))
+    .replace(OCTAVE_MARK_RE, (_m, syl: string, mark: string) => syl + octave(mark));
 }

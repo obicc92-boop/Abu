@@ -106,7 +106,20 @@ describe('displayBeat', () => {
     ['-', '–'],
     ['', ''],
     ['fe', 'fe'],
+    // Bridge notes as sheets print them: the old name small and raised, before the new one.
+    ['s=d', 'ˢd'],
+    ["d'=f", 'ᵈ¹f'],
+    ['m=l1.r', 'ᵐl₁.r'],
+    ['se=la', 'ˢᵉla'],
   ])('shows %j as %j', (input, shown) => {
     expect(displayBeat(input)).toBe(shown);
+  });
+});
+
+describe('key changes on the score', () => {
+  it('marks the line where the key changes, at the beat it starts', () => {
+    const song = parseSolfa(['key: G', 'S  d :r /m :f | s :- /- :- | m :r /s=d :- | r :- /- :- |', 'A  d :- /- :- | m :- /- :- | d :- /- :- | t1 :- /- :- |'].join('\n'), { time: '4/4' });
+    const systems = layoutScore(song, { maxBeats: 8 });
+    expect(systems.map((s) => s.keys)).toEqual([[], [{ beat: 10, semitone: 2 }]]);
   });
 });

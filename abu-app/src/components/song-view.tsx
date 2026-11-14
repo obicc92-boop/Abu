@@ -128,7 +128,7 @@ function Player({ song, apiSong, banner }: { song: DemoSong; apiSong?: Song; ban
             scoreTop.current = e.nativeEvent.layout.y;
           }}
         >
-          <Score song={parsed} activeBeat={p.beat} silent={silent} onActiveLine={followLine} />
+          <Score song={parsed} activeBeat={p.beat} silent={silent} onActiveLine={followLine} transpose={p.transpose} />
         </View>
 
         <PartMixer parts={parsed.parts} mix={p.mix} onMute={p.toggleMute} onSolo={p.toggleSolo} onMine={p.setMine} />

@@ -2,7 +2,7 @@ import { memo, useEffect, useMemo, useRef } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { displayBeat, layoutScore, type ScoreCell, type ScoreSystem } from '@/score/layout';
-import type { ParsedSong } from '@/solfa';
+import { KEY_NAMES, mod12, type ParsedSong } from '@/solfa';
 import { colors, fonts, partColor, partLetter } from '@/theme/tokens';
 
 /** How the score is drawn: the player's small sand cards, or Perform mode's big type on dark or light. */
@@ -71,13 +71,15 @@ interface ScoreProps {
   theme?: ScoreTheme;
   /** Note size in points (12.5 in the player; Perform mode lets people choose). */
   size?: number;
+  /** Semitones the player has moved the key, so a key change is named as it sounds. */
+  transpose?: number;
 }
 
 /**
  * The sol-fa score: one column per beat, the current beat highlighted.
  * Layout comes from src/score/layout.ts (a port of scoreHTML in the prototype).
  */
-export function Score({ song, activeBeat, silent, only, maxBeats, onActiveLine, theme = 'player', size = 12.5 }: ScoreProps) {
+export function Score({ song, activeBeat, silent, only, maxBeats, onActiveLine, theme = 'player', size = 12.5, transpose = 0 }: ScoreProps) {
   const systems = useMemo(() => layoutScore(song, { only, maxBeats }), [song, only, maxBeats]);
   const positions = useRef<Record<string, { y: number; height: number }>>({});
   const activeId = systems.find((s) => activeBeat >= s.start && activeBeat < s.start + s.beats)?.id ?? null;
@@ -99,7 +101,7 @@ export function Score({ song, activeBeat, silent, only, maxBeats, onActiveLine, 
           }}
         >
           {s.heading ? <Text style={[styles.heading, { color: palette.heading }, big && { fontSize: 13 }]}>{s.heading}</Text> : null}
-          <System system={s} activeBeat={s.id === activeId ? activeBeat : -1} silent={silent} palette={palette} size={size} big={big} />
+          <System system={s} activeBeat={s.id === activeId ? activeBeat : -1} silent={silent} palette={palette} size={size} big={big} transpose={transpose} />
         </View>
       ))}
     </View>
@@ -113,14 +115,34 @@ interface SystemProps {
   palette: Palette;
   size: number;
   big: boolean;
+  transpose: number;
 }
 
 /** One line of the score. Memoised: only the line being played re-renders each beat. */
-const System = memo(function System({ system, activeBeat, silent, palette, size, big }: SystemProps) {
+const System = memo(function System({ system, activeBeat, silent, palette, size, big, transpose }: SystemProps) {
   const { widths, start } = system;
   const lyricSize = big ? size * 0.72 : 9.5;
+  const span = (from: number, to: number) => widths.slice(from, to).reduce((a, b) => a + b, 0);
   return (
     <View style={[styles.system, { backgroundColor: palette.system }, big && styles.systemBig]}>
+      {system.keys.length ? (
+        // Where the key changes: "Doh is A" from that beat on.
+        <View style={styles.line}>
+          <View style={[styles.labelSpace, big && { width: 26 }]} />
+          {span(0, Math.floor(system.keys[0].beat - start)) > 0 ? <View style={{ flex: span(0, Math.floor(system.keys[0].beat - start)) }} /> : null}
+          {system.keys.map((k, i) => {
+            const from = Math.floor(k.beat - start);
+            const to = i + 1 < system.keys.length ? Math.floor(system.keys[i + 1].beat - start) : widths.length;
+            return (
+              <View key={k.beat} style={{ flex: Math.max(1, span(from, to)), minWidth: 0 }}>
+                <Text numberOfLines={1} style={[styles.keyMark, { color: palette.heading, fontSize: big ? size * 0.62 : 9 }]}>
+                  Doh is {KEY_NAMES[mod12(k.semitone + transpose)]}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+      ) : null}
       {system.rows.map((row) => {
         const missing = widths.slice(row.cells.length).reduce((a, b) => a + b, 0);
         return (
@@ -219,5 +241,6 @@ const styles = StyleSheet.create({
   noteNow: { fontFamily: fonts.monoBold },
   lyricBox: { minWidth: 0, paddingTop: 1, paddingBottom: 3, paddingLeft: 2 },
   lyric: { fontFamily: fonts.body },
+  keyMark: { fontFamily: fonts.heavy, letterSpacing: 0.3, paddingLeft: 2, marginBottom: 1 },
   lyricNow: { fontFamily: fonts.heavy },
 });
