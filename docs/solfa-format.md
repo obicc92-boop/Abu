@@ -24,7 +24,8 @@ document.
 | Low octave | `t₁`, `t1`, `s,` | `t1` (also accepts `t₁`) |
 | Two octaves | `d²`, `s₂` | `d''` / `s2` |
 | Sharps and flats | `de`, `fe`, `se`, `ta`, `ba` | Same syllables: `de re fe se le` up, `ra ma ba ta` down. `ba` is accepted as `ta` |
-| Key change | `d/f`, `Key F#`, `(F)` | A new `key:` line, with an optional pivot note written `s/d` |
+| Key change | `d/f`, `Key F#`, `(F)`, `A.t.` | A new `key:` line before the bar, with an optional pivot note written `s/d` |
+| Bridge note (where the key changes) | A small note raised before a note: `ˢd`, `ᵈ'f`, `ᵐl₁` | The old name, `=`, the new name: `s=d`, `d'=f`, `m=l1`. Each part changes key at its own bridge note |
 | Parts | Up to 5 rows: Solo + S A T B | Each line starts with a part name |
 | Tenor | Written an octave above where it sounds | Written as on paper. The app plays it an octave lower |
 | Words | Under the soprano, often under each part | A `W` line follows the part it belongs to. `W:` with no part applies to all parts |
@@ -54,11 +55,29 @@ S  s :s.l /-.s:f.m | r :- /- :- |
 W  Sing a-loud and be glad
 ```
 
+## Key changes
+
+A key change can be written two ways:
+
+- **A `key:` line** between bars: `key: D` from the next bar on, for every part. A pivot says how the new key is reached: `key: s/d` (the old soh is the new doh) or `key: D s/d`.
+- **Bridge notes**, as sheets print them, in the parts: `s=d` is one note, soh in the old key and doh in the new. Each part changes key at its own bridge note, so a change can fall in the middle of a bar. A part without one changes where the first part does. Bridge notes more than two bars apart start a new change.
+
+A bridge note or pivot keeps its pitch, so it also says which way doh moves: `s=d` moves doh up to the old soh. Where the parts' bridge notes agree on the key but not the octave (a mark left off one), doh moves the way most of them say. A named key alone (`key: D`) moves doh the shortest way, so the voices stay in range.
+
+```
+key: G
+S  d :r /m :f | s :- /s=d :r | m :- /- :- |
+A  d :t1 /d :r | m :- /m=l1 :t1 | d :- /- :- |
+```
+
+The score shows a bridge note as the sheet does (`ˢd`), and "Doh is D" above the line where the key changes.
+
 ## Checks the app runs before saving
 
 - Every bar has the number of beats the time signature needs. Errors name the part and bar, e.g. "Tenor, bar 6 has 5 beats; 4/4 needs 4."
 - All parts in a section have the same number of bars.
-- Every syllable is a real sol-fa note, with an octave mark the app understands.
+- Every syllable is a real sol-fa note, with an octave mark the app understands. A bridge note is two notes joined by `=`.
+- Bridge notes in one key change all go to the same key (a warning if one doesn't).
 - Each word line has no more syllables than its part has notes. Held notes and syllables that cover several notes (`-` in words) are allowed.
 
 ## Getting sheets into the app
