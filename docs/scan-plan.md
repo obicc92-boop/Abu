@@ -160,7 +160,7 @@ Details and numbers are in `abu-reader/README.md`.
 - **(b) and (d, second half) Abụ's own reader: done**, as the owner asked (own model first, a little Haiku to check, like SonkoMusic).
   - **Training:** a small model (1.1M weights) on 60,000 rows drawn from PDMX hymns in typed and handwriting-like fonts, and 56,000 real rows from 826 typed sheets in the owner's folder, labelled from the PDFs' text. Free data only, as the owner chose; no paid labelling of handwriting.
   - **Results on the same 50 lines:** alone, it gets 98.9% of notes and 92.9% of bars right, for free. **With Haiku checking it: 100% of notes, 99.2% of bars, 49 of 50 lines exact, and no wrong bar the checker would miss**, at about 0.17 US cents a line. That's better than Opus alone (98.2% of bars) at about an eighth of the cost per line.
-  - **Not measured yet:** handwriting, and real phone photos. The training rows include handwriting-like fonts and photo faults, but there are no handwritten answers to measure against.
+  - **Not measured yet:** real phone photos. Handwriting was measured and trained on later (Phase 3 below).
 
 ### Phase 1 so far (12 November 2026): scanning in the web app
 
@@ -193,6 +193,23 @@ Details and numbers are in `abu-reader/README.md`.
   - reading in the background (Cloudflare Workflows)
   - phones (Phase 2)
   - keeping corrections as lessons (needs each group's permission)
+
+### Phase 3 started (14 November 2026): handwriting
+
+Details and numbers are in `abu-reader/README.md` ("Handwritten sheets, measured" and "Handwriting, then trained on").
+
+- **Test and training pages:** handwritten first pages from choirpdfs.com's public previews (its sitemap lists them; about 45% of its ~12,400 songs are handwritten sol-fa). Only the preview pictures are used; the site's PDFs aren't downloaded.
+- **Before:** with no AI, no line of 50 handwritten pages was read right. On 32 pages no lines were found at all, because table lines and touching rows leave no gaps between the rows.
+- **The line finder, fixed for free:** table lines that lean are set aside, and touching rows are split by pen-stroke height. Every page now gives lines.
+- **Paid labels, approved by the owner for this:** Claude Opus 5.5 read 1,959 handwritten rows from 50 other pages through the Batches API. Of those, 1,041 are rows of notes. Haiku and Sonnet made too many mistakes to train on. The labels cost US$6.99.
+- **Abụ's own model, retrained:**
+  - Handwritten rows from unseen pages: 12.8% of symbols wrong (was 36.2%).
+  - Typed test lines: 95.1% of bars right (was 92.9%), with half as many wrong bars that the checker passes.
+  - In the app, 13 of the 50 pages' 364 lines add up, and about 8 of those are real music, mostly right.
+- **Next for handwriting:**
+  - grouping rows into lines (boxes often start partway through a system, so parts get the wrong names);
+  - a checker that doesn't pass near-empty lines;
+  - more labelled pages if the owner wants (about 0.3 US cents a row at batch prices).
 
 ## What the owner needs to provide or decide
 

@@ -21,6 +21,7 @@ Phase 0 of `docs/scan-plan.md`: proving how well Abụ can read a sheet (PDF or 
 | `scripts/pdf-text-ts.ts` | Runs the app's port of the typed-PDF reader (`abu-app/src/scan/pdf-text.ts`) with pdf.js and compares it with `pdf-text.py`. |
 | `train/page_lines.py` | Finds the lines on a page picture without AI (the app's `page-lines.ts`): straightens it, finds rows by ink, tells notes from words with the own model, groups rows into lines. `--told` / `--four` give it the number of parts. |
 | `workers-ai/`, `scripts/workers-ai-check.py`, `scripts/workers-ai-compare.py`, `scripts/gate.ts` | Measure Cloudflare's vision models (Workers AI) through a local measuring Worker (`wrangler dev --port 8791`, never deployed); `gate.ts` applies the app's "only failing lines, kept only if they pass" rule to readings already made. |
+| `scripts/handwriting/` | Handwritten rows for training: `cutrows.py` cuts rows from page pictures as the app does, `rowbatch.ts` has Claude Opus read them through the Batches API (prompt in `rowprompt.ts`), `build_hand.py` makes a training folder, and `eval_reader.py` measures a model on folders of rows. |
 | `scripts/score-readings.ts` | Scores readings against the answers: notes right, bars right, and mistakes the checker would miss. Answer lines found wrong by eye go in `data/<name>/answers-wrong.json`, with the reason, and are left out. |
 
 ```sh
@@ -99,7 +100,7 @@ About 5 seconds a line, and 4 lines at a time.
 - once, a sentence of explanation inside a row (the prompt or a structured answer should stop that)
 
 **What this doesn't cover yet:**
-- **Handwriting:** it's untested, because no handwritten answers exist yet.
+- **Handwriting:** untested here. It's measured and trained on further down, under "Handwriting, then trained on".
 - **Finding the lines:** lines were cut using the PDF's own positions. Finding them in a photo is its own step.
 - **Real photos:** the photo-like pictures are milder than real ones, which have shadows and curled pages.
 
@@ -173,3 +174,53 @@ On the same 50 lines:
 - **Finding the lines fails first.** The rows of ink are found by gaps between them, so a table's vertical lines (one page came out as a single row) and handwritten rows that touch (each table box of S, A, words, T, B came out as one row) leave no gaps. A merged row reads as words, so no lines of notes are found.
 - **Reading fails too, even on a well-cut row:** a clean handwritten row `d:-:-:-.r | m:-:-:m | f:-/-:-.f | f.f:m/r:d` read as `d:--|:-:-:|f:-/-:-:f|f:f:m/s:d` at 94% confidence (the handwritten `r` like γ, dropped notes and marks). The model has only seen rows drawn by computer, in typed and handwriting-like fonts, and rows from typed PDFs.
 - **What it needs:** a line finder that sets aside long vertical lines and splits touching rows at their thinnest points (free, and checkable on these pages by eye), and real handwritten rows with their right answers to train on. The previews give thousands of handwritten rows, but no answers.
+
+**Handwriting, then trained on** (14 November 2026, the same day): the owner approved all four steps: fix the line finder, test Claude on rows, have Claude label handwritten rows, and retrain Abụ's own model on them.
+
+- **The line finder** (`page-lines.ts` and `page_lines.py`): table lines that lean a little are set aside, and touching rows are split by the height of a pen stroke. Every one of the 50 pages now gives lines: 294 of them, 6 adding up.
+- **Which Claude can label handwriting:** 24 rows from the test pages were first read by eye (zoomed in, where readings differed).
+
+| Model | Tokens wrong | Notes wrong | Rows exact | US cents a row |
+|---|---|---|---|---|
+| **Opus 5.5, medium effort** | **1.8%** | **2.8%** | **12 of 24** | 1.05 |
+| Opus 5.5, low effort | 4.4% | 6.1% | 7 of 24 | 0.26 |
+| Sonnet 5.5 | 24.1% | 21.6% | 3 of 24 | 0.17 |
+| Haiku 5.5 | 22.9% | 26.5% | 3 of 24 | 0.065 |
+
+  Only Opus at medium effort is good enough to train on. The readings checked by eye were made by Opus too, so it's not an independent check, but every disagreement was settled by looking at the picture.
+- **The labels:** rows were cut, as the app cuts them, from 50 other handwritten previews (different songs from the test pages). Opus read 1,959 of them through the Batches API at half price, and 1,041 are rows of notes. Six of its readings were checked against the pictures, and all six were right. 300 rows from the test pages were labelled the same way for measuring, and 166 of them are notes. The labels cost US$6.99 (US$5.99 and US$1.00) on the owner's trial key. The day's Claude work came to about US$8.25 in all.
+- **Retrained** (`runs/rows2`, started from `rows1`): two passes over 10,000 drawn rows, 15,000 real typed rows and the 1,041 handwritten rows, each handwritten row repeated 20 times. It took about 80 minutes on the CPU. The best step was chosen by the handwritten test rows.
+
+| Measured on | Before (`rows1`) | Now in the app (`rows2`) |
+|---|---|---|
+| Handwritten rows from unseen pages (166, Opus's readings) | 36.2% of tokens wrong, 1.2% of rows exact | **12.8% wrong, 11.4% exact** |
+| Handwritten rows read by eye (24) | 23.9% wrong, none exact | **6.3% wrong, 3 exact** |
+| Typed rows from unseen sheets (733) | 3.1% wrong, 56.2% exact | 3.3% wrong, 53.3% exact |
+| The 50 typed test lines, read as the app reads them | 92.9% of bars, 34 lines exact, 26 silent mistakes | **95.1% of bars, 38 lines exact, 12 silent mistakes** |
+
+- **In the app, the 50 handwritten test pages, no AI:** 364 lines, 13 of them adding up (before: 294 and 6). Five of the 13 are near-empty lines that add up by chance: a part's letter read as words, or a lone bar. Of the other 8:
+  - one is right except for one octave mark (four parts, five bars);
+  - three are close, with one or two notes wrong;
+  - one has the right notes under the wrong parts' names, because its box cut across two systems;
+  - one is wrong;
+  - two weren't checked.
+
+  The browser test's typed PDF and photo-like picture still read 48 of 48 bars.
+- **What fails most on handwriting now is grouping the rows into lines.** Boxes often start partway through a system, so parts get the wrong names or are lost. The checker also passes near-empty lines. Both are free fixes.
+- **The tools** are in `scripts/handwriting/`. The pictures, labels and folders stay in `data/`, out of git.
+
+```sh
+# from abu-reader: rows cut from pages ({file} list, root folder), as the app cuts them
+.venv/bin/python -I scripts/handwriting/cutrows.py pages.json <root> <out>
+# from abu-app: Opus labels them in batches (key in abu-api/.dev.vars.trial, never printed)
+npx tsx --tsconfig tsconfig.json ../abu-reader/scripts/handwriting/rowbatch.ts submit <out>/rows.json <out>/rows <out>/state.json
+npx tsx --tsconfig tsconfig.json ../abu-reader/scripts/handwriting/rowbatch.ts status <out>/state.json
+npx tsx --tsconfig tsconfig.json ../abu-reader/scripts/handwriting/rowbatch.ts collect <out>/state.json <out>/answers.json
+# from abu-reader: a training folder (data/rows/hand), then train and measure
+.venv/bin/python -I scripts/handwriting/build_hand.py <out>/rows.json <out>/pages <out>/answers.json data/rows/hand
+cd train && ../.venv/bin/python -I train.py --data ../data/rows/synth-sub ../data/rows/real-sub "../data/rows/hand*20" \
+  --held ../data/rows/hand-held --out ../runs/rows2 --init ../runs/rows1/best.pt --epochs 2 --lr 6e-4 --every 500
+cd .. && .venv/bin/python -I scripts/handwriting/eval_reader.py runs/rows2/best.pt data/rows/held data/rows/hand-held data/rows/hand-checked
+```
+
+`synth-sub` and `real-sub` are 10,000 and 15,000 rows picked from `synth` and `real`, with their pictures linked rather than copied, so the handwritten rows aren't drowned out. `"folder*20"` repeats a folder's rows 20 times.
