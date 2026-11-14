@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { ParsedSong } from '@/solfa';
 
@@ -35,6 +35,15 @@ export function useSongPlayer(song: ParsedSong | null, songKey: number, myPart: 
     const mine = myPart && parts.includes(myPart) ? myPart : (parts[0] ?? null);
     return { muted: {}, solo: null, mine, focus: !!myPart && parts.length > 1 };
   });
+
+  // The listener's part often arrives after the screen opens (signing in loads it): it becomes "Mine",
+  // with focus, unless they've already picked one.
+  const pickedMine = useRef(false);
+  useEffect(() => {
+    if (pickedMine.current || !myPart || !song?.parts.includes(myPart)) return;
+    const several = song.parts.length > 1;
+    setMix((m) => (m.mine === myPart ? m : { ...m, mine: myPart, focus: m.focus || several }));
+  }, [myPart, song]);
 
   useEffect(() => {
     if (!song) return;
@@ -80,10 +89,13 @@ export function useSongPlayer(song: ParsedSong | null, songKey: number, myPart: 
     changeKey: (delta: number) => setTranspose((t) => Math.max(-MAX_TRANSPOSE, Math.min(MAX_TRANSPOSE, t + delta))),
     toggleLoop: () => setLoop((l) => !l),
     toggleFocus: () => setMix((m) => ({ ...m, focus: !m.focus })),
-    /** Tapping a part's letter: clears a solo if there is one, else mutes or unmutes. */
+    /** Tapping a part: clears a solo if there is one, else mutes or unmutes. */
     toggleMute: (part: string) =>
       setMix((m) => (m.solo ? { ...m, solo: null } : { ...m, muted: { ...m.muted, [part]: !m.muted[part] } })),
     toggleSolo: (part: string) => setMix((m) => ({ ...m, solo: m.solo === part ? null : part })),
-    setMine: (part: string) => setMix((m) => ({ ...m, mine: part })),
+    setMine: (part: string) => {
+      pickedMine.current = true;
+      setMix((m) => ({ ...m, mine: part }));
+    },
   };
 }
