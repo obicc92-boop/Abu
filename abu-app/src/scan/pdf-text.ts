@@ -25,6 +25,8 @@ export interface PdfChar {
   y: number;
   size: number;
   mark: string;
+  /** A bridge note's name in the old key ("s="), printed small and raised just before this note (ˢd). */
+  pre?: string;
 }
 
 /** A drawn vertical line: x, top, bottom, and how thick it's drawn (when known). */
@@ -464,7 +466,59 @@ export function rowsOf(input: PdfChar[]) {
     reach.set(note, Math.max(reach.get(note) ?? note.x1, m.x1));
   }
   for (const [note, x1] of reach) note.x1 = x1;
-  return cluster([...others, ...leftovers]);
+  const all = [...others, ...leftovers];
+  const bridged = bridgesOf(all, notes);
+  return cluster(all.filter((c) => !bridged.has(c)));
+}
+
+const SYLLABLE = /^(?:de|re|fe|se|le|ra|ma|lo|ta|ba|d|r|m|f|s|l|t)$/;
+
+/**
+ * Bridge notes, where the key changes: a note printed small and raised just
+ * before a note in a row of notes is that note's name in the old key (ˢd, ᵈ'f).
+ * Sets the note's `pre` ("s=") and gives the characters it took.
+ */
+function bridgesOf(chars: PdfChar[], notes: PdfChar[]): Set<PdfChar> {
+  const used = new Set<PdfChar>();
+  const ink = chars.filter((c) => c.c !== ' ');
+  for (const n of notes) {
+    const N = n.size;
+    // Only before a note's first letter (not between the letters of "ta").
+    if (ink.some((g) => g !== n && isSmallLetter(g.c) && g.size >= 0.75 * N && Math.abs(g.y - n.y) < 0.3 * N && g.x1 <= n.x0 + 0.5 && n.x0 - g.x1 < 0.25 * N)) continue;
+    const last = ink
+      .filter((g) => !used.has(g) && g !== n && g.size < 0.75 * N && g.size > 0.35 * N && g.x1 <= n.x0 + 0.15 * N && n.x0 - g.x1 < 0.5 * N && g.y < n.y - 0.12 * N && g.y > n.y - 0.9 * N)
+      .sort((a, b) => b.x1 - a.x1)[0];
+    if (!last) continue;
+    // The small note, read leftwards: its letters and any octave marks, set tight together.
+    const group = [last];
+    for (;;) {
+      const head = group[0];
+      const before = ink.filter((g) => g !== head && g.x1 <= head.x0 + 0.5 && head.x0 - g.x1 < 0.35 * head.size && Math.abs(g.y - head.y) < 0.35 * head.size && g.size < 0.75 * N).sort((a, b) => b.x1 - a.x1)[0];
+      if (!before || group.length >= 4) break;
+      group.unshift(before);
+    }
+    const text = group.map((g) => g.c).join('');
+    const syllable = [text.slice(0, 2), text.slice(0, 1)].find((t) => SYLLABLE.test(t));
+    if (!syllable) continue;
+    // What follows is its octave marks: ticks and raised figures go up; figures, and the "l" some fonts draw
+    // for one, go down unless set raised.
+    const first = group[0];
+    let marks = '';
+    for (const g of group.slice(syllable.length)) {
+      const up = g.y < first.y - 0.12 * first.size;
+      if ("'’ʼ¹".includes(g.c)) marks += "'";
+      else if (g.c === '²') marks += "''";
+      else if (g.c === '₁') marks += '1';
+      else if (g.c === '₂') marks += '2';
+      else if ('1lI'.includes(g.c)) marks += up ? "'" : '1';
+      else if (g.c === '2') marks += up ? "''" : '2';
+      else marks += '?';
+    }
+    if (!/^(?:'{0,2}|[12])$/.test(marks)) continue;
+    n.pre = `${syllable}${marks}=`;
+    for (const g of group) used.add(g);
+  }
+  return used;
 }
 
 // A drawn line goes through a row when it reaches from the row's letters (some
@@ -476,7 +530,7 @@ type Drawn = [number, number, number, '¦' | '┆'];
 
 /** The row as typed, with drawn lines through it as "¦" (or "┆") and gaps as spaces. */
 function rowText(row: PdfChar[], y: number, main: number, drawn: Drawn[]): string {
-  const items: [number, number, string][] = row.map((c) => [c.x0, c.x1, c.c + c.mark]);
+  const items: [number, number, string][] = row.map((c) => [c.x0, c.x1, (c.pre ?? '') + c.c + c.mark]);
   for (const s of drawn) if (crosses([s[0], s[1], s[2]], y, main)) items.push([s[0] - 0.01, s[0] + 0.01, s[3]]);
   // By the middle of each character: a line drawn right at a letter's left edge comes before it.
   items.sort((a, b) => a[0] + a[1] - (b[0] + b[1]));
@@ -677,8 +731,9 @@ function drawnLines(notes: { y: number; main: number }[], segs: Seg[], x0: numbe
   const accentsBy = (isBar: (s: Seg, k: number) => boolean): Set<Seg> | null => {
     const bars = places(through.filter(([s, k]) => isBar(s, k)).map(([s]) => s));
     const inside = bars.filter((x) => x > x0 + main && x < x1 - main);
-    // Lines within the music only: a brace or bracket drawn at the edges isn't one.
-    const between = places(through.filter(([s, k]) => !isBar(s, k)).map(([s]) => s)).filter((x) => x > x0 && x < x1 && !bars.some((b) => Math.abs(b - x) < 2));
+    // Lines well inside the music only: a brace or bracket drawn at the edges isn't one (a last note's
+    // octave mark can reach past it).
+    const between = places(through.filter(([s, k]) => !isBar(s, k)).map(([s]) => s)).filter((x) => x > x0 + 0.5 * main && x < x1 - 0.5 * main && !bars.some((b) => Math.abs(b - x) < 2));
     if (!inside.length || !between.length) return null;
     // A medium accent in most bars and never two in one, as on a sheet in 4/4 or 6/8 (a stray short line isn't one).
     const edges = [x0, ...inside, x1];

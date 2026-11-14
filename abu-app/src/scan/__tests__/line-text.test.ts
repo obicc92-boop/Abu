@@ -3,6 +3,12 @@ import { describe, expect, it } from '@jest/globals';
 import { alignedRows, joinLine, problemsByPart, splitLine, tidyNotes, tidyTitle, withoutNameColumn, withWords, wordsOf } from '../line-text';
 import { parseSolfa } from '@/solfa';
 
+describe('tidyNotes', () => {
+  it('joins a bridge note typed with spaces', () => {
+    expect(tidyNotes("d' = f :f . f |")).toBe("d'=f :f.f |");
+  });
+});
+
 describe('a scanned line as rows', () => {
   const TEXT = ['S  s1 | d :r /m :f |', 'W  O come let us', 'A  s1 | d :t1 /d :d |'].join('\n');
 

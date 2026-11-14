@@ -121,11 +121,48 @@ describe('drawn bar lines', () => {
     expect(line.text.split('\n')[0]).toBe('S  d :r :m | f :s :l | t :d :r |');
   });
 
+  it('doesn’t take a brace drawn at a line’s edge for a half-bar line (a last octave mark can reach past it)', () => {
+    const long: Seg[] = [100, 190].map((x) => [x, 138, 186]);
+    const short: Seg[] = [140, 240, 273].flatMap((x) => [[x, 138, 154], [x, 166, 182]] as Seg[]);
+    const [line] = readTypedSheet([page(rows, [...long, ...short])]).lines;
+    expect(line.text.split('\n')).toEqual(['S  d :r / m :f | s :l / t :d |', 'A  d :d / d :d | m :m / s :m |']);
+  });
+
   it('starts a line’s bar lines a little below the tops of the top row’s letters', () => {
     // The bar lines start at 143: the top row's letters reach 141.6 (its baseline is 150).
     const long: Seg[] = [100, 190, 290].map((x) => [x, 143, 186]);
     const [line] = readTypedSheet([page(rows, long)]).lines;
     expect(line.text.split('\n')[0]).toBe('S  d :r m :f | s :l t :d |');
+  });
+});
+
+describe('bridge notes', () => {
+  const small = (c: string, x0: number, y: number) => ({ c, x0, x1: x0 + 3.5, y, size: 7, mark: '' });
+
+  it('reads a small note raised just before a note as its name in the old key', () => {
+    const sheet = readTypedSheet([
+      page([
+        small('s', 101, 145.5), // ˢd
+        ...typed('d :r |m :f', 106, 150),
+        small('d', 98, 159.5), // ᵈ'f, with its own octave mark
+        { c: '’', x0: 101.5, x1: 103.5, y: 159.5, size: 7, mark: '' },
+        ...typed('f :m |r :d', 106, 164),
+      ]),
+    ]);
+    expect(sheet.lines[0].text.split('\n')).toEqual(['S  s=d :r | m :f |', "A  d'=f :m | r :d |"]);
+  });
+
+  it('reads the “l” some fonts draw for a low mark, and never puts a bridge note inside “ta”', () => {
+    const sheet = readTypedSheet([
+      page([
+        small('d', 97, 145.5), // ᵈˡs: the small note is d1
+        small('l', 100.5, 145.5),
+        ...typed('s :m |r :d', 106, 150),
+        ...typed('ta :m |r :d', 106, 164),
+        small('t', 107.5, 159.5), // a small t over "ta", by its second letter
+      ]),
+    ]);
+    expect(sheet.lines[0].text.split('\n')).toEqual(['S  d1=s :m | r :d |', 'A  ta :m | r :d |']);
   });
 });
 

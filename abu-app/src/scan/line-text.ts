@@ -32,7 +32,7 @@ export function joinLine(rows: LineRow[]): string {
 
 /** A row of notes tidied: single spaces, none around "." and ",". */
 export function tidyNotes(text: string): string {
-  return text.replace(/\s+/g, ' ').replace(/\s*([.,])\s*/g, '$1').trim();
+  return text.replace(/\s+/g, ' ').replace(/\s*([.,=])\s*/g, '$1').trim();
 }
 
 /**

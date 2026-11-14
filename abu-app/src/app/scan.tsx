@@ -606,9 +606,25 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
   const shown = useMemo(() => alignedRows(rows), [rows]);
   const [editing, setEditing] = useState<{ id: string; row: number; value: string } | null>(null);
   const valueOf = (i: number) => (editing && editing.id === line.id && editing.row === i ? editing.value : shown[i]);
-  const parsed = useMemo(() => parseSolfa(line.text, { time, key: doh }), [line.text, time, doh]);
+  // The key where this line starts: the song's, moved by any bridge notes in the lines before it.
+  const before = useMemo(() => lines.slice(0, current).map((l) => l.text), [lines, current]);
+  const lineDoh = useMemo(() => {
+    let key = doh;
+    for (const text of before) key = parseSolfa(text, { time, key }).keyChanges.at(-1)?.key?.semitone ?? key;
+    return key;
+  }, [before, time, doh]);
+  const parsed = useMemo(() => parseSolfa(line.text, { time, key: lineDoh }), [line.text, time, lineDoh]);
   const empty = !rows.some((r) => r.part && r.text.trim());
-  const player = useSongPlayer(empty || parsed.errors.length ? null : parsed, doh);
+  const player = useSongPlayer(empty || parsed.errors.length ? null : parsed, lineDoh);
+  // Where the key changes, said plainly, so a misread bridge note is easy to spot.
+  const keyNotes = useMemo(() => {
+    const all = Object.values(parsed.events).flat();
+    return parsed.keyChanges.flatMap((k) => {
+      if (!k.key) return [];
+      const bar = all.find((e) => Math.abs(e.start - k.beat) < 1e-6)?.bar;
+      return [`Doh changes to ${k.key.name}${bar ? ` in bar ${bar}` : ''}.`];
+    });
+  }, [parsed]);
   const { byPart, other } = problemsByPart(
     parsed.errors.map((e) => e.message),
     rows.flatMap((r) => (r.part ? [r.part] : [])),
@@ -797,6 +813,11 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
                 <Text style={styles.okText}>Every bar adds up. Play it to hear that the notes are right.</Text>
               </View>
             ) : null}
+            {keyNotes.map((k) => (
+              <Text key={k} style={styles.small}>
+                {k}
+              </Text>
+            ))}
             {player.message ? <Text style={styles.small}>{player.message}</Text> : null}
           </View>
           <View style={[styles.toolbar, styles.pad]}>
