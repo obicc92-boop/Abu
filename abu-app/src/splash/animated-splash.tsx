@@ -20,7 +20,7 @@ import Animated, {
 import Svg, { Circle, Defs, Ellipse, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { BrandMark } from '@/components/brand';
-import { colors, fonts } from '@/theme/tokens';
+import { brand as colors, fonts } from '@/theme/tokens';
 
 import { splashParticles, type Burst, type Sparkle } from './particles';
 

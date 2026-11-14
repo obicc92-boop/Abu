@@ -23,7 +23,7 @@ import { useQuery } from '@tanstack/react-query';
 import * as DocumentPicker from 'expo-document-picker';
 import { Redirect, router } from 'expo-router';
 import { useMemo, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollViewInstance } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, Text, TextInput, View, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollViewInstance } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { api, ApiError, type PickedFile, type ScanLineReading } from '@/api/client';
@@ -40,7 +40,8 @@ import { readTypedSheet, type PageText } from '@/scan/pdf-text';
 import type { Box, FoundLine } from '@/scan/types';
 import { parseKey, parseSolfa, partName } from '@/solfa';
 import { useSession } from '@/state/session';
-import { colors, fonts, partColor, partInk } from '@/theme/tokens';
+import { makeStyles, useColors, usePartInk } from '@/theme/theme';
+import { fonts, partColor } from '@/theme/tokens';
 
 const TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic'];
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
@@ -429,6 +430,8 @@ function ChooseStep(props: {
   onRemove(i: number): void;
   onRead(): void;
 }) {
+  const styles = useStyles();
+  const colors = useColors();
   const { chosen, hasPdf, error, pagesLeft } = props;
   return (
     <Page>
@@ -436,7 +439,7 @@ function ChooseStep(props: {
       {!chosen.length ? (
         <>
           <Card style={styles.hero}>
-            <ScanIcon color={colors.red} />
+            <ScanIcon color={colors.link} />
             <Text style={styles.heroTitle}>Turn a sol-fa sheet into a song</Text>
             <View style={styles.steps}>
               {['Photograph or choose the sheet', 'Abụ reads every line', 'You check it, then save'].map((s, i) => (
@@ -449,7 +452,7 @@ function ChooseStep(props: {
               ))}
             </View>
           </Card>
-          <IconButton icon={<CameraIcon color={colors.white} />} label="Take a photo" onPress={props.onPhoto} />
+          <IconButton icon={<CameraIcon color={colors.onRed} />} label="Take a photo" onPress={props.onPhoto} />
           <IconButton icon={<FileIcon color={colors.ink} />} label="Choose a PDF or photos" kind="ghost" onPress={props.onChoose} />
           {error ? <ErrorText message={error} /> : null}
           <Text style={styles.tip}>Best results: the whole page, flat and straight, in good light. Typed sheets read best; handwritten ones need more checking.</Text>
@@ -476,13 +479,13 @@ function ChooseStep(props: {
                   )}
                   {!hasPdf ? <Text style={styles.thumbNo}>{i + 1}</Text> : null}
                   <Pressable onPress={() => props.onRemove(i)} accessibilityRole="button" accessibilityLabel={`Remove ${hasPdf ? c.name : `page ${i + 1}`}`} hitSlop={6} style={styles.thumbRemove}>
-                    <CloseIcon color={colors.white} size={12} />
+                    <CloseIcon color={colors.onRed} size={12} />
                   </Pressable>
                 </View>
               ))}
               {!hasPdf && chosen.length < MAX_PAGES ? (
                 <Pressable onPress={props.onPhoto} accessibilityRole="button" accessibilityLabel="Add a page" style={[styles.thumb, styles.addTile]}>
-                  <PlusIcon color={colors.red} />
+                  <PlusIcon color={colors.link} />
                   <Text style={styles.addText}>Add a page</Text>
                 </Pressable>
               ) : null}
@@ -508,6 +511,8 @@ function ChooseStep(props: {
 }
 
 function IconButton({ icon, label, onPress, kind = 'primary' }: { icon: ReactNode; label: string; onPress(): void; kind?: 'primary' | 'ghost' }) {
+  const styles = useStyles();
+  const colors = useColors();
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} style={({ pressed }) => [styles.iconButton, kind === 'ghost' && styles.iconButtonGhost, pressed && { opacity: 0.85 }]}>
       {icon}
@@ -525,6 +530,8 @@ const STAGES: { key: Stage; label: string }[] = [
 ];
 
 function ReadingStep({ stage, done, lines, note }: { stage: Stage; done: { n: number; of: number }; lines: Line[]; note: string | null }) {
+  const styles = useStyles();
+  const colors = useColors();
   const at = STAGES.findIndex((s) => s.key === stage);
   const share = (at + Math.min(1, done.n / Math.max(1, done.of))) / STAGES.length;
   return (
@@ -538,7 +545,7 @@ function ReadingStep({ stage, done, lines, note }: { stage: Stage; done: { n: nu
           {STAGES.map((s, i) => (
             <View key={s.key} style={styles.stage}>
               <View style={[styles.stageDot, i < at && styles.stageDone, i === at && styles.stageNow]}>
-                {i < at ? <CheckIcon color={colors.white} size={12} /> : i === at ? <ActivityIndicator size="small" color={colors.white} /> : null}
+                {i < at ? <CheckIcon color={colors.onRed} size={12} /> : i === at ? <ActivityIndicator size="small" color={colors.onRed} /> : null}
               </View>
               <Text style={[styles.stageText, i === at && { color: colors.ink }]}>{s.label}</Text>
             </View>
@@ -559,7 +566,7 @@ function ReadingStep({ stage, done, lines, note }: { stage: Stage; done: { n: nu
                 {l.status === 'read' ? (
                   <CheckIcon color={colors.ok} />
                 ) : l.status === 'reading' ? (
-                  <ActivityIndicator size="small" color={colors.red} />
+                  <ActivityIndicator size="small" color={colors.link} />
                 ) : l.status === 'failed' ? (
                   <Text style={styles.failMark}>!</Text>
                 ) : null}
@@ -597,6 +604,9 @@ const READ_BY: Record<NonNullable<Line['via']>, string> = {
 };
 
 function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, update, canReadAgain, readAgain, onFinish }: CheckProps) {
+  const ink = usePartInk();
+  const styles = useStyles();
+  const colors = useColors();
   const line = lines[current];
   const [zoom, setZoom] = useState(true);
   const [width, setWidth] = useState(0);
@@ -714,7 +724,7 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
                 accessibilityLabel={`Line ${i + 1}${l.checked ? ', checked' : l.skipped ? ', left out' : ''}`}
                 style={[styles.dot, l.checked && styles.dotDone, l.skipped && styles.dotSkipped, on && styles.dotOn]}
               >
-                {l.checked && !on ? <CheckIcon color={colors.ok} size={14} /> : <Text style={[styles.dotText, on && { color: colors.white }]}>{l.status === 'failed' ? '!' : i + 1}</Text>}
+                {l.checked && !on ? <CheckIcon color={colors.ok} size={14} /> : <Text style={[styles.dotText, on && { color: colors.onRed }]}>{l.status === 'failed' ? '!' : i + 1}</Text>}
               </Pressable>
             );
           })}
@@ -745,7 +755,7 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
                 {rows.flatMap((r) => (r.part ? [r.part] : [])).map((p) => (
                   <View key={p} style={styles.legendItem}>
                     <View style={[styles.legendDot, { backgroundColor: partColor(p) }]} />
-                    <Text style={[styles.legendText, { color: partInk(p) }]}>{partName(p)}</Text>
+                    <Text style={[styles.legendText, { color: ink(p) }]}>{partName(p)}</Text>
                   </View>
                 ))}
               </View>
@@ -790,7 +800,7 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
           <View style={[styles.pad, { gap: 6 }]}>
             {Object.entries(byPart).map(([part, messages]) => (
               <Text key={part} style={styles.problem}>
-                <Text style={{ color: partColor(part), fontFamily: fonts.heavy }}>{partName(part)}: </Text>
+                <Text style={{ color: ink(part), fontFamily: fonts.heavy }}>{partName(part)}: </Text>
                 {messages.join(' ')}
               </Text>
             ))}
@@ -852,6 +862,8 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
 /* ---------- 4. Finish ---------- */
 
 function FinishStep(props: { lines: Line[]; heading: Heading; time: string; setTime(t: string): void; attached?: string; onOpen(i: number): void; onSave(): void }) {
+  const styles = useStyles();
+  const colors = useColors();
   const { lines, heading, time, attached } = props;
   const checked = lines.filter((l) => l.checked).length;
   const skipped = lines.filter((l) => l.skipped).length;
@@ -893,6 +905,7 @@ function FinishStep(props: { lines: Line[]; heading: Heading; time: string; setT
 }
 
 function Summary({ n, label, color }: { n: number; label: string; color: string }) {
+  const styles = useStyles();
   return (
     <View style={styles.summaryCell}>
       <Text style={[styles.summaryN, { color }]}>{n}</Text>
@@ -901,7 +914,7 @@ function Summary({ n, label, color }: { n: number; label: string; color: string 
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   screen: { flex: 1, backgroundColor: colors.sand },
   body: { padding: 16, paddingBottom: 110, gap: 12, width: '100%', maxWidth: MAX_WIDTH, alignSelf: 'center' },
   hero: { alignItems: 'center', paddingVertical: 24, gap: 12 },
@@ -912,8 +925,8 @@ const styles = StyleSheet.create({
   stepNoText: { fontFamily: fonts.heavy, fontSize: 13, color: colors.redDeep },
   stepText: { fontFamily: fonts.bold, fontSize: 15, color: colors.ink },
   iconButton: { minHeight: 54, borderRadius: 12, backgroundColor: colors.red, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 18 },
-  iconButtonGhost: { backgroundColor: colors.white, borderWidth: 1.5, borderColor: colors.line },
-  iconButtonText: { fontFamily: fonts.heavy, fontSize: 15.5, color: colors.white },
+  iconButtonGhost: { backgroundColor: colors.card, borderWidth: 1.5, borderColor: colors.line },
+  iconButtonText: { fontFamily: fonts.heavy, fontSize: 15.5, color: colors.onRed },
   tip: { fontFamily: fonts.body, fontSize: 13, lineHeight: 18, color: colors.muted },
   muted: { fontFamily: fonts.bold, fontSize: 12.5, color: colors.muted },
   small: { fontFamily: fonts.body, fontSize: 12.5, color: colors.muted },
@@ -924,10 +937,10 @@ const styles = StyleSheet.create({
   thumbImg: { width: '100%', height: '100%' },
   thumbFile: { alignItems: 'center', justifyContent: 'center', gap: 6, padding: 8, backgroundColor: colors.sand },
   thumbName: { fontFamily: fonts.bold, fontSize: 11, color: colors.muted, textAlign: 'center' },
-  thumbNo: { position: 'absolute', left: 6, bottom: 6, fontFamily: fonts.heavy, fontSize: 12, color: colors.white, backgroundColor: 'rgba(34,22,15,0.7)', borderRadius: 8, paddingHorizontal: 6, overflow: 'hidden' },
+  thumbNo: { position: 'absolute', left: 6, bottom: 6, fontFamily: fonts.heavy, fontSize: 12, color: colors.onRed, backgroundColor: 'rgba(34,22,15,0.7)', borderRadius: 8, paddingHorizontal: 6, overflow: 'hidden' },
   thumbRemove: { position: 'absolute', right: 6, top: 6, width: 24, height: 24, borderRadius: 12, backgroundColor: 'rgba(34,22,15,0.75)', alignItems: 'center', justifyContent: 'center' },
-  addTile: { borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.red, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center', gap: 6 },
-  addText: { fontFamily: fonts.bold, fontSize: 12.5, color: colors.red },
+  addTile: { borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.red, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center', gap: 6 },
+  addText: { fontFamily: fonts.bold, fontSize: 12.5, color: colors.link },
   bar: { height: 8, borderRadius: 4, backgroundColor: colors.board, overflow: 'hidden', flex: 1 },
   barWide: { height: 8, borderRadius: 4, backgroundColor: colors.board, overflow: 'hidden', alignSelf: 'stretch' },
   barFill: { height: '100%', backgroundColor: colors.red, borderRadius: 4 },
@@ -939,14 +952,14 @@ const styles = StyleSheet.create({
   stageText: { fontFamily: fonts.bold, fontSize: 12.5, color: colors.muted, textAlign: 'center' },
   progressRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   progressNo: { width: 18, fontFamily: fonts.heavy, fontSize: 12.5, color: colors.muted, textAlign: 'right' },
-  progressImg: { flex: 1, height: 42, backgroundColor: colors.white, borderRadius: 6, borderWidth: 1, borderColor: colors.line },
+  progressImg: { flex: 1, height: 42, backgroundColor: colors.card, borderRadius: 6, borderWidth: 1, borderColor: colors.line },
   progressMark: { width: 24, alignItems: 'center' },
-  failMark: { fontFamily: fonts.heavy, fontSize: 16, color: colors.red },
+  failMark: { fontFamily: fonts.heavy, fontSize: 16, color: colors.link },
   progress: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  timeChip: { borderRadius: 999, borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.white, paddingHorizontal: 12, paddingVertical: 6 },
+  timeChip: { borderRadius: 999, borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.card, paddingHorizontal: 12, paddingVertical: 6 },
   timeChipText: { fontFamily: fonts.heavy, fontSize: 13, color: colors.ink },
   dots: { gap: 6, paddingVertical: 2 },
-  dot: { minWidth: 32, height: 32, borderRadius: 16, borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  dot: { minWidth: 32, height: 32, borderRadius: 16, borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
   dotOn: { backgroundColor: colors.red, borderColor: colors.red },
   dotDone: { borderColor: colors.ok },
   dotSkipped: { opacity: 0.4 },
@@ -955,7 +968,7 @@ const styles = StyleSheet.create({
   pad: { paddingHorizontal: 14, paddingVertical: 10 },
   iconOnly: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.sand },
   rowsBox: { flexDirection: 'row', borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.line, backgroundColor: colors.sand },
-  tags: { width: 18, borderRightWidth: 1, borderColor: colors.line, backgroundColor: colors.white },
+  tags: { width: 18, borderRightWidth: 1, borderColor: colors.line, backgroundColor: colors.card },
   tagCell: { height: ROW_HEIGHT, alignItems: 'center', justifyContent: 'center' },
   tag: { width: 6, height: ROW_HEIGHT - 12, borderRadius: 3 },
   legend: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 12, rowGap: 2, marginTop: 4 },
@@ -975,17 +988,17 @@ const styles = StyleSheet.create({
   rowInputBad: { backgroundColor: colors.redTint },
   wordsInput: { fontFamily: fonts.body, fontStyle: 'italic', fontSize: 14, color: colors.muted },
   problem: { fontFamily: fonts.body, fontSize: 13.5, lineHeight: 19, color: colors.redDeep },
-  doubt: { borderRadius: 999, backgroundColor: '#FBF0DA', paddingHorizontal: 10, paddingVertical: 4 },
-  doubtText: { fontFamily: fonts.bold, fontSize: 12.5, color: '#8A5A06' },
+  doubt: { borderRadius: 999, backgroundColor: colors.warnTint, paddingHorizontal: 10, paddingVertical: 4 },
+  doubtText: { fontFamily: fonts.bold, fontSize: 12.5, color: colors.warn },
   okRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   okText: { fontFamily: fonts.bold, fontSize: 13, color: colors.ok, flex: 1 },
   toolbar: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, borderTopWidth: 1, borderColor: colors.line },
-  tool: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 10, borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.white, paddingHorizontal: 12, paddingVertical: 8 },
+  tool: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 10, borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.card, paddingHorizontal: 12, paddingVertical: 8 },
   toolText: { fontFamily: fonts.bold, fontSize: 13, color: colors.ink },
-  footer: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(247,241,237,0.96)', borderTopWidth: 1, borderColor: colors.line },
+  footer: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.glass, borderTopWidth: 1, borderColor: colors.line },
   footerInner: { flexDirection: 'row', gap: 10, padding: 12, paddingBottom: 16, width: '100%', maxWidth: MAX_WIDTH, alignSelf: 'center' },
   summary: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 6 },
   summaryCell: { alignItems: 'center', gap: 2 },
   summaryN: { fontFamily: fonts.heavy, fontSize: 26 },
   summaryRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-});
+}));

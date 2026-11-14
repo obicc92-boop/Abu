@@ -7,7 +7,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Redirect, router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { api, attendanceCsvUrl, type Tally } from '@/api/client';
 import { Body, Button, Card, Chip, ErrorText, Kicker, Loading, Page, TopBar } from '@/components/ui';
@@ -17,11 +17,14 @@ import { download } from '@/lib/download';
 import { kindLabel } from '@/lib/group-types';
 import { partName, partPlural } from '@/solfa';
 import { useSession } from '@/state/session';
-import { colors, fonts, partColor } from '@/theme/tokens';
+import { makeStyles, useColors } from '@/theme/theme';
+import { fonts, partColor } from '@/theme/tokens';
 
 const PART_ORDER = ['S', 'A', 'T', 'B'];
 
 export default function AttendanceReportScreen() {
+  const styles = useStyles();
+  const colors = useColors();
   const s = useSession();
   const g = s.group;
   const [range, setRange] = useState<ReportRange>('3m');
@@ -65,7 +68,7 @@ export default function AttendanceReportScreen() {
         <>
           <Card tone="sand">
             <Kicker>Attendance</Kicker>
-            <Text style={[styles.big, { color: rateColor(r.overall.rate) }]}>{r.overall.rate === null ? '—' : `${r.overall.rate}%`}</Text>
+            <Text style={[styles.big, { color: rateColor(r.overall.rate, colors) }]}>{r.overall.rate === null ? '—' : `${r.overall.rate}%`}</Text>
             <Text style={styles.small}>
               {r.events.length} {r.events.length === 1 ? 'service or rehearsal' : 'services and rehearsals'} · {r.overall.present} present · {r.overall.absent} absent · {r.overall.excused} excused
             </Text>
@@ -136,7 +139,7 @@ export default function AttendanceReportScreen() {
                         {m.present} present · {m.absent} absent{m.excused ? ` · ${m.excused} excused` : ''}
                       </Text>
                     </View>
-                    <Text style={[styles.rate, { color: rateColor(m.rate) }]}>{m.rate === null ? '—' : `${m.rate}%`}</Text>
+                    <Text style={[styles.rate, { color: rateColor(m.rate, colors) }]}>{m.rate === null ? '—' : `${m.rate}%`}</Text>
                   </View>
                 ))}
               </View>
@@ -152,32 +155,34 @@ export default function AttendanceReportScreen() {
 const order = (part: string) => (part ? (PART_ORDER.includes(part) ? PART_ORDER.indexOf(part) : 10) : 20);
 
 function TallyRow({ label, tally, color, dot }: { label: string; tally: Tally; color?: string; dot?: string }) {
+  const colors = useColors();
+  const styles = useStyles();
   return (
     <View style={styles.tally}>
       {dot ? <View style={[styles.dot, { backgroundColor: color }]} /> : null}
       <View style={{ flex: 1 }}>
         <Text style={styles.name}>{label}</Text>
         <View style={styles.bar}>
-          <View style={[styles.barFill, { width: `${tally.rate ?? 0}%`, backgroundColor: color ?? rateColor(tally.rate) }]} />
+          <View style={[styles.barFill, { width: `${tally.rate ?? 0}%`, backgroundColor: color ?? rateColor(tally.rate, colors) }]} />
         </View>
       </View>
-      <Text style={[styles.rate, { color: rateColor(tally.rate) }]}>{tally.rate === null ? '—' : `${tally.rate}%`}</Text>
+      <Text style={[styles.rate, { color: rateColor(tally.rate, colors) }]}>{tally.rate === null ? '—' : `${tally.rate}%`}</Text>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   big: { fontFamily: fonts.monoBold, fontSize: 40, lineHeight: 46 },
   small: { fontFamily: fonts.body, fontSize: 12.5, color: colors.muted },
   name: { fontFamily: fonts.bold, fontSize: 14.5, color: colors.ink },
-  link: { fontFamily: fonts.heavy, fontSize: 14, color: colors.red },
+  link: { fontFamily: fonts.heavy, fontSize: 14, color: colors.link },
   line: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderTopWidth: 1, borderTopColor: colors.line },
   tally: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 },
   dot: { width: 14, height: 14, borderRadius: 7 },
   bar: { height: 6, borderRadius: 3, backgroundColor: colors.sand, marginTop: 4, overflow: 'hidden' },
   barFill: { height: 6, borderRadius: 3 },
   rate: { fontFamily: fonts.monoBold, fontSize: 15, minWidth: 48, textAlign: 'right' },
-  list: { backgroundColor: colors.white, borderRadius: 14, borderWidth: 1, borderColor: colors.line, overflow: 'hidden' },
+  list: { backgroundColor: colors.card, borderRadius: 14, borderWidth: 1, borderColor: colors.line, overflow: 'hidden' },
   member: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderBottomWidth: 1, borderBottomColor: colors.line },
-});
+}));

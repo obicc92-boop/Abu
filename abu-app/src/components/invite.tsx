@@ -2,14 +2,16 @@
 import * as Clipboard from 'expo-clipboard';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Linking, StyleSheet, Text, View } from 'react-native';
+import { Linking, Text, View } from 'react-native';
 
 import { inviteLink, inviteMessage } from '@/api/client';
-import { colors, fonts } from '@/theme/tokens';
+import { makeStyles } from '@/theme/theme';
+import { fonts } from '@/theme/tokens';
 
 import { Body, Button, Card, Kicker } from './ui';
 
 export function InviteCard({ groupName, code, intro, showQr = true }: { groupName: string; code: string; intro?: string; showQr?: boolean }) {
+  const styles = useStyles();
   const [copied, setCopied] = useState<'code' | 'link' | null>(null);
   const copy = async (what: 'code' | 'link') => {
     await Clipboard.setStringAsync(what === 'code' ? code : inviteLink(code));
@@ -37,8 +39,8 @@ export function InviteCard({ groupName, code, intro, showQr = true }: { groupNam
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   codeBox: { backgroundColor: colors.sand, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
   code: { fontFamily: fonts.monoBold, fontSize: 34, letterSpacing: 8, color: colors.ink },
   row: { flexDirection: 'row', gap: 8 },
-});
+}));

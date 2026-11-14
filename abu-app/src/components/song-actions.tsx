@@ -5,15 +5,18 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { Linking, StyleSheet, Switch, Text, View } from 'react-native';
+import { Linking, Switch, Text, View } from 'react-native';
 
 import { api, sheetUrl, songLink, type Song } from '@/api/client';
 import { useSession } from '@/state/session';
-import { colors, fonts } from '@/theme/tokens';
+import { makeStyles, useColors } from '@/theme/theme';
+import { fonts } from '@/theme/tokens';
 
 import { Body, Button, Card, ErrorText, Kicker } from './ui';
 
 export function SongActions({ songId, song }: { songId: string; song?: Song }) {
+  const styles = useStyles();
+  const colors = useColors();
   const s = useSession();
   const queryClient = useQueryClient();
   const signedIn = s.status === 'signedIn';
@@ -81,8 +84,8 @@ export function SongActions({ songId, song }: { songId: string; song?: Song }) {
             onValueChange={(v) => knows.mutate(v)}
             accessibilityLabel="I know my part"
             trackColor={{ false: colors.switchOff, true: colors.ok }}
-            thumbColor={colors.white}
-            {...({ activeThumbColor: colors.white } as object)}
+            thumbColor={colors.onRed}
+            {...({ activeThumbColor: colors.onRed } as object)}
           />
         </View>
       ) : null}
@@ -94,9 +97,9 @@ export function SongActions({ songId, song }: { songId: string; song?: Song }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   practice: { flexDirection: 'row', alignItems: 'center', gap: 10, borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 10, marginTop: 4 },
   plays: { fontFamily: fonts.bold, fontSize: 14, color: colors.ink, marginTop: 2 },
   knowsLabel: { fontFamily: fonts.bold, fontSize: 13.5, color: colors.ink },
-});
+}));

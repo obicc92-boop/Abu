@@ -7,7 +7,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { api, type AttendanceStatus, type SheetRow } from '@/api/client';
 import { Avatar, Body, Button, Card, Chip, ErrorText, Kicker, Loading, Page, TopBar } from '@/components/ui';
@@ -17,7 +17,8 @@ import { useOnline } from '@/lib/online';
 import { useSerial } from '@/lib/serial';
 import { partName, partPlural } from '@/solfa';
 import { useSession } from '@/state/session';
-import { colors, fonts, partColor } from '@/theme/tokens';
+import { makeStyles, useColors, usePartInk } from '@/theme/theme';
+import { fonts, type Palette, partColor } from '@/theme/tokens';
 
 type Filter = 'all' | 'unmarked' | 'present' | 'absent';
 const PART_ORDER = ['S', 'A', 'T', 'B'];
@@ -28,6 +29,9 @@ const LABEL: Record<AttendanceStatus, string> = { present: 'Present', absent: 'A
 const shown = (r: SheetRow, pending?: AttendanceStatus): AttendanceStatus | null => pending ?? r.status ?? (r.reply === 'cant' ? 'excused' : null);
 
 export default function AttendanceScreen() {
+  const ink = usePartInk();
+  const styles = useStyles();
+  const colors = useColors();
   const { id } = useLocalSearchParams<{ id: string }>();
   const s = useSession();
   const queryClient = useQueryClient();
@@ -91,7 +95,7 @@ export default function AttendanceScreen() {
     myPart ? Number(b === myPart) - Number(a === myPart) : 0,
   );
   const sections = [
-    ...partsInOrder.map((p) => ({ key: p, title: partPlural(p), color: partColor(p), rows: visible.filter((r) => r.part === p) })),
+    ...partsInOrder.map((p) => ({ key: p, title: partPlural(p), color: ink(p), rows: visible.filter((r) => r.part === p) })),
     { key: 'none', title: 'No part yet', color: colors.muted, rows: visible.filter((r) => !r.part) },
   ].filter((x) => x.rows.length);
 
@@ -176,6 +180,8 @@ export default function AttendanceScreen() {
 }
 
 function Row({ row, status, onTap }: { row: SheetRow; status: AttendanceStatus | null; onTap: () => void }) {
+  const colors = useColors();
+  const styles = useStyles();
   const note = [row.self_check_in && row.status === 'present' ? 'checked in' : null, row.reply === 'going' ? 'said going' : row.reply === 'cant' ? 'said can’t come' : null]
     .filter(Boolean)
     .join(' · ');
@@ -194,28 +200,28 @@ function Row({ row, status, onTap }: { row: SheetRow; status: AttendanceStatus |
           onPress={onTap}
           accessibilityRole="button"
           accessibilityLabel={`${row.display_name}: ${status ? LABEL[status] : 'not marked'}. Tap to change.`}
-          style={[styles.badge, status && BADGE[status]]}
+          style={[styles.badge, status && badgeBox(colors)[status]]}
           hitSlop={6}
         >
-          <Text style={[styles.badgeText, status && { color: BADGE_TEXT[status] }]}>{label}</Text>
+          <Text style={[styles.badgeText, status && { color: badgeText(colors)[status] }]}>{label}</Text>
         </Pressable>
       ) : (
-        <View style={[styles.badge, styles.badgeQuiet, status && BADGE[status]]}>
-          <Text style={[styles.badgeText, status && { color: BADGE_TEXT[status] }]}>{label}</Text>
+        <View style={[styles.badge, styles.badgeQuiet, status && badgeBox(colors)[status]]}>
+          <Text style={[styles.badgeText, status && { color: badgeText(colors)[status] }]}>{label}</Text>
         </View>
       )}
     </View>
   );
 }
 
-const BADGE: Record<AttendanceStatus, { backgroundColor: string; borderColor: string }> = {
-  present: { backgroundColor: '#E6F4F0', borderColor: '#BFE3DA' },
-  absent: { backgroundColor: colors.redTint, borderColor: '#F2C4B8' },
-  excused: { backgroundColor: '#FBF0DA', borderColor: '#F0D9A6' },
-};
-const BADGE_TEXT: Record<AttendanceStatus, string> = { present: colors.ok, absent: colors.redDeep, excused: '#94600A' };
+const badgeBox = (colors: Palette): Record<AttendanceStatus, { backgroundColor: string; borderColor: string }> => ({
+  present: { backgroundColor: colors.okTint, borderColor: colors.okLine },
+  absent: { backgroundColor: colors.redTint, borderColor: colors.redLine },
+  excused: { backgroundColor: colors.warnTint, borderColor: colors.warnLine },
+});
+const badgeText = (colors: Palette): Record<AttendanceStatus, string> => ({ present: colors.ok, absent: colors.redDeep, excused: colors.warn });
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   big: { fontFamily: fonts.monoBold, fontSize: 28, color: colors.ink },
   of: { fontFamily: fonts.body, fontSize: 14, color: colors.muted },
   small: { fontFamily: fonts.body, fontSize: 12.5, color: colors.muted },
@@ -224,10 +230,10 @@ const styles = StyleSheet.create({
   dot: { width: 14, height: 14, borderRadius: 7 },
   partCount: { fontFamily: fonts.monoBold, fontSize: 14, color: colors.ink },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  list: { backgroundColor: colors.white, borderRadius: 14, borderWidth: 1, borderColor: colors.line, overflow: 'hidden' },
+  list: { backgroundColor: colors.card, borderRadius: 14, borderWidth: 1, borderColor: colors.line, overflow: 'hidden' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderBottomWidth: 1, borderBottomColor: colors.line },
   name: { fontFamily: fonts.bold, fontSize: 15, color: colors.ink },
-  badge: { minWidth: 82, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.white, alignItems: 'center' },
+  badge: { minWidth: 82, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.card, alignItems: 'center' },
   badgeQuiet: { borderStyle: 'dashed' },
   badgeText: { fontFamily: fonts.heavy, fontSize: 13, color: colors.ink },
-});
+}));

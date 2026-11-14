@@ -8,9 +8,11 @@ import { View } from 'react-native';
 
 import { CalendarIcon, HomeIcon, PeopleIcon, PersonIcon, SongsIcon } from '@/components/icons';
 import { useSession } from '@/state/session';
-import { colors, fonts } from '@/theme/tokens';
+import { useColors } from '@/theme/theme';
+import { fonts } from '@/theme/tokens';
 
 export default function TabsLayout() {
+  const colors = useColors();
   const { status, lookingAround, group } = useSession();
   if (status === 'loading') return <View style={{ flex: 1, backgroundColor: colors.sand }} />;
   if (status === 'signedOut' && !lookingAround) return <Redirect href="/welcome" />;
@@ -22,7 +24,7 @@ export default function TabsLayout() {
         headerShown: false,
         tabBarActiveTintColor: colors.red,
         tabBarInactiveTintColor: colors.muted,
-        tabBarStyle: { backgroundColor: colors.white, borderTopColor: colors.line, height: 70, paddingTop: 6, paddingBottom: 12 },
+        tabBarStyle: { backgroundColor: colors.card, borderTopColor: colors.line, height: 70, paddingTop: 6, paddingBottom: 12 },
         tabBarLabelStyle: { fontFamily: fonts.bold, fontSize: 11.5, lineHeight: 15 },
         sceneStyle: { backgroundColor: colors.sand },
       }}

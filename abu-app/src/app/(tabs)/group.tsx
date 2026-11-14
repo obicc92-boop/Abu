@@ -6,7 +6,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, Switch, Text, View } from 'react-native';
 
 import { api, type Member, type MyGroup, type Role } from '@/api/client';
 import { InviteCard } from '@/components/invite';
@@ -16,11 +16,13 @@ import { rangeFrom, rateColor } from '@/lib/attendance';
 import { GROUP_TYPES } from '@/lib/group-types';
 import { partName } from '@/solfa';
 import { useSession } from '@/state/session';
-import { colors, fonts, partColor } from '@/theme/tokens';
+import { makeStyles, useColors, usePartInk } from '@/theme/theme';
+import { fonts } from '@/theme/tokens';
 
 const PART_ORDER = ['S', 'A', 'T', 'B'];
 
 export default function GroupTab() {
+  const colors = useColors();
   const s = useSession();
   if (s.status !== 'signedIn') return <NoGroup signedIn={false} />;
   if (s.loadingMe || !s.group) return <Loading />;
@@ -40,6 +42,9 @@ export default function GroupTab() {
 }
 
 function GroupDetails({ group, me }: { group: MyGroup; me: string }) {
+  const ink = usePartInk();
+  const styles = useStyles();
+  const colors = useColors();
   const queryClient = useQueryClient();
   const { refresh } = useSession();
   const members = useQuery({ queryKey: ['members', group.id], queryFn: () => api.members(group.id) });
@@ -125,7 +130,7 @@ function GroupDetails({ group, me }: { group: MyGroup; me: string }) {
               {report.data && report.data.overall.rate === null ? (
                 <Text style={styles.hint}>Nothing marked yet. Mark attendance from a rehearsal’s page.</Text>
               ) : (
-                <Text style={[styles.rateBig, { color: rateColor(report.data?.overall.rate ?? null) }]}>{report.data ? `${report.data.overall.rate}%` : '…'}</Text>
+                <Text style={[styles.rateBig, { color: rateColor(report.data?.overall.rate ?? null, colors) }]}>{report.data ? `${report.data.overall.rate}%` : '…'}</Text>
               )}
             </View>
             <Button small kind="ghost" label="Reports" accessibilityLabel="Attendance reports" onPress={() => router.push('/attendance-report')} />
@@ -146,7 +151,7 @@ function GroupDetails({ group, me }: { group: MyGroup; me: string }) {
       {members.error ? <ErrorText message={members.error.message} /> : null}
 
       {parts.map((p) => (
-        <PartSection key={p} title={`${partName(p)} · ${active.filter((m) => m.part === p).length}`} color={partColor(p)}>
+        <PartSection key={p} title={`${partName(p)} · ${active.filter((m) => m.part === p).length}`} color={ink(p)}>
           {active
             .filter((m) => m.part === p)
             .map((m) => (
@@ -169,6 +174,8 @@ function GroupDetails({ group, me }: { group: MyGroup; me: string }) {
 }
 
 function Toggle({ label, hint, value, onChange }: { label: string; hint: string; value: boolean; onChange: (v: boolean) => void }) {
+  const styles = useStyles();
+  const colors = useColors();
   return (
     <View style={styles.toggle}>
       <View style={{ flex: 1 }}>
@@ -180,15 +187,16 @@ function Toggle({ label, hint, value, onChange }: { label: string; hint: string;
         onValueChange={onChange}
         accessibilityLabel={label}
         trackColor={{ false: colors.switchOff, true: colors.red }}
-        thumbColor={colors.white}
+        thumbColor={colors.onRed}
         // On the web, react-native-web colours the "on" knob separately.
-        {...({ activeThumbColor: colors.white } as object)}
+        {...({ activeThumbColor: colors.onRed } as object)}
       />
     </View>
   );
 }
 
 function PartSection({ title, color, children }: { title: string; color: string; children: React.ReactNode }) {
+  const styles = useStyles();
   return (
     <View style={{ gap: 8 }}>
       <Kicker color={color}>{title}</Kicker>
@@ -204,6 +212,7 @@ function roleLabel(group: MyGroup, role: Role): string | null {
 }
 
 function WaitingRow({ groupId, member, onDone }: { groupId: string; member: Member; onDone: () => Promise<void> }) {
+  const styles = useStyles();
   const approve = useMutation({ mutationFn: () => api.approve(groupId, member.user_id), onSuccess: onDone });
   const decline = useMutation({ mutationFn: () => api.removeMember(groupId, member.user_id), onSuccess: onDone });
   return (
@@ -233,6 +242,8 @@ function MemberRow({
   rate?: number | null;
   onChanged: () => Promise<void>;
 }) {
+  const colors = useColors();
+  const styles = useStyles();
   const [open, setOpen] = useState(false);
   const isMe = member.user_id === me;
   const leader = group.role === 'leader';
@@ -263,7 +274,7 @@ function MemberRow({
             <Text style={styles.role}>
               {role}
               {role && typeof rate === 'number' ? ' · ' : ''}
-              {typeof rate === 'number' ? <Text style={{ color: rateColor(rate) }}>attendance {rate}%</Text> : null}
+              {typeof rate === 'number' ? <Text style={{ color: rateColor(rate, colors) }}>attendance {rate}%</Text> : null}
             </Text>
           ) : null}
         </View>
@@ -301,6 +312,7 @@ function MemberRow({
 
 /** Group tab in your own space, or when looking around. */
 function NoGroup({ signedIn, others = [] }: { signedIn: boolean; others?: MyGroup[] }) {
+  const styles = useStyles();
   const { setGroup, setLookingAround } = useSession();
   return (
     <Page>
@@ -337,18 +349,18 @@ function NoGroup({ signedIn, others = [] }: { signedIn: boolean; others?: MyGrou
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   toggle: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 4 },
   rateBig: { fontFamily: fonts.monoBold, fontSize: 24, marginTop: 2 },
   toggleLabel: { fontFamily: fonts.bold, fontSize: 15, color: colors.ink },
   hint: { fontFamily: fonts.body, fontSize: 12.5, color: colors.muted },
-  list: { backgroundColor: colors.white, borderRadius: 14, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 12, paddingVertical: 4 },
+  list: { backgroundColor: colors.card, borderRadius: 14, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 12, paddingVertical: 4 },
   memberRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
   name: { fontFamily: fonts.bold, fontSize: 15, color: colors.ink },
   you: { fontFamily: fonts.body, color: colors.muted },
   role: { fontFamily: fonts.bold, fontSize: 12.5, color: colors.redDeep },
-  more: { fontFamily: fonts.bold, fontSize: 13, color: colors.red },
+  more: { fontFamily: fonts.bold, fontSize: 13, color: colors.link },
   actions: { gap: 10, paddingBottom: 12 },
   roleRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  groupRow: { backgroundColor: colors.white, borderRadius: 14, borderWidth: 1, borderColor: colors.line, padding: 14, gap: 2 },
-});
+  groupRow: { backgroundColor: colors.card, borderRadius: 14, borderWidth: 1, borderColor: colors.line, padding: 14, gap: 2 },
+}));

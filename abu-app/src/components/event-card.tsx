@@ -1,16 +1,19 @@
 /** A service, rehearsal or concert in a list: date block, title, time, venue and songs. */
 import { Link } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import type { GroupEvent, GroupType } from '@/api/client';
 import { fmtTime, relDay } from '@/lib/dates';
 import { kindLabel } from '@/lib/group-types';
-import { colors, fonts } from '@/theme/tokens';
+import { makeStyles, useColors } from '@/theme/theme';
+import { brand, fonts } from '@/theme/tokens';
 
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 const DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
 export function EventCard({ event, groupType, muted }: { event: GroupEvent; groupType: GroupType; muted?: boolean }) {
+  const styles = useStyles();
+  const colors = useColors();
   const d = new Date(event.starts_at);
   const when = relDay(event.starts_at);
   const rehearsal = event.kind === 'rehearsal';
@@ -42,14 +45,14 @@ export function EventCard({ event, groupType, muted }: { event: GroupEvent; grou
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   muted: { opacity: 0.6 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.white, borderRadius: 14, borderWidth: 1, borderColor: colors.line, padding: 12 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.card, borderRadius: 14, borderWidth: 1, borderColor: colors.line, padding: 12 },
   date: { width: 52, borderRadius: 12, backgroundColor: colors.red, paddingVertical: 6, alignItems: 'center' },
   dateRehearsal: { backgroundColor: colors.board },
-  day: { fontFamily: fonts.heavy, fontSize: 10, letterSpacing: 0.6, color: '#FFD9CF' },
-  num: { fontFamily: fonts.heavy, fontSize: 20, lineHeight: 24, color: colors.white },
+  day: { fontFamily: fonts.heavy, fontSize: 10, letterSpacing: 0.6, color: brand.onRedKicker },
+  num: { fontFamily: fonts.heavy, fontSize: 20, lineHeight: 24, color: colors.onRed },
   kind: { fontFamily: fonts.heavy, fontSize: 11, letterSpacing: 0.6, textTransform: 'uppercase', color: colors.redDeep },
   title: { fontFamily: fonts.bold, fontSize: 15.5, color: colors.ink },
   small: { fontFamily: fonts.body, fontSize: 12.5, color: colors.muted },
-});
+}));

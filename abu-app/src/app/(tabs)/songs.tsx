@@ -5,7 +5,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Platform, ScrollView, TextInput, View } from 'react-native';
 
 import { api, type Song } from '@/api/client';
 import { SearchIcon } from '@/components/icons';
@@ -14,11 +14,14 @@ import { Body, Button, Chip, Loading, Page, TopBar } from '@/components/ui';
 import { DEMO_SONGS } from '@/data/demo-songs';
 import { FILTER_TAGS } from '@/lib/tags';
 import { useSession } from '@/state/session';
-import { colors, fonts } from '@/theme/tokens';
+import { makeStyles, useColors } from '@/theme/theme';
+import { fonts } from '@/theme/tokens';
 
 type View_ = 'all' | 'ours' | 'mine' | 'playable';
 
 export default function Songs() {
+  const styles = useStyles();
+  const colors = useColors();
   const s = useSession();
   const [query, setQuery] = useState('');
   const [view, setView] = useState<View_>('all');
@@ -67,7 +70,7 @@ export default function Songs() {
           value={query}
           onChangeText={setQuery}
           placeholder="Search title, composer or words"
-          placeholderTextColor="#B3A39A"
+          placeholderTextColor={colors.placeholder}
           style={styles.searchInput}
           accessibilityLabel="Search songs"
           autoCorrect={false}
@@ -115,12 +118,12 @@ export default function Songs() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   search: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderRadius: 12,
     borderWidth: 1.5,
     borderColor: colors.line,
@@ -128,4 +131,4 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, minHeight: 46, fontFamily: fonts.body, fontSize: 16, color: colors.ink },
   chips: { gap: 8 },
-});
+}));

@@ -6,7 +6,7 @@ import { useId } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Svg, { Circle, Defs, Ellipse, G, LinearGradient, Mask, Path, Pattern, Rect, Stop } from 'react-native-svg';
 
-import { colors } from '@/theme/tokens';
+import { brand as colors } from '@/theme/tokens';
 
 /**
  * The open music book from the app icon (design/brand/icon.svg): notation on

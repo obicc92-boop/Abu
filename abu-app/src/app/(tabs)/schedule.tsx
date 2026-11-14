@@ -13,11 +13,12 @@ import { CalendarIcon } from '@/components/icons';
 import { Body, Button, Card, ErrorText, Kicker, Loading, Page, TopBar } from '@/components/ui';
 import { weekBucket } from '@/lib/dates';
 import { useSession } from '@/state/session';
-import { colors } from '@/theme/tokens';
+import { useColors } from '@/theme/theme';
 
 const BUCKETS = ['this week', 'next week', 'later'] as const;
 
 export default function Schedule() {
+  const colors = useColors();
   const s = useSession();
   const [showPast, setShowPast] = useState(false);
   const g = s.group;

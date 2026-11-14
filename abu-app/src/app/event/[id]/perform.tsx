@@ -19,7 +19,7 @@ import { useScreenOn } from '@/lib/screen-on';
 import { readSetting, writeSetting } from '@/lib/storage';
 import { KEY_NAMES, parseSolfa, partName } from '@/solfa';
 import { useSession } from '@/state/session';
-import { colors, fonts } from '@/theme/tokens';
+import { brand, fonts, lightColors } from '@/theme/tokens';
 
 const SIZES = [16, 19, 23, 28];
 const THEME_KEY = 'abu.performTheme';
@@ -44,7 +44,7 @@ const LOOKS: Record<'dark' | 'light', Look> = {
     bg: '#140D0A',
     text: '#F7EDE7',
     kicker: '#E8A592',
-    section: colors.gold,
+    section: brand.gold,
     small: '#BFAEA5',
     ctl: '#2B1E18',
     ctlText: '#F7EDE7',
@@ -56,14 +56,14 @@ const LOOKS: Record<'dark' | 'light', Look> = {
   light: {
     bg: '#FFFFFF',
     text: '#140D0A',
-    kicker: colors.redDeep,
-    section: colors.red,
+    kicker: brand.redDeep,
+    section: brand.red,
     small: '#5E4E46',
-    ctl: colors.sand,
-    ctlText: colors.ink,
+    ctl: lightColors.sand,
+    ctlText: lightColors.ink,
     ctlOn: '#140D0A',
     ctlOnText: '#FFFFFF',
-    line: colors.line,
+    line: lightColors.line,
     lock: '#8E7A70',
   },
 };

@@ -1,8 +1,9 @@
-import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, Switch, Text, View } from 'react-native';
 
 import { partLevel, type MixSettings } from '@/audio/engine';
 import { partName } from '@/solfa';
-import { colors, fonts, partColor, partInk } from '@/theme/tokens';
+import { makeStyles, useColors, usePartInk } from '@/theme/theme';
+import { fonts, partColor } from '@/theme/tokens';
 
 /* ---------- Part mixer: tap a part to mute it; Solo; Mine ---------- */
 
@@ -15,6 +16,9 @@ interface MixerProps {
 }
 
 export function PartMixer({ parts, mix, onMute, onSolo, onMine }: MixerProps) {
+  const ink = usePartInk();
+  const styles = useStyles();
+  const colors = useColors();
   return (
     <View style={styles.mixer}>
       {parts.map((p) => {
@@ -31,8 +35,8 @@ export function PartMixer({ parts, mix, onMute, onSolo, onMine }: MixerProps) {
               hitSlop={4}
             >
               {/* The part's colour, as in the score; hollow when muted. */}
-              <View style={[styles.swatch, silent ? { borderColor: colors.barline, backgroundColor: colors.white } : { borderColor: partColor(p), backgroundColor: partColor(p) }]} />
-              <Text style={[styles.partName, { color: silent ? colors.muted : partInk(p) }]} numberOfLines={1}>
+              <View style={[styles.swatch, silent ? { borderColor: colors.barline, backgroundColor: colors.card } : { borderColor: partColor(p), backgroundColor: partColor(p) }]} />
+              <Text style={[styles.partName, { color: silent ? colors.muted : ink(p) }]} numberOfLines={1}>
                 {partName(p)}
               </Text>
             </Pressable>
@@ -50,6 +54,7 @@ export function PartMixer({ parts, mix, onMute, onSolo, onMine }: MixerProps) {
 }
 
 function SmallToggle({ label, on, onPress, a11y }: { label: string; on: boolean; onPress(): void; a11y: string }) {
+  const styles = useStyles();
   return (
     <Pressable
       onPress={onPress}
@@ -66,6 +71,8 @@ function SmallToggle({ label, on, onPress, a11y }: { label: string; on: boolean;
 /* ---------- On/off rows ---------- */
 
 export function ToggleRow({ label, hint, value, onChange }: { label: string; hint?: string; value: boolean; onChange(): void }) {
+  const styles = useStyles();
+  const colors = useColors();
   return (
     <View style={styles.toggleRow}>
       <Text style={styles.toggleLabel}>
@@ -77,9 +84,9 @@ export function ToggleRow({ label, hint, value, onChange }: { label: string; hin
         onValueChange={onChange}
         accessibilityLabel={label}
         trackColor={{ false: colors.switchOff, true: colors.red }}
-        thumbColor={colors.white}
+        thumbColor={colors.onRed}
         // On the web, react-native-web colours the "on" knob separately.
-        {...({ activeThumbColor: colors.white } as object)}
+        {...({ activeThumbColor: colors.onRed } as object)}
       />
     </View>
   );
@@ -96,6 +103,7 @@ interface StepperProps {
 }
 
 export function Stepper({ label, value, onStep, lessLabel, moreLabel }: StepperProps) {
+  const styles = useStyles();
   return (
     <View style={styles.stepper}>
       <Text style={styles.stepperLabel}>{label}</Text>
@@ -113,6 +121,8 @@ export function Stepper({ label, value, onStep, lessLabel, moreLabel }: StepperP
 }
 
 export function PlayButton({ playing, onPress, size = 68 }: { playing: boolean; onPress(): void; size?: number }) {
+  const styles = useStyles();
+  const colors = useColors();
   return (
     <Pressable
       onPress={onPress}
@@ -125,7 +135,7 @@ export function PlayButton({ playing, onPress, size = 68 }: { playing: boolean; 
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   mixer: { flexDirection: 'row', gap: 6 },
   part: {
     flex: 1,
@@ -133,7 +143,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1.5,
     borderColor: colors.line,
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     paddingTop: 8,
     paddingHorizontal: 4,
     paddingBottom: 6,
@@ -148,7 +158,7 @@ const styles = StyleSheet.create({
   small: { borderRadius: 6, paddingVertical: 3, backgroundColor: colors.sand, alignItems: 'center' },
   smallOn: { backgroundColor: colors.ink },
   smallText: { fontFamily: fonts.heavy, fontSize: 10.5, color: colors.muted },
-  smallTextOn: { color: colors.white },
+  smallTextOn: { color: colors.onInk },
 
   toggleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
   toggleLabel: { flex: 1, fontFamily: fonts.bold, fontSize: 14, color: colors.ink },
@@ -163,7 +173,7 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     borderWidth: 1.5,
     borderColor: colors.line,
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -189,7 +199,7 @@ const styles = StyleSheet.create({
     borderLeftWidth: 22,
     borderTopColor: 'transparent',
     borderBottomColor: 'transparent',
-    borderLeftColor: colors.white,
+    borderLeftColor: colors.onRed,
   },
-  stopIcon: { width: 20, height: 20, borderRadius: 3, backgroundColor: colors.white },
-});
+  stopIcon: { width: 20, height: 20, borderRadius: 3, backgroundColor: colors.card },
+}));

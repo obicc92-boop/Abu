@@ -1,16 +1,19 @@
 /** On Home in a browser: offer to install Abụ, once, until it's installed or dismissed. */
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { install, usePwa } from '@/lib/pwa';
 import { readSetting, writeSetting } from '@/lib/storage';
-import { colors, fonts } from '@/theme/tokens';
+import { makeStyles, useColors } from '@/theme/theme';
+import { fonts } from '@/theme/tokens';
 
 import { Button, Card, Kicker } from './ui';
 
 const KEY = 'abu.installHint';
 
 export function InstallHint() {
+  const styles = useStyles();
+  const colors = useColors();
   const pwa = usePwa();
   const [hidden, setHidden] = useState(() => readSetting(KEY) === 'dismissed');
   if (hidden || pwa.installed || (!pwa.canInstall && !pwa.ios)) return null;
@@ -34,7 +37,7 @@ export function InstallHint() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   text: { fontFamily: fonts.body, fontSize: 14, lineHeight: 20, color: colors.ink },
   row: { flexDirection: 'row', gap: 8 },
-});
+}));

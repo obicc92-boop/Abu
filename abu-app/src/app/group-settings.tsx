@@ -6,13 +6,14 @@
 import { useMutation } from '@tanstack/react-query';
 import { Redirect, router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 
 import { api, type MyGroup } from '@/api/client';
 import { Body, Button, Card, Chip, ErrorText, Field, Kicker, Loading, Page, TopBar } from '@/components/ui';
 import { GROUP_TYPES } from '@/lib/group-types';
 import { useSession } from '@/state/session';
-import { colors, fonts } from '@/theme/tokens';
+import { makeStyles, useColors } from '@/theme/theme';
+import { fonts } from '@/theme/tokens';
 
 const TITLES = ['Choirmaster', 'Choir director', 'Music director', 'Organist'];
 
@@ -34,6 +35,8 @@ export default function GroupSettingsScreen() {
 }
 
 function Editor({ group }: { group: MyGroup }) {
+  const colors = useColors();
+  const styles = useStyles();
   const s = useSession();
   const [name, setName] = useState(group.name);
   const [church, setChurch] = useState(group.church);
@@ -125,7 +128,7 @@ function Editor({ group }: { group: MyGroup }) {
             onSubmitEditing={add}
             maxLength={60}
             placeholder="Add a section, e.g. Igbo hymn"
-            placeholderTextColor="#B3A39A"
+            placeholderTextColor={colors.placeholder}
             accessibilityLabel="New section"
             style={styles.input}
           />
@@ -140,6 +143,7 @@ function Editor({ group }: { group: MyGroup }) {
 }
 
 function Tool({ label, a11y, onPress, disabled }: { label: string; a11y: string; onPress: () => void; disabled?: boolean }) {
+  const styles = useStyles();
   return (
     <Pressable onPress={onPress} disabled={disabled} accessibilityRole="button" accessibilityLabel={a11y} style={[styles.tool, disabled && { opacity: 0.3 }]} hitSlop={4}>
       <Text style={styles.toolText}>{label}</Text>
@@ -147,7 +151,7 @@ function Tool({ label, a11y, onPress, disabled }: { label: string; a11y: string;
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   small: { fontFamily: fonts.body, fontSize: 12.5, color: colors.muted },
   section: { flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -161,9 +165,9 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     fontSize: 15,
     color: colors.ink,
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     outlineColor: colors.red,
   },
   tool: { width: 34, height: 34, borderRadius: 9, backgroundColor: colors.sand, alignItems: 'center', justifyContent: 'center' },
   toolText: { fontFamily: fonts.heavy, fontSize: 15, color: colors.ink },
-});
+}));

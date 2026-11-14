@@ -1,14 +1,17 @@
 /** Check yourself in with the 4-digit code your leader shows at the rehearsal. */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { StyleSheet, Text, TextInput } from 'react-native';
+import { Text, TextInput } from 'react-native';
 
 import { api } from '@/api/client';
-import { colors, fonts } from '@/theme/tokens';
+import { makeStyles, useColors } from '@/theme/theme';
+import { fonts } from '@/theme/tokens';
 
 import { Body, Button, Card, ErrorText, Kicker } from './ui';
 
 export function CheckIn({ eventId }: { eventId: string }) {
+  const styles = useStyles();
+  const colors = useColors();
   const [code, setCode] = useState('');
   const queryClient = useQueryClient();
   const send = useMutation({
@@ -32,7 +35,7 @@ export function CheckIn({ eventId }: { eventId: string }) {
         inputMode="numeric"
         maxLength={4}
         placeholder="0000"
-        placeholderTextColor="#C9B9B0"
+        placeholderTextColor={colors.placeholder}
         accessibilityLabel="Check-in code"
         style={styles.code}
         onSubmitEditing={() => code.length === 4 && send.mutate()}
@@ -46,6 +49,7 @@ export function CheckIn({ eventId }: { eventId: string }) {
 }
 
 export function CheckedIn() {
+  const styles = useStyles();
   return (
     <Card style={styles.ok}>
       <Text style={styles.okText}>✓ You’re checked in. Enjoy rehearsal!</Text>
@@ -53,7 +57,7 @@ export function CheckedIn() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   code: {
     fontFamily: fonts.monoBold,
     fontSize: 34,
@@ -65,6 +69,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     outlineColor: colors.red,
   },
-  ok: { backgroundColor: '#EEF8F5', borderColor: '#BFE3DA' },
+  ok: { backgroundColor: colors.okTint, borderColor: colors.okLine },
   okText: { fontFamily: fonts.heavy, fontSize: 15, color: colors.ok },
-});
+}));

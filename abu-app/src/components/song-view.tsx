@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
+import { Pressable, ScrollView, Text, View, type ScrollViewInstance } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { api, type Song } from '@/api/client';
@@ -12,7 +12,8 @@ import { dayKey } from '@/lib/dates';
 import { queuePlay } from '@/lib/outbox';
 import { KEY_NAMES, mod12, parseSolfa } from '@/solfa';
 import { useSession } from '@/state/session';
-import { colors, fonts } from '@/theme/tokens';
+import { makeStyles } from '@/theme/theme';
+import { fonts } from '@/theme/tokens';
 
 import { PartMixer, PlayButton, Stepper, ToggleRow } from './player-controls';
 import { Score } from './score';
@@ -24,6 +25,7 @@ import { SongActions } from './song-actions';
  * puts its own step-through bar in `banner`.
  */
 export function SongView({ id, banner }: { id: string; banner?: ReactNode }) {
+  const styles = useStyles();
   const demo = DEMO_SONGS.find((s) => s.id === id);
   // Every song comes from the library; the demo songs are also built in, so they
   // open instantly and still play with no connection.
@@ -68,6 +70,7 @@ export function SongView({ id, banner }: { id: string; banner?: ReactNode }) {
 }
 
 function Player({ song, apiSong, banner }: { song: DemoSong; apiSong?: Song; banner?: ReactNode }) {
+  const styles = useStyles();
   const parsed = useMemo(() => parseSolfa(song.solfa, { time: song.time, key: song.key }), [song.solfa, song.time, song.key]);
   const { status, group } = useSession();
   const p = useSongPlayer(parsed, song.key, group?.part ?? null);
@@ -156,6 +159,7 @@ function Player({ song, apiSong, banner }: { song: DemoSong; apiSong?: Song; ban
 }
 
 function TopBar({ title, subtitle }: { title: string; subtitle: string }) {
+  const styles = useStyles();
   return (
     <View style={styles.topbar}>
       <Pressable
@@ -181,8 +185,8 @@ function TopBar({ title, subtitle }: { title: string; subtitle: string }) {
 
 const MAX_WIDTH = 560;
 
-const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: colors.white },
+const useStyles = makeStyles((colors) => ({
+  page: { flex: 1, backgroundColor: colors.card },
   topbar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -218,7 +222,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderTopWidth: 1,
     borderTopColor: colors.line,
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
   },
   transportSide: { flex: 1, alignItems: 'center' },
-});
+}));

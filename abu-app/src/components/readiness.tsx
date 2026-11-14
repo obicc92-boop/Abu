@@ -1,14 +1,16 @@
 import { useQuery } from '@tanstack/react-query';
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { api } from '@/api/client';
 import { partName } from '@/solfa';
-import { colors, fonts, partColor } from '@/theme/tokens';
+import { makeStyles } from '@/theme/theme';
+import { fonts, partColor } from '@/theme/tokens';
 
 import { Card, Kicker } from './ui';
 
 /** Totals per part: who knows every song, and how much they've practised. Never one person's practice. */
 export function Readiness({ eventId, title = 'How ready each part is' }: { eventId: string; title?: string }) {
+  const styles = useStyles();
   const readiness = useQuery({ queryKey: ['readiness', eventId], queryFn: () => api.readiness(eventId) });
   const parts = (readiness.data ?? []).filter((p) => p.part);
   if (!parts.length) return null;
@@ -36,11 +38,11 @@ export function Readiness({ eventId, title = 'How ready each part is' }: { event
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   readyRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 },
   dot: { width: 16, height: 16, borderRadius: 8 },
   title: { fontFamily: fonts.bold, fontSize: 15, color: colors.ink },
   small: { fontFamily: fonts.body, fontSize: 12.5, color: colors.muted },
   bar: { height: 6, borderRadius: 3, backgroundColor: colors.sand, marginTop: 4, overflow: 'hidden' },
   barFill: { height: 6, borderRadius: 3 },
-});
+}));

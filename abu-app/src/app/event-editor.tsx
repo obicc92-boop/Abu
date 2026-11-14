@@ -6,7 +6,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 
 import { api, type EventKind, type GroupEvent } from '@/api/client';
 import { Body, Button, Card, Chip, ErrorText, Field, Kicker, Loading, Page, TopBar } from '@/components/ui';
@@ -14,7 +14,8 @@ import { addDays, fmtDate, startOfDay } from '@/lib/dates';
 import { defaultTitle, kindLabel } from '@/lib/group-types';
 import { useOnline } from '@/lib/online';
 import { useSession } from '@/state/session';
-import { colors, fonts } from '@/theme/tokens';
+import { makeStyles } from '@/theme/theme';
+import { fonts } from '@/theme/tokens';
 
 const TIMES = ['07:00', '08:00', '09:00', '10:00', '12:00', '16:00', '17:00', '18:00', '19:00'];
 const REPEATS = [0, 3, 7, 11];
@@ -46,6 +47,7 @@ export default function EventEditorScreen() {
 }
 
 function Editor({ event }: { event?: GroupEvent }) {
+  const styles = useStyles();
   const s = useSession();
   const queryClient = useQueryClient();
   const group = s.groups.find((g) => g.id === (event?.group_id ?? s.group?.id)) ?? s.group;
@@ -188,9 +190,9 @@ function Editor({ event }: { event?: GroupEvent }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   group: { gap: 6 },
   label: { fontFamily: fonts.heavy, fontSize: 13, color: colors.muted },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   row: { gap: 8 },
-});
+}));

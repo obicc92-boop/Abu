@@ -4,21 +4,24 @@
  */
 import { router } from 'expo-router';
 import type { ReactNode } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextInputProps, type ViewStyle } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View, type StyleProp, type TextInputProps, type ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useOnline } from '@/lib/online';
 import { partName } from '@/solfa';
-import { colors, fonts, partColor } from '@/theme/tokens';
+import { makeStyles, useColors, usePartInk } from '@/theme/theme';
+import { brand, fonts, type Palette, partColor } from '@/theme/tokens';
 
 import { BackIcon } from './icons';
 
 export const MAX_WIDTH = 560;
 
 /** A scrolling page, centred and no wider than a phone on big screens. */
-export function Page({ children, background = colors.sand, edges }: { children: ReactNode; background?: string; edges?: ('top' | 'bottom' | 'left' | 'right')[] }) {
+export function Page({ children, background, edges }: { children: ReactNode; background?: string; edges?: ('top' | 'bottom' | 'left' | 'right')[] }) {
+  const colors = useColors();
+  const styles = useStyles();
   return (
-    <SafeAreaView style={[styles.page, { backgroundColor: background }]} edges={edges ?? ['top', 'left', 'right']}>
+    <SafeAreaView style={[styles.page, { backgroundColor: background ?? colors.sand }]} edges={edges ?? ['top', 'left', 'right']}>
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         {children}
       </ScrollView>
@@ -28,6 +31,8 @@ export function Page({ children, background = colors.sand, edges }: { children: 
 
 /** Title row; with `back`, a back button that returns or goes home. */
 export function TopBar({ title, subtitle, back, right }: { title: string; subtitle?: string; back?: boolean; right?: ReactNode }) {
+  const styles = useStyles();
+  const colors = useColors();
   return (
     <View style={styles.topbar}>
       {back ? (
@@ -71,7 +76,9 @@ export function Button({
   style?: StyleProp<ViewStyle>;
   accessibilityLabel?: string;
 }) {
-  const k = BUTTONS[kind];
+  const styles = useStyles();
+  const colors = useColors();
+  const k = buttonsFor(colors)[kind];
   return (
     <Pressable
       onPress={onPress}
@@ -86,19 +93,22 @@ export function Button({
   );
 }
 
-const BUTTONS: Record<ButtonKind, { box: ViewStyle; text: { color: string } }> = {
-  primary: { box: { backgroundColor: colors.red }, text: { color: colors.white } },
-  ghost: { box: { backgroundColor: colors.white, borderWidth: 1.5, borderColor: colors.line }, text: { color: colors.ink } },
-  light: { box: { backgroundColor: colors.white }, text: { color: colors.redDeep } },
-  outlineLight: { box: { borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.75)' }, text: { color: colors.white } },
-  danger: { box: { backgroundColor: colors.white, borderWidth: 1.5, borderColor: '#E7B9AE' }, text: { color: colors.redDeep } },
-};
+/** Each kind of button in a palette. "light" and "outlineLight" sit on the red cards, so they look the same in both. */
+const buttonsFor = (colors: Palette): Record<ButtonKind, { box: ViewStyle; text: { color: string } }> => ({
+  primary: { box: { backgroundColor: colors.red }, text: { color: colors.onRed } },
+  ghost: { box: { backgroundColor: colors.card, borderWidth: 1.5, borderColor: colors.line }, text: { color: colors.ink } },
+  light: { box: { backgroundColor: brand.white }, text: { color: brand.redDeep } },
+  outlineLight: { box: { borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.75)' }, text: { color: colors.onRed } },
+  danger: { box: { backgroundColor: colors.card, borderWidth: 1.5, borderColor: colors.redLine }, text: { color: colors.redDeep } },
+});
 
 export function Field({ label, hint, error, ...input }: TextInputProps & { label: string; hint?: string; error?: string | null }) {
+  const colors = useColors();
+  const styles = useStyles();
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
-      <TextInput placeholderTextColor="#B3A39A" {...input} style={[styles.input, input.multiline && { minHeight: 90, textAlignVertical: 'top' }, input.style]} accessibilityLabel={label} />
+      <TextInput placeholderTextColor={colors.placeholder} {...input} style={[styles.input, input.multiline && { minHeight: 90, textAlignVertical: 'top' }, input.style]} accessibilityLabel={label} />
       {hint ? <Text style={styles.hint}>{hint}</Text> : null}
       {error ? <ErrorText message={error} /> : null}
     </View>
@@ -106,19 +116,25 @@ export function Field({ label, hint, error, ...input }: TextInputProps & { label
 }
 
 export function Card({ children, style, tone = 'white' }: { children: ReactNode; style?: StyleProp<ViewStyle>; tone?: 'white' | 'sand' | 'red' }) {
+  const styles = useStyles();
   return <View style={[styles.card, tone === 'sand' && styles.cardSand, tone === 'red' && styles.cardRed, style]}>{children}</View>;
 }
 
 /** Small uppercase label above a section or inside a card. */
-export function Kicker({ children, color = colors.muted }: { children: ReactNode; color?: string }) {
-  return <Text style={[styles.kicker, { color }]}>{children}</Text>;
+export function Kicker({ children, color }: { children: ReactNode; color?: string }) {
+  const styles = useStyles();
+  const colors = useColors();
+  return <Text style={[styles.kicker, { color: color ?? colors.muted }]}>{children}</Text>;
 }
 
 export function Body({ children, muted, style }: { children: ReactNode; muted?: boolean; style?: object }) {
+  const styles = useStyles();
+  const colors = useColors();
   return <Text style={[styles.text, muted && { color: colors.muted }, style]}>{children}</Text>;
 }
 
 export function ErrorText({ message }: { message: string }) {
+  const styles = useStyles();
   return (
     <Text style={styles.error} accessibilityRole="alert">
       {message}
@@ -127,6 +143,8 @@ export function ErrorText({ message }: { message: string }) {
 }
 
 export function Loading({ label = 'Loading…' }: { label?: string }) {
+  const styles = useStyles();
+  const colors = useColors();
   const online = useOnline();
   // Offline, a query with nothing saved waits for a connection: say so instead of spinning.
   if (!online) {
@@ -138,7 +156,7 @@ export function Loading({ label = 'Loading…' }: { label?: string }) {
   }
   return (
     <View style={styles.loading}>
-      <ActivityIndicator color={colors.red} />
+      <ActivityIndicator color={colors.link} />
       <Text style={styles.hint}>{label}</Text>
     </View>
   );
@@ -146,6 +164,8 @@ export function Loading({ label = 'Loading…' }: { label?: string }) {
 
 /** Round badge with a person's initials, ringed in their part's colour. */
 export function Avatar({ name, part, size = 38 }: { name: string; part?: string | null; size?: number }) {
+  const styles = useStyles();
+  const colors = useColors();
   const initials = name
     .split(/\s+/)
     .filter(Boolean)
@@ -163,6 +183,8 @@ export const PARTS = ['S', 'A', 'T', 'B'];
 
 /** Choose a voice part: S, A, T, B, and optionally "I don't sing". */
 export function PartPicker({ value, onChange, allowNone }: { value: string | null; onChange: (part: string | null) => void; allowNone?: boolean }) {
+  const styles = useStyles();
+  const colors = useColors();
   const options: (string | null)[] = allowNone ? [...PARTS, null] : PARTS;
   return (
     <View style={styles.parts} accessibilityRole="radiogroup">
@@ -188,24 +210,28 @@ export function PartPicker({ value, onChange, allowNone }: { value: string | nul
 
 /** A rounded toggle, for filters and tags. */
 export function Chip({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) {
+  const styles = useStyles();
+  const colors = useColors();
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityState={{ selected: on }} style={[styles.chip, on && styles.chipOn]}>
-      <Text style={[styles.chipText, on && { color: colors.white }]}>{label}</Text>
+      <Text style={[styles.chipText, on && { color: colors.onInk }]}>{label}</Text>
     </Pressable>
   );
 }
 
 /** A part's name in its colour, e.g. for "Alto" next to a name. */
 export function PartTag({ part }: { part: string | null }) {
+  const ink = usePartInk();
+  const styles = useStyles();
   if (!part) return null;
-  return <Text style={[styles.partTag, { color: partColor(part) }]}>{partName(part)}</Text>;
+  return <Text style={[styles.partTag, { color: ink(part) }]}>{partName(part)}</Text>;
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   page: { flex: 1 },
   body: { padding: 16, paddingBottom: 32, gap: 14, width: '100%', maxWidth: MAX_WIDTH, alignSelf: 'center' },
   topbar: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 2 },
-  back: { width: 38, height: 38, borderRadius: 10, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' },
+  back: { width: 38, height: 38, borderRadius: 10, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' },
   title: { fontFamily: fonts.heavy, fontSize: 21, lineHeight: 26, color: colors.ink },
   subtitle: { fontFamily: fonts.body, fontSize: 13.5, color: colors.muted, marginTop: 1 },
   button: { minHeight: 50, borderRadius: 12, paddingHorizontal: 18, alignItems: 'center', justifyContent: 'center' },
@@ -219,7 +245,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1.5,
     borderColor: colors.line,
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontFamily: fonts.body,
@@ -230,14 +256,14 @@ const styles = StyleSheet.create({
   },
   hint: { fontFamily: fonts.body, fontSize: 12.5, color: colors.muted },
   error: { fontFamily: fonts.bold, fontSize: 13.5, color: colors.redDeep },
-  card: { backgroundColor: colors.white, borderRadius: 16, borderWidth: 1, borderColor: colors.line, padding: 16, gap: 8 },
+  card: { backgroundColor: colors.card, borderRadius: 16, borderWidth: 1, borderColor: colors.line, padding: 16, gap: 8 },
   cardSand: { backgroundColor: colors.board, borderColor: colors.board },
   cardRed: { backgroundColor: colors.red, borderColor: colors.red, overflow: 'hidden' },
   kicker: { fontFamily: fonts.heavy, fontSize: 11.5, letterSpacing: 0.9, textTransform: 'uppercase' },
   text: { fontFamily: fonts.body, fontSize: 15, lineHeight: 21, color: colors.ink },
   loading: { padding: 32, alignItems: 'center', gap: 10 },
   avatar: { alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontFamily: fonts.heavy, color: colors.white },
+  avatarText: { fontFamily: fonts.heavy, color: brand.white },
   parts: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   partOption: {
     flexGrow: 1,
@@ -249,13 +275,13 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1.5,
     borderColor: colors.line,
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
   },
   partOptionOn: { borderColor: colors.ink, borderWidth: 2 },
   partDot: { width: 22, height: 22, borderRadius: 11 },
   partLabel: { fontFamily: fonts.bold, fontSize: 15, color: colors.muted },
   partTag: { fontFamily: fonts.bold, fontSize: 13 },
-  chip: { paddingHorizontal: 13, paddingVertical: 7, borderRadius: 999, borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.white },
+  chip: { paddingHorizontal: 13, paddingVertical: 7, borderRadius: 999, borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.card },
   chipOn: { backgroundColor: colors.ink, borderColor: colors.ink },
   chipText: { fontFamily: fonts.bold, fontSize: 13, color: colors.ink },
-});
+}));

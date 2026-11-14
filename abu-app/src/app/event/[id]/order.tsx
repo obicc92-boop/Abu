@@ -8,7 +8,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useDeferredValue, useRef, useState, type ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 
 import { api, type EventDetails, type MyGroup, type OrderItem, type Song } from '@/api/client';
 import { SearchIcon } from '@/components/icons';
@@ -19,7 +19,8 @@ import { useOnline } from '@/lib/online';
 import { useSerial } from '@/lib/serial';
 import { KEY_NAMES } from '@/solfa';
 import { useSession } from '@/state/session';
-import { colors, fonts } from '@/theme/tokens';
+import { makeStyles, useColors } from '@/theme/theme';
+import { fonts } from '@/theme/tokens';
 
 export default function OrderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -67,6 +68,7 @@ export default function OrderScreen() {
 }
 
 function OrderEditor({ details, group, reload }: { details: EventDetails; group: MyGroup; reload: () => void }) {
+  const styles = useStyles();
   const queryClient = useQueryClient();
   const e = details.event;
   const rehearsal = e.kind === 'rehearsal';
@@ -228,6 +230,7 @@ function SectionBlock({
   picker: ReactNode;
   children?: ReactNode;
 }) {
+  const styles = useStyles();
   const [renaming, setRenaming] = useState<string | null>(null);
   const label = name || 'No section';
   return (
@@ -291,6 +294,8 @@ function SectionBlock({
 
 /** Start a new section: type any name, or tap one of the usual ones. */
 function NewSection({ suggestions, empty, onAdd }: { suggestions: string[]; empty: boolean; onAdd: (name: string) => void }) {
+  const colors = useColors();
+  const styles = useStyles();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   if (!open && !empty) {
@@ -320,7 +325,7 @@ function NewSection({ suggestions, empty, onAdd }: { suggestions: string[]; empt
           onChangeText={setName}
           maxLength={60}
           placeholder="Or type a name, e.g. Igbo hymn"
-          placeholderTextColor="#B3A39A"
+          placeholderTextColor={colors.placeholder}
           accessibilityLabel="New section name"
           style={styles.input}
           onSubmitEditing={() => {
@@ -348,6 +353,7 @@ function NewSection({ suggestions, empty, onAdd }: { suggestions: string[]; empt
 }
 
 function Tool({ label, a11y, onPress, disabled, small }: { label: string; a11y: string; onPress: () => void; disabled?: boolean; small?: boolean }) {
+  const styles = useStyles();
   return (
     <Pressable
       onPress={onPress}
@@ -364,6 +370,8 @@ function Tool({ label, a11y, onPress, disabled, small }: { label: string; a11y: 
 
 /** Songs to add to one section: the group's repertoire first, or search the whole library. Stays open to add several. */
 function SongPicker({ group, items, section, onAdd }: { group: MyGroup; items: OrderItem[]; section: string; onAdd: (song: Song) => Promise<void> }) {
+  const styles = useStyles();
+  const colors = useColors();
   const [query, setQuery] = useState('');
   const q = useDeferredValue(query.trim());
   const [adding, setAdding] = useState<string | null>(null);
@@ -426,8 +434,8 @@ function SongPicker({ group, items, section, onAdd }: { group: MyGroup; items: O
   );
 }
 
-const styles = StyleSheet.create({
-  block: { backgroundColor: colors.white, borderRadius: 14, borderWidth: 1, borderColor: colors.line, padding: 12, gap: 8 },
+const useStyles = makeStyles((colors) => ({
+  block: { backgroundColor: colors.card, borderRadius: 14, borderWidth: 1, borderColor: colors.line, padding: 12, gap: 8 },
   blockHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   section: { fontFamily: fonts.heavy, fontSize: 12.5, letterSpacing: 0.6, textTransform: 'uppercase', color: colors.redDeep },
   pencil: { fontFamily: fonts.body, fontSize: 13, color: colors.muted, textTransform: 'none' },
@@ -442,7 +450,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     fontSize: 15,
     color: colors.ink,
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     outlineColor: colors.red,
   },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4, borderTopWidth: 1, borderTopColor: colors.line },
@@ -450,15 +458,15 @@ const styles = StyleSheet.create({
   title: { fontFamily: fonts.bold, fontSize: 15, color: colors.ink },
   small: { fontFamily: fonts.body, fontSize: 12.5, color: colors.muted },
   label: { fontFamily: fonts.heavy, fontSize: 13, color: colors.muted },
-  link: { fontFamily: fonts.heavy, fontSize: 14, color: colors.red },
+  link: { fontFamily: fonts.heavy, fontSize: 14, color: colors.link },
   tools: { flexDirection: 'row', gap: 4 },
   tool: { width: 34, height: 34, borderRadius: 9, backgroundColor: colors.sand, alignItems: 'center', justifyContent: 'center' },
   toolSmall: { width: 30, height: 30 },
   toolText: { fontFamily: fonts.heavy, fontSize: 15, color: colors.ink },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   addRow: { borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 10 },
-  addText: { fontFamily: fonts.heavy, fontSize: 14, color: colors.red },
+  addText: { fontFamily: fonts.heavy, fontSize: 14, color: colors.link },
   picker: { borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 10, gap: 8 },
   pick: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderTopWidth: 1, borderTopColor: colors.line },
   searchIcon: { position: 'absolute', right: 14, bottom: 16 },
-});
+}));

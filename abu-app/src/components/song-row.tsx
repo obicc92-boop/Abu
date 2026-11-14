@@ -1,9 +1,10 @@
 /** A song in a list: key badge, title, composer and time. Opens the player. */
 import { Link } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { KEY_NAMES } from '@/solfa';
-import { colors, fonts } from '@/theme/tokens';
+import { makeStyles, useColors } from '@/theme/theme';
+import { fonts } from '@/theme/tokens';
 
 export interface SongSummary {
   id: string;
@@ -15,6 +16,8 @@ export interface SongSummary {
 }
 
 export function SongRow({ song, note }: { song: SongSummary; note?: string }) {
+  const styles = useStyles();
+  const colors = useColors();
   return (
     <Link href={{ pathname: '/song/[id]', params: { id: song.id } }} asChild>
       <Pressable style={styles.row} accessibilityRole="link" accessibilityLabel={`${song.title}, ${song.composer}`}>
@@ -35,12 +38,12 @@ export function SongRow({ song, note }: { song: SongSummary; note?: string }) {
   );
 }
 
-const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.white, borderRadius: 14, borderWidth: 1, borderColor: colors.line, padding: 12 },
+const useStyles = makeStyles((colors) => ({
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.card, borderRadius: 14, borderWidth: 1, borderColor: colors.line, padding: 12 },
   badge: { width: 44, height: 44, borderRadius: 11, backgroundColor: colors.redTint, alignItems: 'center', justifyContent: 'center' },
   badgeSheet: { backgroundColor: colors.sand },
   badgeText: { fontFamily: fonts.monoBold, fontSize: 15, color: colors.redDeep },
   title: { fontFamily: fonts.bold, fontSize: 15, color: colors.ink },
   small: { fontFamily: fonts.body, fontSize: 12.5, color: colors.muted },
   note: { fontFamily: fonts.bold, fontSize: 12, color: colors.ok },
-});
+}));

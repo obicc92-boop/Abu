@@ -5,7 +5,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 
 import { api, type EventDetails, type GroupEvent, type GroupType, type MyGroup, type OrderItem, type Practice, type Reply } from '@/api/client';
 import { BrandMark, Motif } from '@/components/brand';
@@ -25,7 +25,8 @@ import { checkInOpen, countdownText, fmtDate, fmtTime, hasStarted, isOver, relDa
 import { kindLabel, kindNoun } from '@/lib/group-types';
 import { partName } from '@/solfa';
 import { useSession } from '@/state/session';
-import { colors, fonts } from '@/theme/tokens';
+import { makeStyles, useColors } from '@/theme/theme';
+import { brand, fonts } from '@/theme/tokens';
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -60,6 +61,8 @@ function useUpcoming(g: MyGroup | null) {
 }
 
 export default function Home() {
+  const styles = useStyles();
+  const colors = useColors();
   const s = useSession();
   const upcoming = useUpcoming(s.status === 'signedIn' ? s.group : null);
   const practice = useQuery({ queryKey: ['myPractice'], queryFn: api.myPractice, enabled: s.status === 'signedIn' });
@@ -111,7 +114,7 @@ export default function Home() {
               accessibilityState={{ selected: x.id === g.id }}
               style={[styles.chip, x.id === g.id && styles.chipOn]}
             >
-              <Text style={[styles.chipText, x.id === g.id && { color: colors.white }]}>{x.type === 'personal' ? 'My space' : x.name}</Text>
+              <Text style={[styles.chipText, x.id === g.id && { color: colors.onInk }]}>{x.type === 'personal' ? 'My space' : x.name}</Text>
             </Pressable>
           ))}
         </ScrollView>
@@ -129,9 +132,9 @@ export default function Home() {
         </Card>
       ) : g.type === 'personal' ? (
         <Card tone="red">
-          <Motif color={colors.white} opacity={0.16} fade />
-          <Kicker color="#FFD9CF">{choirs.length ? 'Your own space' : 'Sing with a group?'}</Kicker>
-          <Text style={[styles.cardTitle, { color: colors.white }]}>{choirs.length ? 'Your songs and setlists' : 'Join your choir or band'}</Text>
+          <Motif color={colors.onRed} opacity={0.16} fade />
+          <Kicker color={brand.onRedKicker}>{choirs.length ? 'Your own space' : 'Sing with a group?'}</Kicker>
+          <Text style={[styles.cardTitle, { color: colors.onRed }]}>{choirs.length ? 'Your songs and setlists' : 'Join your choir or band'}</Text>
           <Text style={styles.onRed}>
             {choirs.length
               ? 'Save songs here and make personal setlists for weddings, concerts and services.'
@@ -152,9 +155,9 @@ export default function Home() {
         />
       ) : (
         <Card tone="red">
-          <Motif color={colors.white} opacity={0.16} fade />
-          <Kicker color="#FFD9CF">Next {kindNoun(g.type, 'service')}</Kicker>
-          <Text style={[styles.cardTitle, { color: colors.white }]}>{upcoming.loading ? 'Loading…' : 'Nothing planned yet'}</Text>
+          <Motif color={colors.onRed} opacity={0.16} fade />
+          <Kicker color={brand.onRedKicker}>Next {kindNoun(g.type, 'service')}</Kicker>
+          <Text style={[styles.cardTitle, { color: colors.onRed }]}>{upcoming.loading ? 'Loading…' : 'Nothing planned yet'}</Text>
           {!upcoming.loading ? (
             <Text style={styles.onRed}>
               {g.role === 'leader' ? 'Plan the next service and build its song order by section.' : 'Your services and rehearsals will show here, with their song orders.'}
@@ -182,7 +185,7 @@ export default function Home() {
             <Kicker>Next rehearsal</Kicker>
             {attendance.data?.rate != null ? (
               <Text style={styles.small}>
-                Your attendance <Text style={{ fontFamily: fonts.heavy, color: rateColor(attendance.data.rate) }}>{attendance.data.rate}%</Text>
+                Your attendance <Text style={{ fontFamily: fonts.heavy, color: rateColor(attendance.data.rate, colors) }}>{attendance.data.rate}%</Text>
               </Text>
             ) : null}
           </View>
@@ -217,6 +220,8 @@ export default function Home() {
  * check in with the code; leaders and part leaders mark attendance or show the code.
  */
 function HappeningNow({ group, event, details }: { group: MyGroup; event: GroupEvent; details: EventDetails }) {
+  const styles = useStyles();
+  const colors = useColors();
   const leaderish = details.my_role === 'leader' || details.my_role === 'part_leader';
   if (!leaderish) {
     if (!details.self_check_in) return null;
@@ -252,6 +257,8 @@ function NextService({
   songs?: number;
   canEditOrder: boolean;
 }) {
+  const styles = useStyles();
+  const colors = useColors();
   const queryClient = useQueryClient();
   const send = useMutation({
     mutationFn: (status: Reply) => api.reply(event.id, status),
@@ -264,13 +271,13 @@ function NextService({
   const open = () => router.push({ pathname: '/event/[id]', params: { id: event.id } });
   return (
     <Card tone="red">
-      <Motif color={colors.white} opacity={0.16} fade />
-      <Kicker color="#FFD9CF">
+      <Motif color={colors.onRed} opacity={0.16} fade />
+      <Kicker color={brand.onRedKicker}>
         Next {kindNoun(group.type, event.kind)}
         {when ? ` · ${when}` : ''}
       </Kicker>
       <Pressable onPress={open} accessibilityRole="link">
-        <Text style={[styles.cardTitle, { color: colors.white }]}>{event.title}</Text>
+        <Text style={[styles.cardTitle, { color: colors.onRed }]}>{event.title}</Text>
         <Text style={styles.onRed}>{[fmtDate(event.starts_at), fmtTime(event.starts_at), event.venue].filter(Boolean).join(' · ')}</Text>
         {countdown ? <Text style={styles.countdown}>{countdown}</Text> : null}
       </Pressable>
@@ -301,6 +308,8 @@ function LearnForUpcoming({
   part: string | null;
   type: GroupType;
 }) {
+  const styles = useStyles();
+  const colors = useColors();
   const bySong = new Map((practice ?? []).map((p) => [p.song_id, p]));
   return (
     <View style={{ gap: 8 }}>
@@ -340,13 +349,15 @@ function LearnForUpcoming({
 
 /** Home for someone browsing without an account. */
 function LookingAround() {
+  const styles = useStyles();
+  const colors = useColors();
   const s = useSession();
   return (
     <Page>
       <Card tone="red" style={{ alignItems: 'flex-start' }}>
-        <Motif color={colors.white} opacity={0.16} fade />
+        <Motif color={colors.onRed} opacity={0.16} fade />
         <BrandMark size={64} />
-        <Text style={[styles.cardTitle, { color: colors.white, marginTop: 6 }]}>Welcome to Abụ</Text>
+        <Text style={[styles.cardTitle, { color: colors.onRed, marginTop: 6 }]}>Welcome to Abụ</Text>
         <Text style={styles.onRed}>Listen to any song’s parts now. Create an account to join your choir, save songs and see your song orders.</Text>
         <Button
           kind="light"
@@ -366,19 +377,19 @@ function LookingAround() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   header: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   hello: { fontFamily: fonts.heavy, fontSize: 22, color: colors.ink },
   groupLine: { fontFamily: fonts.body, fontSize: 14, color: colors.muted, marginTop: 2 },
   chips: { gap: 8 },
-  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.white },
+  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.card },
   chipOn: { backgroundColor: colors.ink, borderColor: colors.ink },
   chipText: { fontFamily: fonts.bold, fontSize: 13.5, color: colors.ink },
   cardTitle: { fontFamily: fonts.heavy, fontSize: 20, color: colors.ink },
-  onRed: { fontFamily: fonts.body, fontSize: 14.5, lineHeight: 20, color: '#FFE7E0' },
+  onRed: { fontFamily: fonts.body, fontSize: 14.5, lineHeight: 20, color: colors.onRedSoft },
   row: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginTop: 4 },
   learnHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   learnTitle: { flex: 1, fontFamily: fonts.heavy, fontSize: 14, color: colors.ink },
-  countdown: { fontFamily: fonts.heavy, fontSize: 14, color: colors.white, marginTop: 2 },
+  countdown: { fontFamily: fonts.heavy, fontSize: 14, color: colors.onRed, marginTop: 2 },
   small: { fontFamily: fonts.body, fontSize: 12.5, color: colors.muted },
-});
+}));

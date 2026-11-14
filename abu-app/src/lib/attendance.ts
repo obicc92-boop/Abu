@@ -1,5 +1,6 @@
-import { colors } from '@/theme/tokens';
 
+
+import type { Palette } from '@/theme/tokens';
 import { addDays, startOfDay } from './dates';
 
 /** The time spans attendance reports offer. */
@@ -20,7 +21,7 @@ export function rangeFrom(range: ReportRange, now = new Date()): string {
 }
 
 /** Green from 75%, gold from 50%, red below; muted before anyone is marked. */
-export function rateColor(rate: number | null): string {
+export function rateColor(rate: number | null, colors: Palette): string {
   if (rate === null) return colors.muted;
-  return rate >= 75 ? colors.ok : rate >= 50 ? '#B07510' : colors.redDeep;
+  return rate >= 75 ? colors.ok : rate >= 50 ? colors.warn : colors.redDeep;
 }

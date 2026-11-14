@@ -6,12 +6,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { api, type MyGroup, type Notice } from '@/api/client';
 import { postedText } from '@/lib/dates';
 import { partPlural } from '@/solfa';
-import { colors, fonts, partColor } from '@/theme/tokens';
+import { makeStyles, usePartInk } from '@/theme/theme';
+import { fonts } from '@/theme/tokens';
 
 import { Button, Card, Chip, ErrorText, Field, Kicker } from './ui';
 
@@ -19,6 +20,7 @@ const MAX = 2000;
 
 
 export function NoticesSection({ group, me, forMe, limit }: { group: MyGroup; me: string; forMe?: boolean; limit?: number }) {
+  const styles = useStyles();
   const notices = useQuery({ queryKey: ['notices', group.id], queryFn: () => api.notices(group.id) });
   const leaderish = group.role === 'leader' || group.role === 'part_leader';
   const all = notices.data ?? [];
@@ -52,6 +54,8 @@ export function NoticesSection({ group, me, forMe, limit }: { group: MyGroup; me
 }
 
 function NoticeCard({ notice, group, me }: { notice: Notice; group: MyGroup; me: string }) {
+  const ink = usePartInk();
+  const styles = useStyles();
   const queryClient = useQueryClient();
   const [confirm, setConfirm] = useState(false);
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['notices', group.id] });
@@ -64,7 +68,7 @@ function NoticeCard({ notice, group, me }: { notice: Notice; group: MyGroup; me:
     <Card style={notice.pinned ? styles.pinned : undefined}>
       <View style={styles.meta}>
         {notice.pinned ? <Text style={styles.pin}>Pinned</Text> : null}
-        {notice.part ? <Text style={[styles.for, { color: partColor(notice.part), borderColor: partColor(notice.part) }]}>For {partPlural(notice.part).toLowerCase()}</Text> : null}
+        {notice.part ? <Text style={[styles.for, { color: ink(notice.part), borderColor: ink(notice.part) }]}>For {partPlural(notice.part).toLowerCase()}</Text> : null}
         <Text style={styles.small} numberOfLines={1}>
           {[notice.author_name ?? 'Someone who left', postedText(notice.created_at)].join(' · ')}
         </Text>
@@ -101,6 +105,7 @@ function NoticeCard({ notice, group, me }: { notice: Notice; group: MyGroup; me:
 
 /** Write a notice: to everyone, or (leaders) any part, or (part leaders) their own part. */
 function NoticeComposer({ group }: { group: MyGroup }) {
+  const styles = useStyles();
   const queryClient = useQueryClient();
   const [body, setBody] = useState('');
   const [part, setPart] = useState<string | null>(null);
@@ -139,14 +144,14 @@ function NoticeComposer({ group }: { group: MyGroup }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  link: { fontFamily: fonts.heavy, fontSize: 14, color: colors.red },
+  link: { fontFamily: fonts.heavy, fontSize: 14, color: colors.link },
   meta: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 },
-  pinned: { borderColor: '#F0D9A6', backgroundColor: '#FFFBF2' },
-  pin: { fontFamily: fonts.heavy, fontSize: 11, letterSpacing: 0.5, textTransform: 'uppercase', color: '#94600A', backgroundColor: '#FBF0DA', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, overflow: 'hidden' },
+  pinned: { borderColor: colors.warnLine, backgroundColor: colors.warnTint },
+  pin: { fontFamily: fonts.heavy, fontSize: 11, letterSpacing: 0.5, textTransform: 'uppercase', color: colors.warn, backgroundColor: colors.warnTint, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, overflow: 'hidden' },
   for: { fontFamily: fonts.heavy, fontSize: 11.5, borderWidth: 1.5, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 1, overflow: 'hidden' },
   small: { fontFamily: fonts.body, fontSize: 12.5, color: colors.muted, flexShrink: 1 },
   body: { fontFamily: fonts.body, fontSize: 15.5, lineHeight: 22, color: colors.ink },
   row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
-});
+}));

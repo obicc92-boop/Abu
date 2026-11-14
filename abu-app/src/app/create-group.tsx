@@ -5,18 +5,20 @@
 import { useMutation } from '@tanstack/react-query';
 import { Redirect, router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { api, type GroupType } from '@/api/client';
 import { InviteCard } from '@/components/invite';
 import { Body, Button, Card, ErrorText, Field, Kicker, Page, PartPicker, TopBar } from '@/components/ui';
 import { GROUP_TYPES } from '@/lib/group-types';
 import { useSession } from '@/state/session';
-import { colors, fonts } from '@/theme/tokens';
+import { makeStyles } from '@/theme/theme';
+import { fonts } from '@/theme/tokens';
 
 const CHOICES = ['catholic', 'anglican', 'pentecostal', 'band'] as const;
 
 export default function CreateGroup() {
+  const styles = useStyles();
   const { status, refresh, setGroup } = useSession();
   const [name, setName] = useState('');
   const [type, setType] = useState<Exclude<GroupType, 'personal'>>('catholic');
@@ -82,11 +84,11 @@ export default function CreateGroup() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   section: { gap: 8 },
   label: { fontFamily: fonts.heavy, fontSize: 13, color: colors.muted },
-  option: { borderRadius: 12, borderWidth: 1.5, borderColor: colors.line, padding: 12, gap: 2, backgroundColor: colors.white },
+  option: { borderRadius: 12, borderWidth: 1.5, borderColor: colors.line, padding: 12, gap: 2, backgroundColor: colors.card },
   optionOn: { borderColor: colors.ink, borderWidth: 2 },
   optionTitle: { fontFamily: fonts.bold, fontSize: 15, color: colors.ink },
   optionHint: { fontFamily: fonts.body, fontSize: 12.5, color: colors.muted },
-});
+}));

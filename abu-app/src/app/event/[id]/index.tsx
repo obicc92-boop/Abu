@@ -5,7 +5,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, Text, View } from 'react-native';
 
 import { api, eventLink, whatsappUrl, type EventDetails, type OrderItem, type Reply } from '@/api/client';
 import { CheckedIn, CheckIn } from '@/components/check-in';
@@ -17,7 +17,8 @@ import { kindLabel, kindNoun } from '@/lib/group-types';
 import { bySection } from '@/lib/order';
 import { KEY_NAMES, partPlural } from '@/solfa';
 import { useSession } from '@/state/session';
-import { colors, fonts } from '@/theme/tokens';
+import { makeStyles } from '@/theme/theme';
+import { fonts } from '@/theme/tokens';
 
 export default function EventScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -37,6 +38,7 @@ export default function EventScreen() {
 }
 
 function EventView({ details }: { details: EventDetails }) {
+  const styles = useStyles();
   const s = useSession();
   const { event: e, items, my_role } = details;
   const group = s.groups.find((g) => g.id === e.group_id);
@@ -135,6 +137,7 @@ function EventView({ details }: { details: EventDetails }) {
 }
 
 function OrderRow({ item, n }: { item: OrderItem; n: number }) {
+  const styles = useStyles();
   return (
     <Link href={{ pathname: '/song/[id]', params: { id: item.song_id } }} asChild>
       <Pressable style={styles.row} accessibilityRole="link" accessibilityLabel={`${n}. ${item.title}`}>
@@ -156,6 +159,7 @@ function OrderRow({ item, n }: { item: OrderItem; n: number }) {
 }
 
 function ReplyCard({ details }: { details: EventDetails }) {
+  const styles = useStyles();
   const queryClient = useQueryClient();
   const send = useMutation({
     mutationFn: (status: Reply) => api.reply(details.event.id, status),
@@ -186,6 +190,7 @@ function ReplyCard({ details }: { details: EventDetails }) {
  * WhatsApp reminder. Part leaders see their own part.
  */
 function WhoIsComing({ details }: { details: EventDetails }) {
+  const styles = useStyles();
   const e = details.event;
   const partLeader = details.my_role === 'part_leader' ? details.my_part : null;
   const replies = useQuery({ queryKey: ['replies', e.id], queryFn: () => api.replies(e.id) });
@@ -229,6 +234,7 @@ const MARK_LABEL = { present: 'Present', absent: 'Absent', excused: 'Excused' } 
  * Leaders and part leaders: how many are present, Mark, and the code to show.
  */
 function AttendanceSection({ details }: { details: EventDetails }) {
+  const styles = useStyles();
   const e = details.event;
   const leaderish = details.my_role === 'leader' || details.my_role === 'part_leader';
   const open = checkInOpen(e.starts_at);
@@ -268,6 +274,7 @@ function AttendanceSection({ details }: { details: EventDetails }) {
 
 /** For an empty order: start from an earlier service's songs. */
 function CopyEarlier({ eventId, groupId }: { eventId: string; groupId: string }) {
+  const styles = useStyles();
   const queryClient = useQueryClient();
   const earlier = useQuery({
     queryKey: ['events', groupId, 'earlier'],
@@ -301,7 +308,7 @@ function CopyEarlier({ eventId, groupId }: { eventId: string; groupId: string })
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   badge: {
     fontFamily: fonts.heavy,
@@ -315,11 +322,11 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   badgeRed: { backgroundColor: colors.redTint, color: colors.redDeep },
-  badgeDark: { backgroundColor: colors.ink, color: colors.white },
+  badgeDark: { backgroundColor: colors.ink, color: colors.onInk },
   sectHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 },
-  link: { fontFamily: fonts.heavy, fontSize: 14, color: colors.red },
+  link: { fontFamily: fonts.heavy, fontSize: 14, color: colors.link },
   section: { fontFamily: fonts.heavy, fontSize: 11, letterSpacing: 0.8, textTransform: 'uppercase', color: colors.redDeep, marginLeft: 2 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.white, borderRadius: 14, borderWidth: 1, borderColor: colors.line, padding: 12 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.card, borderRadius: 14, borderWidth: 1, borderColor: colors.line, padding: 12 },
   ord: { width: 26, height: 26, borderRadius: 8, backgroundColor: colors.sand, textAlign: 'center', lineHeight: 26, fontFamily: fonts.heavy, fontSize: 12.5, color: colors.muted, overflow: 'hidden' },
   title: { fontFamily: fonts.bold, fontSize: 15, color: colors.ink },
   small: { fontFamily: fonts.body, fontSize: 12.5, color: colors.muted },
@@ -327,4 +334,4 @@ const styles = StyleSheet.create({
   attHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   copyRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6, borderTopWidth: 1, borderTopColor: colors.line },
-});
+}));

@@ -8,7 +8,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as DocumentPicker from 'expo-document-picker';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useDeferredValue, useMemo, useState } from 'react';
-import { Platform, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, Switch, Text, TextInput, View } from 'react-native';
 
 import { api, type PickedFile, type Song } from '@/api/client';
 import { useSongPlayer } from '@/audio/use-song-player';
@@ -20,7 +20,8 @@ import { TAG_GROUPS } from '@/lib/tags';
 import { clearScanDraft, scanDraft, type ScanDraft } from '@/scan/draft';
 import { KEY_NAMES, parseSolfa } from '@/solfa';
 import { useSession } from '@/state/session';
-import { colors, fonts } from '@/theme/tokens';
+import { makeStyles, useColors } from '@/theme/theme';
+import { fonts } from '@/theme/tokens';
 
 const TIMES = ['2/4', '3/4', '4/4', '6/8'];
 const MAX_SHEET_BYTES = 10 * 1024 * 1024;
@@ -49,6 +50,8 @@ export default function SongEditorScreen() {
 }
 
 function Editor({ song, draft }: { song?: Song; draft: ScanDraft | null }) {
+  const styles = useStyles();
+  const colors = useColors();
   const s = useSession();
   const queryClient = useQueryClient();
   const editing = !!song;
@@ -172,7 +175,7 @@ function Editor({ song, draft }: { song?: Song; draft: ScanDraft | null }) {
           autoCorrect={false}
           spellCheck={false}
           placeholder={'S  d :r /m :f | s :- /- :- |\nW  Glo-ry to God on high'}
-          placeholderTextColor="#B3A39A"
+          placeholderTextColor={colors.placeholder}
           style={styles.solfa}
           accessibilityLabel="Sol-fa"
         />
@@ -240,8 +243,8 @@ function Editor({ song, draft }: { song?: Song; draft: ScanDraft | null }) {
                 onValueChange={setAddToRep}
                 accessibilityLabel="Add to our repertoire"
                 trackColor={{ false: colors.switchOff, true: colors.red }}
-                thumbColor={colors.white}
-                {...({ activeThumbColor: colors.white } as object)}
+                thumbColor={colors.onRed}
+                {...({ activeThumbColor: colors.onRed } as object)}
               />
             </View>
           ) : null}
@@ -271,6 +274,7 @@ function Editor({ song, draft }: { song?: Song; draft: ScanDraft | null }) {
 }
 
 function Help({ onExample }: { onExample: () => void }) {
+  const styles = useStyles();
   const rules = [
     'Start each line with the part: S, A, T, B or Solo. A W line under a part holds its words.',
     ': between beats, / for the half-bar accent, | between bars.',
@@ -293,12 +297,12 @@ function Help({ onExample }: { onExample: () => void }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   group: { gap: 6 },
   label: { fontFamily: fonts.heavy, fontSize: 13, color: colors.muted },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   headRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  link: { fontFamily: fonts.bold, fontSize: 13.5, color: colors.red },
+  link: { fontFamily: fonts.bold, fontSize: 13.5, color: colors.link },
   solfa: {
     minHeight: 180,
     borderRadius: 12,
@@ -319,4 +323,4 @@ const styles = StyleSheet.create({
   helpText: { fontFamily: fonts.body, fontSize: 13.5, lineHeight: 19, color: colors.ink },
   toggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   toggleText: { fontFamily: fonts.bold, fontSize: 15, color: colors.ink },
-});
+}));

@@ -6,16 +6,18 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { Pressable, Text } from 'react-native';
 
 import { authClient } from '@/auth/client';
 import { Body, Button, Card, Field, Page, TopBar } from '@/components/ui';
 import { useSession } from '@/state/session';
-import { colors, fonts } from '@/theme/tokens';
+import { makeStyles } from '@/theme/theme';
+import { fonts } from '@/theme/tokens';
 
 type Next = 'join' | 'create-group' | 'just-me';
 
 export default function Auth() {
+  const styles = useStyles();
   const params = useLocalSearchParams<{ next?: Next; mode?: 'sign-in'; code?: string }>();
   const [mode, setMode] = useState<'sign-up' | 'sign-in'>(params.mode === 'sign-in' ? 'sign-in' : 'sign-up');
   const [name, setName] = useState('');
@@ -110,8 +112,8 @@ function friendlyAuthError(message: string | undefined, status: number, signingU
   return message || 'Something went wrong. Try again.';
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   error: { fontFamily: fonts.bold, fontSize: 14, color: colors.redDeep },
   switch: { padding: 8 },
-  switchStrong: { fontFamily: fonts.heavy, color: colors.red },
-});
+  switchStrong: { fontFamily: fonts.heavy, color: colors.link },
+}));

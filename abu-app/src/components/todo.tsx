@@ -5,13 +5,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { router, useFocusEffect, type Href } from 'expo-router';
 import { useCallback } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { api, type MyGroup, type TodoItem } from '@/api/client';
 import { fmtDate } from '@/lib/dates';
 import { kindLabel, kindNoun } from '@/lib/group-types';
 import { partPlural } from '@/solfa';
-import { colors, fonts } from '@/theme/tokens';
+import { makeStyles, useColors } from '@/theme/theme';
+import { fonts } from '@/theme/tokens';
 
 import { Button, Card, Kicker } from './ui';
 
@@ -43,6 +44,8 @@ function line(item: TodoItem, group: MyGroup): { text: string; action: string; h
 }
 
 export function LeaderTodo({ group }: { group: MyGroup }) {
+  const styles = useStyles();
+  const colors = useColors();
   const leader = group.role === 'leader';
   const todo = useQuery({ queryKey: ['todo', group.id], queryFn: () => api.todo(group.id) });
   // Home stays open underneath while you mark attendance or add songs: check again on coming back.
@@ -77,12 +80,12 @@ export function LeaderTodo({ group }: { group: MyGroup }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   done: { fontFamily: fonts.body, fontSize: 14, color: colors.ok },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderTopWidth: 1, borderTopColor: colors.line },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.gold },
   dotUrgent: { backgroundColor: colors.red },
   text: { flex: 1, fontFamily: fonts.bold, fontSize: 14, lineHeight: 19, color: colors.ink },
-  action: { fontFamily: fonts.heavy, fontSize: 13.5, color: colors.red },
+  action: { fontFamily: fonts.heavy, fontSize: 13.5, color: colors.link },
   quick: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
-});
+}));

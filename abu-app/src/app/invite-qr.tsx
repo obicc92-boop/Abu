@@ -3,7 +3,7 @@
  * their phone camera at it and the join page opens. The screen stays on.
  */
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { inviteLink } from '@/api/client';
@@ -11,9 +11,11 @@ import { QrCode } from '@/components/qr-code';
 import { Loading } from '@/components/ui';
 import { useScreenOn } from '@/lib/screen-on';
 import { useSession } from '@/state/session';
-import { colors, fonts } from '@/theme/tokens';
+import { makeStyles } from '@/theme/theme';
+import { fonts } from '@/theme/tokens';
 
 export default function InviteQrScreen() {
+  const styles = useStyles();
   const s = useSession();
   const params = useLocalSearchParams<{ code?: string; name?: string }>();
   useScreenOn();
@@ -52,8 +54,8 @@ export default function InviteQrScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: colors.white },
+const useStyles = makeStyles((colors) => ({
+  page: { flex: 1, backgroundColor: colors.card },
   head: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 16 },
   kicker: { flex: 1, fontFamily: fonts.heavy, fontSize: 13, letterSpacing: 0.8, textTransform: 'uppercase', color: colors.redDeep },
   done: { backgroundColor: colors.sand, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 },
@@ -62,4 +64,4 @@ const styles = StyleSheet.create({
   note: { fontFamily: fonts.body, fontSize: 15, lineHeight: 21, color: colors.ink, textAlign: 'center', maxWidth: 320 },
   or: { fontFamily: fonts.heavy, fontSize: 12, letterSpacing: 1, textTransform: 'uppercase', color: colors.muted, marginTop: 6 },
   code: { fontFamily: fonts.monoBold, fontSize: 40, letterSpacing: 10, color: colors.ink },
-});
+}));

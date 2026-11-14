@@ -5,15 +5,18 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { api } from '@/api/client';
 import { Body, Button, Card, ErrorText, Field, Kicker, Page, PartPicker, TopBar } from '@/components/ui';
 import { GROUP_TYPES } from '@/lib/group-types';
 import { useSession } from '@/state/session';
-import { colors, fonts } from '@/theme/tokens';
+import { makeStyles, useColors } from '@/theme/theme';
+import { fonts } from '@/theme/tokens';
 
 export default function Join() {
+  const styles = useStyles();
+  const colors = useColors();
   const params = useLocalSearchParams<{ code?: string }>();
   const { status, refresh, setGroup } = useSession();
   const [code, setCode] = useState((params.code ?? '').toUpperCase());
@@ -89,8 +92,8 @@ export default function Join() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   code: { fontFamily: fonts.monoBold, fontSize: 24, letterSpacing: 6, textAlign: 'center' },
   groupName: { fontFamily: fonts.heavy, fontSize: 22, color: colors.ink },
   section: { gap: 10 },
-});
+}));

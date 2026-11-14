@@ -4,14 +4,16 @@
  * the check-in code or the invite QR code, which take the whole screen.
  */
 import { usePathname } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useOnline } from '@/lib/online';
 import { applyUpdate, usePwa } from '@/lib/pwa';
-import { colors, fonts } from '@/theme/tokens';
+import { makeStyles } from '@/theme/theme';
+import { brand, fonts } from '@/theme/tokens';
 
 export function ConnectionBars() {
+  const styles = useStyles();
   const online = useOnline();
   const { updateReady } = usePwa();
   const insets = useSafeAreaInsets();
@@ -37,11 +39,11 @@ export function ConnectionBars() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   bar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 7 },
-  offline: { backgroundColor: colors.ink },
-  update: { backgroundColor: colors.redDeep },
-  text: { fontFamily: fonts.bold, fontSize: 13, color: colors.white, textAlign: 'center' },
-  button: { backgroundColor: colors.white, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 5 },
-  buttonText: { fontFamily: fonts.heavy, fontSize: 13, color: colors.redDeep },
-});
+  offline: { backgroundColor: brand.ink },
+  update: { backgroundColor: brand.redDeep },
+  text: { fontFamily: fonts.bold, fontSize: 13, color: colors.onRed, textAlign: 'center' },
+  button: { backgroundColor: brand.white, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 5 },
+  buttonText: { fontFamily: fonts.heavy, fontSize: 13, color: brand.redDeep },
+}));

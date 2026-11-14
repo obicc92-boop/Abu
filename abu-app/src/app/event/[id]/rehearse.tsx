@@ -1,15 +1,17 @@
 /** Rehearse: the full player for each song in the order, with Previous and Next. */
 import { useQuery } from '@tanstack/react-query';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { api } from '@/api/client';
 import { SongView } from '@/components/song-view';
 import { Body, Card, ErrorText, Loading, MAX_WIDTH, Page, TopBar } from '@/components/ui';
 import { useSession } from '@/state/session';
-import { colors, fonts } from '@/theme/tokens';
+import { makeStyles } from '@/theme/theme';
+import { fonts } from '@/theme/tokens';
 
 export default function RehearseScreen() {
+  const styles = useStyles();
   const { id, i } = useLocalSearchParams<{ id: string; i?: string }>();
   const s = useSession();
   const details = useQuery({ queryKey: ['event', id], queryFn: () => api.event(id), enabled: s.status === 'signedIn' && !!id });
@@ -61,6 +63,7 @@ export default function RehearseScreen() {
 }
 
 function StepButton({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) {
+  const styles = useStyles();
   return (
     <Pressable onPress={onPress} disabled={disabled} accessibilityRole="button" style={[styles.step, disabled && { opacity: 0.35 }]} hitSlop={4}>
       <Text style={styles.stepText}>{label}</Text>
@@ -68,12 +71,12 @@ function StepButton({ label, onPress, disabled }: { label: string; onPress: () =
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   outer: { width: '100%', maxWidth: MAX_WIDTH, alignSelf: 'center', paddingHorizontal: 16, marginBottom: 8 },
   bar: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 6, borderRadius: 12, backgroundColor: colors.board },
   middle: { flex: 1, alignItems: 'center', minWidth: 0 },
   kicker: { fontFamily: fonts.heavy, fontSize: 11, letterSpacing: 0.6, textTransform: 'uppercase', color: colors.muted },
   section: { fontFamily: fonts.bold, fontSize: 13, color: colors.redDeep },
-  step: { paddingHorizontal: 12, minHeight: 36, borderRadius: 9, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center' },
+  step: { paddingHorizontal: 12, minHeight: 36, borderRadius: 9, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
   stepText: { fontFamily: fonts.heavy, fontSize: 13, color: colors.ink },
-});
+}));
