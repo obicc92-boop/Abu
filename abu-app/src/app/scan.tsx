@@ -33,7 +33,7 @@ import { PlayButton } from '@/components/player-controls';
 import { Body, Button, Card, Chip, ErrorText, Kicker, MAX_WIDTH, Page, TopBar } from '@/components/ui';
 import { setScanDraft } from '@/scan/draft';
 import { joinLines, timeFor } from '@/scan/join';
-import { alignedRows, freeRepair, joinLine, problemsByPart, splitLine, tidyNotes, tidyTitle, withWords, wordsOf, type LineRow, type LineWords } from '@/scan/line-text';
+import { alignedRows, bestFree, joinLine, problemsByPart, splitLine, tidyNotes, tidyTitle, withWords, wordsOf, type LineRow, type LineWords } from '@/scan/line-text';
 import { findLinesOwn, readLineOwn } from '@/scan/own-reader';
 import { cutLine, loadPages, MAX_PAGES, pageForFinding, scanningHere, takePhoto } from '@/scan/pages';
 import { readTypedSheet, type PageText } from '@/scan/pdf-text';
@@ -87,6 +87,8 @@ interface Line {
   height: number;
   /** What the app read itself: from the PDF's text, or with Abụ's own model. */
   draft: string;
+  /** From a PDF's text: the same with the parts' bar lines lined up by where they're printed, tried if `draft` fails. */
+  lined?: string;
   /** Who read it: the PDF's text, Abụ's own reader, or an AI that corrected it. */
   via?: 'text' | 'own' | 'cloudflare' | 'haiku' | 'strong';
   status: 'waiting' | 'reading' | 'read' | 'failed';
@@ -177,9 +179,9 @@ function Scanner() {
   const readOne = async (line: Line, head: Heading, songTime: string, ai: Readers, again = false): Promise<string> => {
     const passes = (t: string) => splitLine(t).some((r) => r.part && r.text.trim()) && !parseSolfa(t, { time: songTime }).errors.length;
     let own = withWords(line.draft, line.wordTexts);
-    // Free repairs first: a column of part names read as notes, beat marks left out, parts resting through an upbeat.
-    const repaired = !passes(own) && freeRepair(own, passes, parseTime(songTime)?.pulses ?? 4);
-    if (repaired) own = repaired;
+    // Free repairs first: the parts' bar lines lined up as printed; a column of part names read as notes,
+    // beat marks left out, parts resting through an upbeat.
+    if (!passes(own)) own = bestFree([own, ...(line.lined ? [withWords(line.lined, line.wordTexts)] : [])], passes, parseTime(songTime)?.pulses ?? 4);
     if (!again && passes(own)) {
       update(line.id, { status: 'read', text: own, checked: false });
       return own;
@@ -234,7 +236,7 @@ function Scanner() {
       if (more) setNote(`Only the first ${MAX_PAGES} pages are read at a time.`);
       const found: Line[] = [];
       let head: Heading = { title: '', composer: '', key: '', time: '' };
-      const add = async (p: number, box: Box, l: { parts: string[]; words: number; wordRows?: FoundLine['wordRows']; text?: string }) => {
+      const add = async (p: number, box: Box, l: { parts: string[]; words: number; wordRows?: FoundLine['wordRows']; text?: string; lined?: string }) => {
         const cut = await cutLine(pages[p], box);
         const text = l.text ?? '';
         const wordRows = l.wordRows ?? [];
@@ -248,6 +250,7 @@ function Scanner() {
           wordTexts: text ? wordsOf(text) : wordRows.map((w) => ({ after: w.after, text: '' })),
           ...cut,
           draft: text,
+          ...(l.lined ? { lined: l.lined } : {}),
           via: text ? 'text' : 'own',
           status: text ? 'read' : 'waiting',
           text,

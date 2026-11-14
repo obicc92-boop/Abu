@@ -221,6 +221,19 @@ export function freeRepair(text: string, passes: (t: string) => boolean, beatsPe
   return null;
 }
 
+/**
+ * The first of the readings (the app's own first, then any others it made)
+ * that passes, as it is or with a free repair; otherwise the first as it is.
+ */
+export function bestFree(readings: string[], passes: (t: string) => boolean, beatsPerBar: number): string {
+  for (const r of readings) if (passes(r)) return r;
+  for (const r of readings) {
+    const fixed = freeRepair(r, passes, beatsPerBar);
+    if (fixed) return fixed;
+  }
+  return readings[0];
+}
+
 /** The checker's messages that are about one part ("Alto, bar 2 has 5 beats…"), and the rest. */
 export function problemsByPart(messages: string[], parts: string[]): { byPart: Record<string, string[]>; other: string[] } {
   const byPart: Record<string, string[]> = {};
