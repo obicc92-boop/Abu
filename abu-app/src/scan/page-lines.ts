@@ -91,25 +91,59 @@ export function skewOf(img: Gray): number {
   return best;
 }
 
+/** Each pixel on where any pixel within `r` of it, sideways (or up and down), is on. */
+function spread(on: Uint8Array, w: number, h: number, r: number, sideways: boolean): Uint8Array {
+  const out = new Uint8Array(on);
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      if (!on[y * w + x]) continue;
+      if (sideways) for (let k = Math.max(0, x - r); k <= Math.min(w - 1, x + r); k++) out[y * w + k] = 1;
+      else for (let k = Math.max(0, y - r); k <= Math.min(h - 1, y + r); k++) out[k * w + x] = 1;
+    }
+  return out;
+}
+
+/** The height of the writing's tall strokes: the 90th percentile of its vertical runs of ink (3 pixels or more). */
+function strokeHeight(ink: Uint8Array, ruled: Uint8Array, w: number, h: number): number {
+  const runs: number[] = [];
+  for (let x = 0; x < w; x++) {
+    let start = -1;
+    for (let y = 0; y <= h; y++) {
+      const on = y < h && ink[y * w + x] && !ruled[y * w + x];
+      if (on && start < 0) start = y;
+      if (!on && start >= 0) {
+        if (y - start >= 3) runs.push(y - start);
+        start = -1;
+      }
+    }
+  }
+  return runs.length ? percentile(runs, 0.9) : 0;
+}
+
 /** The page's rows of writing, top to bottom, and the ruled lines across it (their y). */
 export function pageRows(img: Gray): { rows: RowBox[]; rules: number[] } {
   const { width: w, height: h } = img;
   const ink = inkOf(img);
   // Long ruled lines aren't writing: vertical ones (a table's borders, through several rows) and
-  // horizontal ones (rules between lines of music, kept as places to split).
-  const ruled = new Uint8Array(w * h);
+  // horizontal ones (rules between lines of music, kept as places to split). A hand-drawn line wanders
+  // a pixel or two, so they're looked for in the ink spread that far sideways (or up and down).
+  const lean = 2;
+  const tall = new Uint8Array(w * h);
+  const sideways = spread(ink, w, h, lean, true);
   const tallRun = Math.floor(0.035 * h);
   for (let x = 0; x < w; x++) {
     let start = -1;
     for (let y = 0; y <= h; y++) {
-      const on = y < h && ink[y * w + x];
+      const on = y < h && sideways[y * w + x];
       if (on && start < 0) start = y;
       if (!on && start >= 0) {
-        if (y - start > tallRun) for (let k = start; k < y; k++) ruled[k * w + x] = 1;
+        if (y - start > tallRun) for (let k = start; k < y; k++) tall[k * w + x] = 1;
         start = -1;
       }
     }
   }
+  const wideRuns = new Uint8Array(w * h);
+  const upDown = spread(ink, w, h, lean, false);
   const wideRun = Math.floor(0.12 * w);
   const rules: number[] = [];
   for (let y = 0; y < h; y++) {
@@ -117,19 +151,23 @@ export function pageRows(img: Gray): { rows: RowBox[]; rules: number[] } {
     let wide = 0;
     let all = 0;
     for (let x = 0; x <= w; x++) {
-      const on = x < w && ink[y * w + x];
-      if (on) all++;
+      if (x < w && ink[y * w + x]) all++;
+      const on = x < w && upDown[y * w + x];
       if (on && start < 0) start = x;
       if (!on && start >= 0) {
         if (x - start > wideRun) {
           wide += x - start;
-          for (let k = start; k < x; k++) ruled[y * w + k] = 1;
+          for (let k = start; k < x; k++) wideRuns[y * w + k] = 1;
         }
         start = -1;
       }
     }
     if (wide > 0.25 * w || all > 0.6 * w) rules.push(y);
   }
+  const ruled = spread(tall, w, h, lean, true);
+  const across = spread(wideRuns, w, h, lean, false);
+  for (let i = 0; i < ruled.length; i++) ruled[i] = ink[i] && (ruled[i] || across[i]) ? 1 : 0;
+  const stroke = strokeHeight(ink, ruled, w, h);
   const raw = new Float32Array(h);
   for (let y = 0; y < h; y++) {
     let n = 0;
@@ -162,12 +200,14 @@ export function pageRows(img: Gray): { rows: RowBox[]; rules: number[] } {
   }
   // Rows that touch (octave marks and underlines bridge the gap in tight tables) are split at their
   // thinnest point, judged against a single row (rows that touch come in pairs, so the usual row is the
-  // smaller kind).
+  // smaller kind). A row is at most about twice the writing's tall strokes: where every block is
+  // several rows that touch (handwriting in a table), the blocks can't say how tall one row is.
   if (bands.length) {
-    const single = percentile(
+    let single = percentile(
       bands.map(([a, b]) => b - a),
       0.25,
     );
+    if (stroke > 0) single = Math.min(single, 2 * stroke);
     const out: [number, number][] = [];
     const todo = [...bands];
     while (todo.length) {

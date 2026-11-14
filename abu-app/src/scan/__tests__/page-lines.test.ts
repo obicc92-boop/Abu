@@ -48,6 +48,29 @@ describe('rows on a page', () => {
     expect(rules).toContain(120);
   });
 
+  it('sets hand-drawn table lines aside, though they lean', () => {
+    const img = page(600, 420, layout(3, 5));
+    // Twelve table lines from top to bottom, each leaning a pixel every 8 rows.
+    for (let k = 0; k < 12; k++) for (let y = 20; y < 400; y++) img.data[y * 600 + 45 + k * 42 + Math.floor(y / 8)] = 20;
+    expect(pageRows(img).rows).toHaveLength(15);
+  });
+
+  it('splits blocks of rows that touch, even when every block is one (handwriting in a table)', () => {
+    const w = 600;
+    const h = 1200;
+    const data = new Uint8Array(w * h).fill(250);
+    // Rows 20 pixels apart, their letters 8 pixels tall (as handwriting's strokes are about 40% of that).
+    const rows = layout(3, 5, 8, 12, 40);
+    for (const [top, bottom] of rows) for (let y = top; y < bottom; y++) for (let x = 40; x < w - 40; x += 3) data[y * w + x] = 20;
+    // In each block, marks bridge each row to the next (in different places, as a tail touches the
+    // letter below), so no gap is clear of ink.
+    rows.forEach(([, bottom], i) => {
+      const next = rows[i + 1];
+      if (next && next[0] - bottom < 20) for (let y = bottom; y < next[0]; y++) for (let x = 40 + (i % 2) * 21; x < w - 40; x += 45) data[y * w + x] = 20;
+    });
+    expect(pageRows({ data, width: w, height: h }).rows).toHaveLength(15);
+  });
+
   it('splits rows that touch', () => {
     // Two rows of 14 pixels with only a thin bridge between them, among single rows.
     const img = page(600, 300, [

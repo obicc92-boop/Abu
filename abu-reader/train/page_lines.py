@@ -79,20 +79,47 @@ def skew_of(ink: np.ndarray) -> float:
     return best
 
 
+def spread(a: np.ndarray, r: int, axis: int) -> np.ndarray:
+    """Each pixel on where any pixel within r of it, along the axis (1: sideways, 0: up and down), is on."""
+    out = a.copy()
+    for d in range(1, r + 1):
+        if axis == 1:
+            out[:, d:] |= a[:, :-d]
+            out[:, :-d] |= a[:, d:]
+        else:
+            out[d:] |= a[:-d]
+            out[:-d] |= a[d:]
+    return out
+
+
+def stroke_height(ink: np.ndarray) -> float:
+    """The height of the writing's tall strokes: the 90th percentile of its vertical runs of ink (3 pixels or more)."""
+    edge = np.zeros((1, ink.shape[1]), np.int8)
+    d = np.diff(np.vstack([edge, ink.astype(np.int8), edge]), axis=0)
+    runs = np.nonzero(d.T == -1)[1] - np.nonzero(d.T == 1)[1]
+    runs = runs[runs >= 3]
+    return float(np.percentile(runs, 90)) if len(runs) else 0.0
+
+
 def page_rows(gray: np.ndarray):
     """The page's rows of writing, top to bottom, and the long ruled lines across it (y)."""
     h, w = gray.shape
     ink = ink_of(gray)
     # Long ruled lines aren't writing: vertical ones (a table's borders, through several rows) and
-    # horizontal ones (rules between lines of music, which are kept as places to split).
+    # horizontal ones (rules between lines of music, which are kept as places to split). A hand-drawn
+    # line wanders a pixel or two, so they're looked for in the ink spread that far sideways (or up and down).
+    lean = 2
+    sideways = spread(ink, lean, 1)
     tall = np.zeros_like(ink)
     for x in range(w):
-        tall[:, x] = runs_longer(ink[:, x], int(0.035 * h))
+        tall[:, x] = runs_longer(sideways[:, x], int(0.035 * h))
+    up_down = spread(ink, lean, 0)
     wide = np.zeros_like(ink)
     for y in range(h):
-        wide[y] = runs_longer(ink[y], int(0.12 * w))
+        wide[y] = runs_longer(up_down[y], int(0.12 * w))
     rules = [y for y in range(h) if wide[y].sum() > 0.25 * w or (ink[y].sum() > 0.6 * w)]
-    ink &= ~tall & ~wide
+    ink &= ~(spread(tall, lean, 1) | spread(wide, lean, 0))
+    stroke = stroke_height(ink)
     profile = np.convolve(ink.sum(axis=1).astype(np.float32), np.ones(3) / 3, mode='same')
     top = float(np.percentile(profile[profile > 0], 98)) if (profile > 0).any() else 0
     if top <= 0:
@@ -118,9 +145,12 @@ def page_rows(gray: np.ndarray):
         bands = [b for b in bands if b[1] - b[0] >= 0.45 * usual]
     # Rows that touch (octave marks and underlines bridge the gap in tight tables) are split at their
     # thinnest point, judged against a single row (most rows that touch come in pairs, so the usual
-    # row is the smaller kind).
+    # row is the smaller kind). A row is at most about twice the writing's tall strokes: where every
+    # block is several rows that touch (handwriting in a table), the blocks can't say how tall one row is.
     if bands:
         single = float(np.percentile([b[1] - b[0] for b in bands], 25))
+        if stroke:
+            single = min(single, 2.0 * stroke)
         out = []
         todo = list(bands)
         while todo:
