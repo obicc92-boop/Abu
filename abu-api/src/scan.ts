@@ -96,6 +96,7 @@ Abụ's format:
 - \`-\` holds the note before it. A beat with nothing in it is a rest: leave it empty, as in \`d : :m\`. A printed \`x\` is a rest too: copy it. Keep \`-.\` and \`.-\` and similar exactly.
 - Notes: d r m f s l t; raised de re fe se le; lowered ra ma lo ta (ba is written ta).
 - Octave marks: a mark above or raised after the note (¹, ', a small raised figure or tick) means an octave up: write \`d'\`. A mark below or lowered (₁, a small lowered figure or tick, a comma right after the note) means an octave down: write \`t1\`. Two octaves: \`d''\` and \`s2\`.
+- Bridge notes, where the key changes: a small note printed raised just before a note is that note's name in the old key. Write both joined by \`=\`, old first, each with its own octave marks: \`ˢd\` is \`s=d\`, \`ᵈ'f\` is \`d'=f\`, \`ᵐl₁\` is \`m=l1\`.
 - If the line begins with a column before its first bar line (an upbeat), write that column as the row's first bar: \`s | d :r /m :f |\`.
 - Every row has the same number of bars, lined up with the rows above and below. A bar with nothing in it for a part is written with its empty beats, e.g. \` : : : \` for 4 beats.
 
