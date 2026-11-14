@@ -20,7 +20,8 @@ import { persistOptions, queryClient } from '@/lib/offline';
 import { startPwa } from '@/lib/pwa';
 import { AnimatedSplash, BOOK_WIDTH } from '@/splash/animated-splash';
 import { SessionProvider } from '@/state/session';
-import { colors } from '@/theme/tokens';
+import { ThemeProvider, useTheme } from '@/theme/theme';
+import { brand } from '@/theme/tokens';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -58,7 +59,7 @@ export default function RootLayout() {
   // If a font fails, carry on with system fonts rather than a blank screen.
   if (!loaded && !error) {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.red, alignItems: 'center', justifyContent: 'center' }}>
+      <View style={{ flex: 1, backgroundColor: brand.red, alignItems: 'center', justifyContent: 'center' }}>
         <BrandMark size={BOOK_WIDTH} />
       </View>
     );
@@ -67,15 +68,28 @@ export default function RootLayout() {
   return (
     // Data saved on the phone is restored first, so the app opens with it even without a connection.
     <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
-      <SessionProvider>
-        <KeepOffline />
-        <StatusBar style={opening ? 'light' : 'dark'} />
-        <View style={{ flex: 1, backgroundColor: colors.sand }}>
-          <ConnectionBars />
-          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.sand } }} />
-        </View>
-        {opening ? <AnimatedSplash onDone={opened} /> : null}
-      </SessionProvider>
+      <ThemeProvider>
+        <SessionProvider>
+          <KeepOffline />
+          <Screens opening={opening} />
+          {opening ? <AnimatedSplash onDone={opened} /> : null}
+        </SessionProvider>
+      </ThemeProvider>
     </PersistQueryClientProvider>
+  );
+}
+
+/** Every screen, on the page colour of the light or dark theme. */
+function Screens({ opening }: { opening: boolean }) {
+  const { scheme, colors } = useTheme();
+  return (
+    <>
+      {/* Light icons on the red opening and in the dark theme; dark ones on the light pages. */}
+      <StatusBar style={opening || scheme === 'dark' ? 'light' : 'dark'} />
+      <View style={{ flex: 1, backgroundColor: colors.sand }}>
+        <ConnectionBars />
+        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.sand } }} />
+      </View>
+    </>
   );
 }

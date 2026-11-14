@@ -5,6 +5,14 @@
     <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
     <meta name="theme-color" content="#D93A1E" />
+    <!-- Light and dark: the page follows the phone unless Abụ's own setting (Me → Appearance) says otherwise. -->
+    <meta name="color-scheme" content="light dark" />
+    <script>
+      try {
+        var t = localStorage.getItem('abu.theme');
+        if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    </script>
     <!-- Installable: Android offers "Install app"; iPhones use Share, then "Add to Home Screen". -->
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
@@ -31,9 +39,17 @@
       body {
         overflow: hidden;
         margin: 0;
-        /* The app's sand, so nothing red shows around it (the red first paint
-           below has its own background). */
+        /* The app's page colour, so nothing red shows around it (the red first
+           paint below has its own background): sand, or near-black in dark. */
         background: #f7f1ed;
+      }
+      @media (prefers-color-scheme: dark) {
+        html:not([data-theme='light']) body {
+          background: #15100d;
+        }
+      }
+      html[data-theme='dark'] body {
+        background: #15100d;
       }
       #root {
         display: flex;
