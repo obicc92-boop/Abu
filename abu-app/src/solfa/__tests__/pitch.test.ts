@@ -45,7 +45,26 @@ describe('dohTimeline', () => {
       { beat: 4, doh: 62, semitone: 2 },
     ]);
     expect(dohTimeline(withChange('A'))[1].doh).toBe(69);
-    expect(dohTimeline(withChange('s/d'))[1].doh).toBe(62);
+    // A pivot keeps its note's pitch: G's soh is the new doh, D above it.
+    expect(dohTimeline(withChange('s/d'))[1].doh).toBe(74);
+    expect(dohTimeline(withChange('d/s'))[1].doh).toBe(60);
+  });
+
+  it('keeps each bridge note’s pitch, and each part changes at its own', () => {
+    const song = parseSolfa(
+      ['key: D', "S  d :d' /d'=f :m |", 'A  d :r /r=s1 :- |', 'T  m :m /m :m=l1 |', 'B  d :- /d :- |'].join('\n'),
+      { time: '4/4' },
+    );
+    const midi = (part: string) => {
+      const tl = dohTimeline(song, 0, part);
+      return song.events[part].map((e) => noteMidi(part, e, dohAt(tl, e.start)));
+    };
+    expect(midi('S')).toEqual([62, 74, 74, 73]); // D5 stays D5 as the new fah, then the new me
+    expect(midi('A')).toEqual([62, 64, 64]); // r=s1 is E4 in both keys
+    expect(midi('T')).toEqual([54, 54, 54, 54]); // still in D on beat 3; m=l1 is F♯3 in both keys
+    expect(midi('B')).toEqual([50, 57]); // no bridge note: the bass changes where the first part does
+    expect(dohTimeline(song, 0, 'T').map((p) => p.beat)).toEqual([0, 3]);
+    expect(dohTimeline(song).map((p) => [p.beat, p.semitone])).toEqual([[0, 2], [2, 9]]);
   });
 
   it('starts from the song record’s key when the text has none', () => {

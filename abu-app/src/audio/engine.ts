@@ -73,7 +73,8 @@ export class SongPlayer {
   private readonly live = new Set<OscillatorNodeLike>();
   private timer: ReturnType<typeof setInterval> | null = null;
   private song: ParsedSong | null = null;
-  private doh: DohPoint[] = [];
+  /** Where doh sits through the song, for each part (parts can change key at their own bridge notes). */
+  private doh: Record<string, DohPoint[]> = {};
   private anchorTime = 0;
   private anchorBeat = 0;
   private ptr: Record<string, number> = {};
@@ -95,7 +96,7 @@ export class SongPlayer {
   load(song: ParsedSong, fallbackKey = 0): void {
     this.stop();
     this.song = song;
-    this.doh = dohTimeline(song, fallbackKey);
+    this.doh = Object.fromEntries(song.parts.map((p) => [p, dohTimeline(song, fallbackKey, p)]));
   }
 
   /** Changing tempo while playing carries on from the current beat. */
@@ -200,7 +201,7 @@ export class SongPlayer {
         const e = events[i];
         const t = this.anchorTime + (e.start - this.anchorBeat) * spb;
         if (t >= ctx.currentTime - 0.02) {
-          const midi = noteMidi(part, e, dohAt(this.doh, e.start), this.transpose);
+          const midi = noteMidi(part, e, dohAt(this.doh[part] ?? [], e.start), this.transpose);
           this.voice(part, midi, Math.max(t, ctx.currentTime), Math.max(0.08, e.dur * spb * 0.95));
         }
         i++;

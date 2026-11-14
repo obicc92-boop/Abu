@@ -54,12 +54,25 @@ export interface Mark {
   beat: number;
 }
 
-/** A key change after the start of the song. */
+/**
+ * A key change after the start of the song: from a `key:` line (at a bar
+ * line, for every part), or from bridge notes ("s=d") in the parts, each part
+ * changing at its own bridge note.
+ */
 export interface KeyChange {
+  /** Where the change starts: the bar line, or the first part's bridge note. */
   beat: number;
   /** Null only when a pivot is given and the key before it isn't known. */
   key: KeyInfo | null;
   pivot: Pivot | null;
+  /**
+   * How far doh moves, in semitones, when a pivot or bridge note says so: the
+   * note keeps its pitch, so its octave marks fix the octave too. Without it
+   * (a named key alone), doh moves the shortest way.
+   */
+  shift?: number;
+  /** Parts with their own bridge note: where each changes key, and by how much. Other parts change at `beat`. */
+  bridges?: Record<string, { beat: number; shift: number }>;
 }
 
 export interface Tempo {

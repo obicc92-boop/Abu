@@ -7,8 +7,8 @@
  *
  * Pure module: no React, no audio, no I/O.
  */
-import { keyAfterPivot, keyFromSemitone, parseKey, parseKeyLine, type KeyInfo, type Pivot } from './keys';
-import { normalizePart, parseNote, partName } from './syllables';
+import { keyAfterPivot, keyFromSemitone, mod12, parseKey, parseKeyLine, type KeyInfo, type Pivot } from './keys';
+import { normalizePart, parseNote, partName, SYLLABLE_SEMITONES, type ParsedNote } from './syllables';
 import type { Issue, KeyChange, MarkName, NoteEvent, ParseOptions, ParsedSong, Section, SongMeta, Tempo } from './types';
 
 const EPS = 1e-6;
@@ -83,6 +83,20 @@ interface RawKeyChange {
   pivot: Pivot | null;
   line: number;
 }
+
+/** A bridge note ("s=d"): one note named in the old key, then in the new. */
+interface RawBridge {
+  part: string;
+  beat: number;
+  from: ParsedNote;
+  to: ParsedNote;
+  text: string;
+  bar: number;
+  line: number;
+}
+
+/** Bridge notes this many bars apart or less belong to one key change. */
+const BRIDGE_BARS = 2;
 
 export function parseSolfa(text: string, options: ParseOptions = {}): ParsedSong {
   const errors: Issue[] = [];
@@ -203,7 +217,7 @@ export function parseSolfa(text: string, options: ParseOptions = {}): ParsedSong
       const empty = stripped.trim() === '';
       for (const f of found) s.marks.push({ name: f.name, part, barIndex: bars.length, atEnd: !empty && f.atEnd });
       if (empty) continue;
-      bars.push(stripped.split(/[:/¦]/).map((b) => b.trim()));
+      bars.push(stripped.split(/[:/¦]/).map((b) => b.trim().replace(/\s*=\s*/g, '=')));
       s.barLines[part].push(line);
       anyBars = true;
     }
@@ -315,6 +329,7 @@ export function parseSolfa(text: string, options: ParseOptions = {}): ParsedSong
   let barNo = 0;
   let halfBarHint = false;
   let commaWarned = false;
+  const bridges: RawBridge[] = [];
 
   for (const rs of raw) {
     if (!rs.order.length) {
@@ -383,6 +398,24 @@ export function parseSolfa(text: string, options: ParseOptions = {}): ParsedSong
               }
               if (tok === 'x') {
                 last = null;
+                return;
+              }
+              if (tok.includes('=')) {
+                const [from, to] = tok.split('=').map((t) => parseNote(t));
+                if (!from || !to || tok.split('=').length !== 2) {
+                  errors.push({
+                    message: `${partName(p)}, bar ${n}: “${tok}” isn’t a bridge note. Write the note’s name in the old key, “=”, then its name in the new key, e.g. “s=d”.`,
+                    line,
+                    part: p,
+                    bar: n,
+                  });
+                  last = null;
+                  return;
+                }
+                last = { start: at, dur: d, deg: to.degree, oct: to.octave, text: tok, bar: n };
+                result.events[p].push(last);
+                onsets.push(last);
+                bridges.push({ part: p, beat: at, from, to, text: tok, bar: n, line });
                 return;
               }
               const note = parseNote(tok);
@@ -483,27 +516,106 @@ export function parseSolfa(text: string, options: ParseOptions = {}): ParsedSong
     warnings.push({ message: 'Playback goes straight through for now. It doesn’t follow {ds}, {dc} or 1st and 2nd endings yet.' });
   }
 
-  let prev = meta.key?.semitone ?? null;
-  const changes: KeyChange[] = [];
-  for (const rk of rawKeys) {
-    const beat = beatOf(rk.sec, null, rk.barIndex);
-    let key = rk.key;
-    if (rk.pivot && prev !== null) {
-      const implied = keyAfterPivot(prev, rk.pivot);
-      if (!key) key = implied;
-      else if (key.semitone !== implied.semitone) {
-        warnings.push({
-          message: `Line ${rk.line}: the pivot ${rk.pivot.from}/${rk.pivot.to} moves doh from ${keyFromSemitone(prev).name} to ${implied.name}, not ${key.name}. Check the key or the pivot.`,
-          line: rk.line,
-        });
-      }
-    }
-    changes.push({ beat, key, pivot: rk.pivot });
-    if (key) prev = key.semitone;
-  }
-  result.keyChanges = changes.sort((a, b) => a.beat - b.beat);
+  result.keyChanges = keyChanges(
+    rawKeys.map((rk) => ({ ...rk, beat: beatOf(rk.sec, null, rk.barIndex) })),
+    bridges,
+    meta.key,
+    BRIDGE_BARS * bpb,
+    warnings,
+  );
 
   return result;
+}
+
+/**
+ * The key changes, from `key:` lines and bridge notes, in order. A bridge
+ * note keeps its pitch, so it says how far doh moves in that part. Bridge
+ * notes in other parts within `window` beats belong to the same change (each
+ * part changes at its own); a `key:` line there only names the key they move to.
+ */
+function keyChanges(
+  lines: (RawKeyChange & { beat: number })[],
+  bridges: RawBridge[],
+  start: KeyInfo | null,
+  window: number,
+  warnings: Issue[],
+): KeyChange[] {
+  const steps = [...lines.map((l) => ({ beat: l.beat, line: l, bridge: null })), ...bridges.map((b) => ({ beat: b.beat, line: null, bridge: b }))]
+    // In time order; at the same beat, a key: line (written before the bar) first.
+    .sort((a, b) => a.beat - b.beat || (a.line ? 0 : 1) - (b.line ? 0 : 1));
+  const changes: KeyChange[] = [];
+  let prev = start?.semitone ?? null;
+  /** The change still taking bridge notes from other parts, the key before it, who has one, and whose bridge note started it. */
+  let open: { change: KeyChange; before: number | null; parts: Set<string>; first: string | null } | null = null;
+  for (const st of steps) {
+    if (open && st.beat - open.change.beat > window + EPS) open = null;
+    if (st.line) {
+      const rk = st.line;
+      let key = rk.key;
+      let shift: number | undefined;
+      if (rk.pivot) {
+        const moves = SYLLABLE_SEMITONES[rk.pivot.from] - SYLLABLE_SEMITONES[rk.pivot.to];
+        if (prev === null) shift = key ? undefined : moves;
+        else {
+          const implied = keyAfterPivot(prev, rk.pivot);
+          if (!key) key = implied;
+          if (key.semitone === implied.semitone) shift = moves;
+          else {
+            warnings.push({
+              message: `Line ${rk.line}: the pivot ${rk.pivot.from}/${rk.pivot.to} moves doh from ${keyFromSemitone(prev).name} to ${implied.name}, not ${key.name}. Check the key or the pivot.`,
+              line: rk.line,
+            });
+          }
+        }
+      }
+      // Bridge notes just before have already moved there.
+      if (open && key && open.change.key?.semitone === key.semitone) continue;
+      const change: KeyChange = { beat: st.beat, key, pivot: rk.pivot, ...(shift === undefined ? {} : { shift }) };
+      changes.push(change);
+      open = { change, before: prev, parts: new Set(), first: null };
+      if (key) prev = key.semitone;
+      continue;
+    }
+    const br = st.bridge!;
+    const shift = br.from.degree + 12 * br.from.octave - (br.to.degree + 12 * br.to.octave);
+    const pivot = { from: br.from.syllable, to: br.to.syllable };
+    if (open && !open.parts.has(br.part)) {
+      const implied = open.before === null ? null : keyFromSemitone(open.before + shift);
+      const want = open.change.key;
+      if (implied && want && implied.semitone !== want.semitone) {
+        const after = open.first ? ` (${partName(open.first)}’s bridge note does)` : '';
+        warnings.push({
+          message: `${partName(br.part)}, bar ${br.bar}: the bridge note ${br.text} moves doh to ${implied.name}, not to ${want.name}${after}. Check the bridge notes.`,
+          line: br.line,
+          part: br.part,
+          bar: br.bar,
+        });
+      }
+      // A key: line names the key; the first bridge note that agrees says how far doh moves for the other parts.
+      if (open.change.shift === undefined && (!implied || !want || implied.semitone === want.semitone)) open.change.shift = shift;
+      (open.change.bridges ??= {})[br.part] = { beat: br.beat, shift };
+      open.parts.add(br.part);
+      continue;
+    }
+    const key = prev === null ? null : keyFromSemitone(prev + shift);
+    const change: KeyChange = { beat: br.beat, key, pivot, shift, bridges: { [br.part]: { beat: br.beat, shift } } };
+    changes.push(change);
+    open = { change, before: prev, parts: new Set([br.part]), first: br.part };
+    if (key) prev = key.semitone;
+  }
+  // Every part reads from one doh. Where bridge notes agree on the key but not the octave (a mark left
+  // off one of them), they all move doh as far as most of them say.
+  for (const ch of changes) {
+    if (!ch.bridges || ch.shift === undefined) continue;
+    const same = Object.values(ch.bridges).filter((b) => mod12(b.shift) === mod12(ch.shift!));
+    const counts = new Map<number, number>();
+    for (const b of same) counts.set(b.shift, (counts.get(b.shift) ?? 0) + 1);
+    let best = ch.shift;
+    for (const [v, c] of counts) if (c > (counts.get(best) ?? 0)) best = v;
+    ch.shift = best;
+    for (const b of same) b.shift = best;
+  }
+  return changes;
 }
 
 /** Splits a W line into syllables: "peo-ple" → "peo-", "ple". A lone "-" or "_" carries the last syllable over one more note. */

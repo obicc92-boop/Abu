@@ -35,21 +35,34 @@ export interface DohPoint {
 }
 
 /**
- * Where doh sits through the song. Starts from the song's key (or `fallbackKey`,
- * the song record's key, when the text has none). At each key change the new
- * doh is placed as close as possible to the old one, so voices stay in range.
+ * Where doh sits through the song, for one part or (without `part`) where
+ * each key change starts. Starts from the song's key (or `fallbackKey`, the
+ * song record's key, when the text has none). A pivot or bridge note says
+ * exactly how far doh moves, since that note keeps its pitch; a part with its
+ * own bridge note changes there. A named key alone puts the new doh as close
+ * as possible to the old one, so voices stay in range.
  */
-export function dohTimeline(song: ParsedSong, fallbackKey = 0): DohPoint[] {
+export function dohTimeline(song: ParsedSong, fallbackKey = 0, part?: string): DohPoint[] {
   let semitone = song.meta.key?.semitone ?? mod12(fallbackKey);
   let doh = dohMidi(semitone);
   const out: DohPoint[] = [{ beat: 0, doh, semitone }];
   for (const kc of song.keyChanges) {
-    const next = kc.key ? kc.key.semitone : kc.pivot ? keyAfterPivot(semitone, kc.pivot).semitone : null;
-    if (next === null) continue;
-    const up = mod12(next - semitone);
-    doh += up <= 5 ? up : up - 12;
+    const own = part ? kc.bridges?.[part] : undefined;
+    let shift = own?.shift ?? kc.shift;
+    // A named key wins over a shift that doesn't reach it (the reader has warned about it).
+    if (!own && shift !== undefined && kc.key && mod12(semitone + shift) !== kc.key.semitone) shift = undefined;
+    let next: number | null;
+    if (shift !== undefined) {
+      next = mod12(semitone + shift);
+      doh += shift;
+    } else {
+      next = kc.key ? kc.key.semitone : kc.pivot ? keyAfterPivot(semitone, kc.pivot).semitone : null;
+      if (next === null) continue;
+      const up = mod12(next - semitone);
+      doh += up <= 5 ? up : up - 12;
+    }
     semitone = next;
-    out.push({ beat: kc.beat, doh, semitone });
+    out.push({ beat: own?.beat ?? kc.beat, doh, semitone });
   }
   return out;
 }

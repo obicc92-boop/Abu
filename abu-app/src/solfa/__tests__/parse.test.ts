@@ -273,9 +273,9 @@ describe('format table: key changes', () => {
     expect(song.keyChanges).toEqual([{ beat: 8, key: { semitone: 2, name: 'D' }, pivot: null }]);
   });
 
-  it('a pivot alone works the new key out: s/d from G is D', () => {
+  it('a pivot alone works the new key out: s/d from G is D, and doh moves up to the old soh', () => {
     const song = twoLines('key: s/d');
-    expect(song.keyChanges).toEqual([{ beat: 8, key: { semitone: 2, name: 'D' }, pivot: { from: 's', to: 'd' } }]);
+    expect(song.keyChanges).toEqual([{ beat: 8, key: { semitone: 2, name: 'D' }, pivot: { from: 's', to: 'd' }, shift: 7 }]);
     expect(song.warnings).toEqual([]);
   });
 
@@ -290,6 +290,71 @@ describe('format table: key changes', () => {
     const song = parse(['key: G', '[Verse]', 'S  d :r /m :f |', '[Chorus]', 'key: A', 'S  s :- /- :- |']);
     expect(song.keyChanges.map((k) => [k.beat, k.key?.name])).toEqual([[4, 'A']]);
     expect(song.meta.key?.name).toBe('G');
+  });
+});
+
+describe('bridge notes', () => {
+  // Handel's "Worthy is the Lamb", bar 32: from D to A, each part on its own bridge note.
+  const handel = parse([
+    'key: D',
+    "S  d'=f :f.f /f.s,f :m.r | m.s :l.s,f /s.m,f :s.f,m |",
+    'A  : /r=s1 :-.l1,t1 | d.d :d.d /d.d :d.d |',
+    'T  m=l1.r :t1.,t1 /d : | .m :f.m,r /m.d,r :m.r,d |',
+    'B  : / : | : / : |',
+  ]);
+
+  it('reads a bridge note as one note, named in the new key', () => {
+    expect(handel.errors).toEqual([]);
+    expect(handel.warnings).toEqual([]);
+    expect(handel.events.S[0]).toMatchObject({ start: 0, dur: 1, deg: 5, oct: 0, text: "d'=f" });
+    expect(handel.events.A[0]).toMatchObject({ start: 2, deg: 7, oct: -1, text: 'r=s1' });
+  });
+
+  it('changes key where the first part’s bridge note is, each part at its own', () => {
+    expect(handel.keyChanges).toEqual([
+      {
+        beat: 0,
+        key: { semitone: 9, name: 'A' },
+        pivot: { from: 'd', to: 'f' },
+        shift: 7,
+        bridges: { S: { beat: 0, shift: 7 }, T: { beat: 0, shift: 7 }, A: { beat: 2, shift: 7 } },
+      },
+    ]);
+  });
+
+  it('takes spaces around “=” and says how to write a bridge note it can’t read', () => {
+    expect(parse(['S  s = d :r /m :f |']).events.S[0].text).toBe('s=d');
+    expect(messages(parse(['S  s=q :r /m :f |']).errors)).toEqual([
+      'Soprano, bar 1: “s=q” isn’t a bridge note. Write the note’s name in the old key, “=”, then its name in the new key, e.g. “s=d”.',
+    ]);
+  });
+
+  it('warns when one part’s bridge note goes to another key', () => {
+    const song = parse(['key: G', 'S  s=d :r /m :f |', 'A  f=d :r /m :f |']);
+    expect(song.keyChanges).toHaveLength(1);
+    expect(messages(song.warnings)).toEqual(['Alto, bar 1: the bridge note f=d moves doh to C, not to D (Soprano’s bridge note does). Check the bridge notes.']);
+  });
+
+  it('moves every part’s doh the same way when one bridge note leaves off an octave mark', () => {
+    const song = parse(['key: G', "S  s=d :r /m :f |", 'A  m :r /s=d :- |', "T  s=d' :t /d' :- |"]);
+    expect(song.keyChanges.map((k) => [k.shift, k.bridges])).toEqual([[7, { S: { beat: 0, shift: 7 }, T: { beat: 0, shift: 7 }, A: { beat: 2, shift: 7 } }]]);
+  });
+
+  it('treats a key: line naming the key the bridge notes went to as the same change', () => {
+    const song = parse(['key: G', 'S  d :r /m :s=d |', 'key: D', 'S  r :- /- :- |']);
+    expect(song.keyChanges.map((k) => [k.beat, k.key?.name, k.shift])).toEqual([[3, 'D', 7]]);
+  });
+
+  it('with a key: line before the bar, a part with a bridge note changes there, the others at the bar line', () => {
+    const song = parse(['key: G', 'S  d :r /m :f |', 'A  d :r /m :f |', 'key: D', 'S  s :f /s=d :r |', 'A  m :- /- :- |']);
+    expect(song.warnings).toEqual([]);
+    // The bridge note also says how far doh moves for the alto, which has none.
+    expect(song.keyChanges).toEqual([{ beat: 4, key: { semitone: 2, name: 'D' }, pivot: null, shift: 7, bridges: { S: { beat: 6, shift: 7 } } }]);
+  });
+
+  it('starts a new change for bridge notes more than two bars later', () => {
+    const song = parse(['key: C', 'S  s=d :r /m :f | s :- /- :- | s :- /- :- | s :- /- :- |', 'A  d :- /- :- | m :- /- :- | m :- /- :- | s=d :- /- :- |']);
+    expect(song.keyChanges.map((k) => [k.beat, k.key?.name])).toEqual([[0, 'G'], [12, 'D']]);
   });
 });
 

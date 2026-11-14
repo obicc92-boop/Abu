@@ -49,9 +49,9 @@ const isZip = (b: Uint8Array) => b[0] === 0x50 && b[1] === 0x4b;
 export function checkText(out: SolfaText): string[] {
   const parsed = parseSolfa(out.text);
   const problems = parsed.errors.map((e) => e.message);
-  const timeline = dohTimeline(parsed);
   for (const part of out.parts) {
     const want = out.planned[part] ?? [];
+    const timeline = dohTimeline(parsed, 0, part);
     const got = (parsed.events[part] ?? []).map((ev) => ({ start: ev.start, dur: ev.dur, midi: noteMidi(part, ev, dohAt(timeline, ev.start)) }));
     if (want.length !== got.length) {
       problems.push(`${part}: ${got.length} notes read back, ${want.length} planned.`);
