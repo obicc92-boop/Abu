@@ -33,7 +33,7 @@ import { PlayButton } from '@/components/player-controls';
 import { Body, Button, Card, Chip, ErrorText, Kicker, MAX_WIDTH, Page, TopBar } from '@/components/ui';
 import { setScanDraft } from '@/scan/draft';
 import { joinLines, timeFor } from '@/scan/join';
-import { alignedRows, bestFree, joinLine, problemsByPart, splitLine, tidyNotes, tidyTitle, withWords, wordsOf, type LineRow, type LineWords } from '@/scan/line-text';
+import { alignedRows, bestFree, joinLine, keepsParts, problemsByPart, splitLine, tidyNotes, tidyTitle, withWords, wordsOf, type LineRow, type LineWords } from '@/scan/line-text';
 import { findLinesOwn, readLineOwn } from '@/scan/own-reader';
 import { cutLine, loadPages, MAX_PAGES, pageForFinding, scanningHere, takePhoto } from '@/scan/pages';
 import { readTypedSheet, type PageText } from '@/scan/pdf-text';
@@ -173,7 +173,8 @@ function Scanner() {
    * A line's reading, with AI only as the last resort. A reading that passes Abụ's checker is kept as it is
    * (the AIs broke more right lines than they fixed when sent every line). One that fails, or one the
    * person asks to read again, goes to Cloudflare's reader, then Claude if the Worker has a key (Haiku
-   * checks it, Opus reads it from scratch); an answer is kept only if it passes. Otherwise the line keeps
+   * checks it, Opus reads it from scratch); an answer is kept only if it passes and keeps every part
+   * (`keepsParts`). Otherwise the line keeps
    * the app's own reading for the person to fix. Throws only when today's allowance is used up.
    */
   const readOne = async (line: Line, head: Heading, songTime: string, ai: Readers, again = false): Promise<string> => {
@@ -199,7 +200,8 @@ function Scanner() {
       try {
         const r = await ask();
         const text = withWords(r.text, line.wordTexts);
-        if (passes(text)) {
+        // Kept only if it adds up and still has every part (an answer that drops or empties a part adds up too).
+        if (passes(text) && keepsParts(text, draft)) {
           update(line.id, { status: 'read', text, doubts: r.doubts, checked: false, via });
           return text;
         }

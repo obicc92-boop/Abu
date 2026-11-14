@@ -414,7 +414,7 @@ function cluster(chars: PdfChar[]): { rows: PdfChar[][]; base: number[]; size: n
   return { rows, base, size };
 }
 
-const SOLFA_CHARS = new RegExp(`${NOTE}|[|¦:.,\\-–—/x!ǀ]`, 'g');
+const SOLFA_CHARS = new RegExp(`${NOTE}|[|¦┆:.,\\-–—/x!ǀ]`, 'g');
 const NOTES = new RegExp(NOTE, 'g');
 
 /**
@@ -425,7 +425,7 @@ export function isSolfa(text: string): boolean {
   const t = text.replace(/ /g, '');
   if (!t) return false;
   const colons = t.match(/:/g)?.length ?? 0;
-  if (/^[:|¦/]+$/.test(t) && colons >= 2) return true;
+  if (/^[:|¦┆/]+$/.test(t) && colons >= 2) return true;
   const rest = t.replace(SOLFA_CHARS, '');
   return (t.length - rest.length) / t.length > 0.85 && ((t.match(NOTES)?.length ?? 0) + (t.match(/-/g)?.length ?? 0) >= 2 || colons >= 3);
 }
@@ -540,7 +540,12 @@ type Item = [number, number, string];
 
 /** A row's characters and the drawn lines through it, left to right. */
 function rowItems(row: PdfChar[], y: number, main: number, drawn: Drawn[]): Item[] {
-  const items: Item[] = row.map((c) => [c.x0, c.x1, (c.pre ?? '') + c.c + c.mark]);
+  // Some sheets type their bar lines tall and their half-bar lines as tall as the notes: in a row
+  // with a tall "|", the tall ones are bar lines and the rest half-bars (a tiny one is an octave mark).
+  const tall = (c: PdfChar) => c.c === '|' && c.size >= 1.35 * main;
+  const sized = row.some(tall);
+  const text = (c: PdfChar) => (sized && c.c === '|' && c.size >= 0.75 * main ? (tall(c) ? '¦' : '┆') : (c.pre ?? '') + c.c + c.mark);
+  const items: Item[] = row.map((c) => [c.x0, c.x1, text(c)]);
   for (const s of drawn) if (crosses([s[0], s[1], s[2]], y, main)) items.push([s[0] - 0.01, s[0] + 0.01, s[3]]);
   // By the middle of each character: a line drawn right at a letter's left edge comes before it.
   return items.sort((a, b) => a[0] + a[1] - (b[0] + b[1]));
@@ -655,7 +660,7 @@ const DASHES: Record<string, string> = { '–': '-', '—': '-', '−': '-', '�
 const DYNAMICS = /(^|[^a-z'])(?:mf|mp|pp|ff|fff|ppp|p|sfz|cresc\.?|dim\.?|rit\.?|rall\.?|accel\.?)(?![a-z])/g;
 
 /** Labels printed among the notes ("CH", "Refrain", "Bars", a part's letter): never notes, which are small letters. */
-const LABELS = /(^|[\s|:/¦┆])(?:CHR?|CHORUS|Chorus|VERSE|Verse|REFRAIN|Refrain|Ref\.|SOLO|Tutti|TUTTI|ALL|Unison|UNISON|Bars|bars|Organ|organ|Interlude|interlude|Intro|INTRO|[SATB])(?:\.|:)?(?=[\s|:/¦┆]|$)/g;
+const LABELS = /(^|[\s|:/¦┆])(?:CHR?|CHORUS|Chorus|VERSE|Verse|REFRAIN|Refrain|Ref\.|SOLO|Tutti|TUTTI|ALL|Unison|UNISON|Bars|bars|Organ|organ|Interlude|interlude|Intro|INTRO|[SATB][12]?)(?:\.|:)?(?=[\s|:/¦┆]|$)/g;
 
 /** A run of letters that sol-fa syllables can make ("rm", "d't"): anything else in a row of notes is a word. */
 const NOTE_RUN = new RegExp(`^(?:${NOTE})+$`);
@@ -665,8 +670,8 @@ export function toAbu(text: string, drawnBars: boolean): string {
   let t = text.replace(/[–—−‒’ʼ]/g, (c) => DASHES[c]);
   // The click letter "ǀ" right after a note is a low octave mark ("sǀ" is s1); on its own, a bar line.
   t = t.replace(/([a-z])ǀ/g, (_, n: string) => `${n}1`).replace(/ǀ/g, '|');
-  // A part's name printed before its row ("S", "Alto:", "Ten."), in capitals: a small "s" is a note.
-  t = t.replace(/^\s*(?:¦\s*)?(?:Solo|Soprano|Sop|Alto|Tenor|Ten|Bass|S|A|T|B)\b[.:]?\s*/, '');
+  // A part's name printed before its row ("S", "S1", "Alto:", "Ten."), in capitals: a small "s" is a note.
+  t = t.replace(/^\s*(?:¦\s*)?(?:Solo|Soprano|Sop|Alto|Tenor|Ten|Bass|[SATB][12]?)\b[.:]?\s*/, '');
   t = t.replace(/\|/g, drawnBars ? '/' : '|').replace(/¦/g, '|').replace(/┆/g, '/');
   t = t.replace(/\.{2,}/g, '.').replace(/,{2,}/g, ','); // a dot or comma printed several times over
   t = t.replace(/\s+'/g, "'"); // "d '" is d'
@@ -800,7 +805,7 @@ const PARTS: Record<number, string[]> = { 1: ['S'], 2: ['S', 'A'], 3: ['S', 'A',
 const WORDISH = /[A-Za-zÀ-ÖØ-öø-ɏḀ-ỿ]/;
 // A tempo or metronome mark printed between lines ("Andante. M. 70"): not words.
 const TEMPO = /\b(?:Largo|Larghetto|Lento|Adagio|Andante|Andantino|Moderato|Allegretto|Allegro|Vivace|Presto|Maestoso|Grave)\b|\bM\.\s*M?\.?\s*=?\s*\d{2,3}\b/;
-const PART_LABEL = /^(?:Solo|Soprano|Sop|Alto|Tenor|Ten|Bass|S|A|T|B)[.:]?$/;
+const PART_LABEL = /^(?:Solo|Soprano|Sop|Alto|Tenor|Ten|Bass|[SATB][12]?)[.:]?$/;
 
 /**
  * How many characters at the start of a row are a part's name printed beside
@@ -909,8 +914,8 @@ export function readSystems(pages: PageText[]): { header: string[]; systems: Sys
       const ruled = notes.map((n) => drawn.some((d) => crosses([d[0], d[1], d[2]], n.y, n.main)));
       const items = notes.map((n, k) => rowItems(n.row, n.y, n.main, ruled[k] ? drawn : []));
       const texts = notes.map((n, k) => toAbu(itemsText(items[k], n.main), ruled[k]));
-      // In a ruled row a typed "|" is a half-bar line; in a plain one it's a bar line.
-      const aligned = alignBars(items, ruled.map((r) => (r ? (x: string) => x === '¦' : (x: string) => x === '|')), s.main);
+      // In a ruled row a typed "|" is a half-bar line; in a plain one it's a bar line (as is a tall one, "¦").
+      const aligned = alignBars(items, ruled.map((r) => (r ? (x: string) => x === '¦' : (x: string) => x === '|' || x === '¦')), s.main);
       const lined = aligned ? withRests(aligned.map((it, k) => toAbu(itemsText(it, notes[k].main), ruled[k]))) : null;
       notes.forEach((n, k) => (s.rows[n.at] = lined && lined[k] !== texts[k] ? ['n', texts[k], lined[k]] : ['n', texts[k]]));
       systems.push(...splitTall(s, across));

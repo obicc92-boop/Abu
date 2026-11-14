@@ -1,6 +1,23 @@
 import { describe, expect, it } from '@jest/globals';
 
-import { alignedRows, freeRepair, joinLine, problemsByPart, splitLine, tidyNotes, tidyTitle, withoutNameColumn, withRestingEdges, withSpacedBeats, withWords, wordsOf } from '../line-text';
+import {
+  alignedRows,
+  freeRepair,
+  joinLine,
+  keepsParts,
+  problemsByPart,
+  splitLine,
+  tidyNotes,
+  tidyTitle,
+  withFullEmptyBars,
+  withGapsAsBars,
+  withHalfBarsAsBars,
+  withoutNameColumn,
+  withRestingEdges,
+  withSpacedBeats,
+  withWords,
+  wordsOf,
+} from '../line-text';
 import { parseSolfa } from '@/solfa';
 
 describe('tidyNotes', () => {
@@ -28,10 +45,48 @@ describe('free repairs', () => {
     expect(withRestingEdges(['S  d :r / m :f | s :- / - :- |', 'A  d :r / m :f |'].join('\n'))).toBeNull();
   });
 
+  it('reads half-bar marks as bar lines where they cut a long bar into whole bars', () => {
+    // A 4/4 sheet whose tall and short bar lines came out alike, read as 2/4: plays the same.
+    expect(withHalfBarsAsBars('S  / : / : m.m / f.,s :-.l / - :- |', 2)).toBe('S  : | : m.m | f.,s :-.l | - :- |');
+    // Half-bars of a 4/4 bar that's too long for another reason stay.
+    expect(withHalfBarsAsBars('S  d :r / m :f s :l / t :d\' |', 4)).toBeNull();
+  });
+
+  it('puts in bar lines left out between notes, only where every piece is a whole bar', () => {
+    expect(withGapsAsBars('S  : m : m : s l : - : f : m r : - : - : l |', 4)).toBe('S  : m : m : s | l : - : f : m | r : - : - : l |');
+    // A part's name read as a note ("s") isn't an upbeat.
+    expect(withGapsAsBars('S  s r : - .d : - :t1 d : - : s : - |', 4)).toBeNull();
+  });
+
+  it('fills out a silent bar typed short, but not a double bar line', () => {
+    const line = (s: string) => [`S  d :r :m :f | ${s} | s :- :- :- |`, 'A  d :r :m :f | m :- :- :- | s :- :- :- |'].join('\n');
+    expect(withFullEmptyBars(line(':'), 4)).toBe(line(': : :'));
+    expect(withFullEmptyBars(line(''), 4)).toBeNull();
+  });
+
   it('keeps a repair only when the line then passes', () => {
     const fixable = ['S  m | d : m : r -.s1 | d : - : - : - |', 'A  s1 | s1 : s1 : s1 -.s1 | s1 : - : - : - |', 'T  d : d : t1 :-.t1 | d : - : - : - |'].join('\n');
     expect(freeRepair(fixable, passes, 4)).toBe(['S  m | d : m : r :-.s1 | d : - : - : - |', 'A  s1 | s1 : s1 : s1 :-.s1 | s1 : - : - : - |', 'T  x | d : d : t1 :-.t1 | d : - : - : - |'].join('\n'));
     expect(freeRepair('S  d r m f : s | m : r : d : - |', passes, 4)).toBeNull();
+  });
+});
+
+describe('an AI answer kept only with every part', () => {
+  const reading = ['S  d :r | m :f |', 'W  O come let us', 'A  s1 :t1 | d :d |', 'T  m :s | s :l |', 'B  d :s1 | d :f1 |'].join('\n');
+
+  it('keeps an answer that changes notes but keeps the parts', () => {
+    expect(keepsParts(['S  d :r | m :- |', 'A  s1 :t1 | d :- |', 'T  m :s | s :- |', 'B  d :s1 | d :- |'].join('\n'), reading)).toBe(true);
+  });
+
+  it('turns away an answer that drops a part, empties one, or copies one onto others', () => {
+    expect(keepsParts(['S  d :r | m :f |', 'A  s1 :t1 | d :d |'].join('\n'), reading)).toBe(false);
+    expect(keepsParts(['S  d :r | m :f |', 'A  s1 :t1 | d :d |', 'T  m :s | s :l |', 'B  : | : |'].join('\n'), reading)).toBe(false);
+    expect(keepsParts(['S  d :r | m :f |', 'A  d :r | m :f |', 'T  d :r | m :f |', 'B  d :r | m :f |'].join('\n'), reading)).toBe(false);
+  });
+
+  it('lets a part that was resting rest, and parts the reading had alike stay alike', () => {
+    const resting = ['S  d :r | m :f |', 'A  d :r | m :f |', 'T  : | : |'].join('\n');
+    expect(keepsParts(resting, resting)).toBe(true);
   });
 });
 

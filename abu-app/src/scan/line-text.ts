@@ -2,7 +2,7 @@
  * A scanned line's text as rows to edit one by one: each part's row of notes
  * and the rows of words, in order, and back to text.
  */
-import { partName } from '@/solfa';
+import { parseNote, partName } from '@/solfa';
 
 export interface LineRow {
   /** S, A, T, B, Solo... or null for a row of words. */
@@ -201,12 +201,108 @@ export function withRestingEdges(text: string): string | null {
 }
 
 /**
+ * Each part's too-long bars cut into whole bars where `cut` splits them into
+ * pieces of exactly the bar's beats; a row's last piece may be shorter (a
+ * short last bar), and its first too (an upbeat) when `upbeat`. Null if no
+ * bar changes.
+ */
+function withBarsCut(text: string, beatsPerBar: number, cut: (bar: string, j: number) => string[], upbeat: boolean): string | null {
+  let changed = false;
+  const fixed = splitLine(text).map((r) => {
+    if (!r.part) return r;
+    const { bars, closed } = barsOfRow(r.text);
+    const out = bars.flatMap((bar, j) => {
+      if (beatCount(bar) <= beatsPerBar) return [bar];
+      const pieces = cut(bar, j);
+      if (pieces.length < 2) return [bar];
+      const first = upbeat && j === 0;
+      const last = j === bars.length - 1;
+      const fits = pieces.every((p, k) => {
+        const n = beatCount(p);
+        return n === beatsPerBar || (n < beatsPerBar && ((first && k === 0) || (last && k === pieces.length - 1)));
+      });
+      if (!fits) return [bar];
+      changed = true;
+      return pieces;
+    });
+    return { part: r.part, text: `${out.map((b) => b.trim()).join(' | ')}${closed ? ' |' : ''}` };
+  });
+  return changed ? joinLine(fixed) : null;
+}
+
+/**
+ * The line with half-bar marks read as bar lines, for a sheet whose long and
+ * short bar lines came out alike: a bar far too long whose "/" marks cut it
+ * into whole bars ("/ : / : m.m / f.,s :-.l" in 2/4). One before the row's
+ * first beat is its opening bar line, and goes. Null if no bar changes. (A
+ * sheet in 4/4 read this way as 2/4 plays the same, with its bars halved.)
+ */
+export function withHalfBarsAsBars(text: string, beatsPerBar: number): string | null {
+  return withBarsCut(
+    text,
+    beatsPerBar,
+    (bar, j) => {
+      const pieces = bar.split('/');
+      return j === 0 && !pieces[0].trim() ? pieces.slice(1) : pieces;
+    },
+    true,
+  );
+}
+
+/**
+ * The line with bar lines a typist left out between two notes ("s : - : m : r
+ * d : - : - : m.s"): in a bar too long, the spaces between notes become bar
+ * lines when that cuts it into whole bars (a short one only at the row's end:
+ * a part's name read as a note, "s r : - …", is no upbeat). Null if no bar
+ * changes.
+ */
+export function withGapsAsBars(text: string, beatsPerBar: number): string | null {
+  return withBarsCut(text, beatsPerBar, (bar) => bar.split(GAP), false);
+}
+
+/**
+ * The line with the bars a part rests through filled out with empty beats: a
+ * typist often types a silent 4/4 bar as "| : |". Only bars with beat marks
+ * and nothing else; an inner bar gets the time's beats, a first or last bar
+ * as many as the longest part has there. Null if no part changes.
+ */
+export function withFullEmptyBars(text: string, beatsPerBar: number): string | null {
+  const rows = splitLine(text);
+  const notes = rows.filter((r) => r.part).map((r) => barsOfRow(r.text).bars);
+  let changed = false;
+  const fixed = rows.map((r) => {
+    if (!r.part) return r;
+    const { bars, closed } = barsOfRow(r.text);
+    const out = bars.map((bar, j) => {
+      // Beat marks and nothing else ("| |" with none is more likely a double bar line).
+      if (/[^\s:/]/.test(bar) || !/[:/]/.test(bar)) return bar;
+      const edge = j === 0 || j === bars.length - 1;
+      const want = edge ? Math.max(...notes.map((b) => (b[j] === undefined ? 0 : beatCount(b[j])))) : beatsPerBar;
+      const have = beatCount(bar);
+      if (have >= want) return bar;
+      changed = true;
+      return `${bar.trimEnd()}${' :'.repeat(want - have)} `;
+    });
+    return { part: r.part, text: `${out.join('|')}${closed ? '|' : ''}` };
+  });
+  return changed ? joinLine(fixed) : null;
+}
+
+/**
  * The free repairs for a line that fails the checker, tried in turn and
- * together: a column of part names read as notes, missing beat marks, parts
- * resting through an upbeat. The first that makes the line pass, or null.
+ * together: a column of part names read as notes, half-bar marks that are bar
+ * lines, bar lines left out, missing beat marks, parts resting through an
+ * upbeat, silent bars typed short. The first that makes the line pass, or null.
  */
 export function freeRepair(text: string, passes: (t: string) => boolean, beatsPerBar: number): string | null {
-  const steps: ((t: string) => string | null)[] = [withoutNameColumn, (t) => withSpacedBeats(t, beatsPerBar), withRestingEdges];
+  const steps: ((t: string) => string | null)[] = [
+    withoutNameColumn,
+    (t) => withHalfBarsAsBars(t, beatsPerBar),
+    (t) => withGapsAsBars(t, beatsPerBar),
+    (t) => withSpacedBeats(t, beatsPerBar),
+    withRestingEdges,
+    (t) => withFullEmptyBars(t, beatsPerBar),
+  ];
   // Each repair alone, then each in turn on top of the ones before (in this order).
   let layered = text;
   for (const step of steps) {
@@ -232,6 +328,34 @@ export function bestFree(readings: string[], passes: (t: string) => boolean, bea
     if (fixed) return fixed;
   }
   return readings[0];
+}
+
+/** The notes in each part's row (not holds, rests or marks), top to bottom. */
+function notesByPart(text: string): string[][] {
+  return splitLine(text)
+    .filter((r) => r.part)
+    .map((r) => r.text.split(/[\s:|/.,=-]+/).filter((t) => parseNote(t)));
+}
+
+/**
+ * Whether a reader's answer for a line still has the line's parts, compared
+ * with the reading it was given: a row for every part, notes in every part
+ * that had notes, and no part's row a copy of another's that differed. An
+ * answer can pass the checker without them (a line of two parts adds up as
+ * well as four), so the app keeps an AI's answer only if this holds too.
+ */
+export function keepsParts(answer: string, reading: string): boolean {
+  const was = notesByPart(reading);
+  const now = notesByPart(answer);
+  if (now.length < was.length) return false;
+  if (was.some((notes, i) => notes.length > 0 && now[i].length === 0)) return false;
+  const rows = splitLine(answer)
+    .filter((r) => r.part)
+    .map((r) => r.text.replace(/\s+/g, ''));
+  const same = (a: string[], b: string[]) => a.length === b.length && a.every((n, k) => n === b[k]);
+  for (let i = 0; i < was.length; i++)
+    for (let j = i + 1; j < was.length; j++) if (now[i].length && rows[i] === rows[j] && !same(was[i], was[j])) return false;
+  return true;
 }
 
 /** The checker's messages that are about one part ("Alto, bar 2 has 5 beats…"), and the rest. */

@@ -199,6 +199,16 @@ describe('how typists write', () => {
   it('leaves out labels printed among the notes', () => {
     expect(toAbu('d :r |m :f | CH |', false)).toBe('d :r | m :f |');
     expect(toAbu('A d1 :r1 |Verse m :f', false)).toBe('d1 :r1 | m :f |');
+    // Divided parts' names ("S1", "S2") too.
+    expect(toAbu('S1 m :m |s :s', false)).toBe('m :m | s :s |');
+    expect(toAbu('d :r |S2 m :f', false)).toBe('d :r | m :f |');
+  });
+
+  it('reads a tall typed "|" as a bar line and one as tall as the notes as a half-bar', () => {
+    const tall = (x: number, y: number): PdfChar => ({ c: '|', x0: x, x1: x + 3, y, size: 20, mark: '' });
+    const row = (y: number) => [tall(94, y), ...typed('m :m |- :-', 100, y), tall(164, y), ...typed('r :r |- :-', 170, y)];
+    const [line] = readTypedSheet([page(row(150))]).lines;
+    expect(line.text).toBe('S  m :m / - :- | r :r / - :- |');
   });
 
   it('takes a bar line that stops just above a row of dots as going through it', () => {
