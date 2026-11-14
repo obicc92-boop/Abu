@@ -145,7 +145,7 @@ Drafts: `design/brand-draft.html` (sources in `design/brand/`).
 
 - **Feel:** warm, celebratory and dignified, not generic office software.
   - Sand background, white cards, red for actions, gold for celebration (a learned song, a streak), dark ink for text.
-  - **Part colours are the signature**: avatar rings, chips and score labels.
+  - **Part colours are the signature**: avatar rings, chips and the score. A part is shown by its colour, never by a letter beside the music (an "S" or "T" there reads like soh or te): in the score each row has a coloured edge and its notes in the part's colour, with a key to the colours on top that marks your own part ("Alto (you)"). Notes use a darker shade on light backgrounds and a lighter one on dark (`partInk`), at least 5:1 contrast.
 - **Type:** Marcellus for the name and big titles, Figtree for the interface, JetBrains Mono for the score.
 - **App icon (draft, in the app now):** an open music book on red, with notation on the left page, a pair of notes on the right, and a gold ribbon marker like a hymnal's.
   - An earlier draft of four rising bars was dropped because it looked like a phone's signal icon.
