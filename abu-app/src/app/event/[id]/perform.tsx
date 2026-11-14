@@ -199,7 +199,7 @@ function PerformSong({
       </View>
 
       {parsed ? (
-        <Score song={parsed} activeBeat={-1} only={only} maxBeats={maxBeats} theme={light ? 'light' : 'dark'} size={pts} />
+        <Score song={parsed} activeBeat={-1} only={only} maxBeats={maxBeats} theme={light ? 'light' : 'dark'} size={pts} mine={myPart} />
       ) : song.isPending && !demo ? (
         <Text style={[styles.small, { color: look.small }]}>Loading…</Text>
       ) : (

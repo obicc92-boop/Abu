@@ -47,6 +47,23 @@ export function partColor(part: string): string {
   return partColors[part.charAt(0).toUpperCase()] ?? colors.muted;
 }
 
+/**
+ * A part's colour for text, such as its notes in the score: a darker shade
+ * on light backgrounds, a lighter one on dark (each at least 5:1 contrast).
+ */
+const partInks: Readonly<Record<string, readonly [string, string]>> = {
+  S: ['#B42A12', '#FF8F75'],
+  A: ['#8A5A00', '#F2B54A'],
+  T: ['#146A5E', '#4CC3AF'],
+  B: ['#33409A', '#A3AEFF'],
+  Solo: ['#7A3590', '#D49AE6'],
+};
+
+export function partInk(part: string, dark = false): string {
+  const pair = /^solo/i.test(part) ? partInks.Solo : partInks[part.charAt(0).toUpperCase()];
+  return pair ? pair[dark ? 1 : 0] : dark ? '#F7EDE7' : colors.ink;
+}
+
 /** Short label for a part in narrow places: "S", "Solo" → "So". */
 export function partLetter(part: string): string {
   return part.length > 2 ? part.slice(0, 2) : part;

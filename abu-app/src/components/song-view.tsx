@@ -128,7 +128,7 @@ function Player({ song, apiSong, banner }: { song: DemoSong; apiSong?: Song; ban
             scoreTop.current = e.nativeEvent.layout.y;
           }}
         >
-          <Score song={parsed} activeBeat={p.beat} silent={silent} onActiveLine={followLine} transpose={p.transpose} />
+          <Score song={parsed} activeBeat={p.beat} silent={silent} onActiveLine={followLine} transpose={p.transpose} mine={group?.part ? p.mix.mine : null} />
         </View>
 
         <PartMixer parts={parsed.parts} mix={p.mix} onMute={p.toggleMute} onSolo={p.toggleSolo} onMine={p.setMine} />
@@ -138,7 +138,7 @@ function Player({ song, apiSong, banner }: { song: DemoSong; apiSong?: Song; ban
         <ToggleRow label="Loop the song" value={p.loop} onChange={p.toggleLoop} />
 
         {p.message ? <Text style={styles.message}>{p.message}</Text> : null}
-        {parsed.parts.length > 1 ? <Text style={styles.hint}>Tap a letter to mute that part. “Mine” sets your part.</Text> : null}
+        {parsed.parts.length > 1 ? <Text style={styles.hint}>Tap a part to mute it. “Mine” sets your part.</Text> : null}
         <SongActions songId={song.id} song={apiSong} />
       </ScrollView>
 
