@@ -85,7 +85,7 @@ export interface PageReading {
 
 /* ---------- Reading one line ---------- */
 
-const LINE_SYSTEM = `You read one line of music from a picture of a tonic sol-fa choir sheet (typed or handwritten) and write it in Abụ's sol-fa text format. Copy exactly what is printed or written; never correct or improve the music.
+export const LINE_SYSTEM = `You read one line of music from a picture of a tonic sol-fa choir sheet (typed or handwritten) and write it in Abụ's sol-fa text format. Copy exactly what is printed or written; never correct or improve the music.
 
 The picture shows one line of music: one row of notes per part, top to bottom, often with rows of words between them. Give each row of notes, in the order given, with its part name.
 
@@ -108,7 +108,7 @@ B  d | l1 :s1 /d :l1 | f1 :s1 /s1 :- |
 
 Also give the words printed under the top row of notes (or the first row of words), as syllables separated by spaces, with a hyphen after a syllable that runs on into the next (\`peo- ple\` is written \`peo-ple\`); an empty string if there are none. And list any bars you couldn't read with confidence (part and bar number, counting this line's bars from 1, the upbeat column included).`;
 
-const LINE_SCHEMA = {
+export const LINE_SCHEMA = {
   type: 'object',
   properties: {
     rows: {
@@ -135,7 +135,7 @@ const LINE_SCHEMA = {
   additionalProperties: false,
 };
 
-const CHECK_SYSTEM = `${LINE_SYSTEM}
+export const CHECK_SYSTEM = `${LINE_SYSTEM}
 
 A small model has already read this line; its reading comes with the picture. It is usually close, but check it bar by bar against the picture and correct every mistake: wrong or missing notes, octave marks, holds, rests, beat marks and bar lines. Keep what it got right exactly as it is. List the bars you corrected or still can't read with confidence as doubts.`;
 

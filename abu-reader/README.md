@@ -150,3 +150,18 @@ On the same 50 lines:
 
   (Bars here leave empty bars out for every reader, so the own model shows 94.6% rather than 92.9%.) Every Cloudflare model breaks lines that were right, so the app sends only lines that fail the checker. Mistral then Haiku equals Haiku alone (97.6%) with 7 Anthropic calls instead of 12. Words: Mistral 79% of words right, Qwen 74%, Gemma 62%, Scout 45%. The measurement cost about US$0.21.
 - **The owner's Cloudflare account is on the Workers Free plan:** Workers AI stops at 10,000 neurons a day (about 165 Mistral corrections or 500 rows of words), and GLM 5.3 Flash isn't available on it. The Workers Paid plan ($5 a month) keeps the free 10,000 a day and charges $0.011 per 1,000 neurons after that.
+
+**Claude on the typed PDFs' failing lines** (14 November 2026, on a separate trial key): 93 lines from 43 of the owner's typed sample sheets that still fail the checker after the PDF text reader and the free repairs, spread over the kinds of failure. Each was sent with its picture cut as the app cuts it, through the app's check (`CHECK_SYSTEM`, the same request as `/api/scan/check`), and the answer was kept only if it passed. Every answer that passed was then compared with its picture by eye.
+
+| | Haiku 5.5 | Sonnet 5.5 |
+|---|---|---|
+| Pass the checker | 43 | 41 |
+| …and keep every part | 34 | 39 |
+| …of those, wrong on the picture | 6 | 15 |
+| **Fixed correctly** | **about 28 of 93** | **about 24 of 93** |
+| Cost | 0.24 US cents a line | 0.59 US cents a line |
+
+- **Most wrong answers come from the picture, not the reading:** the line's box cut off its last row, or took in rows of two systems, or the sheet puts S/A and T/B on shared rows. Claude then fills the missing part with rests, copies another row, or puts a part's notes under the wrong name, and still passes the checker.
+- **The app accepts an answer that drops parts** (`passes` in `scan.tsx` needs only one part row): Haiku dropped parts on 9 lines. Sonnet often drops a hold that starts a beat (`- :` becomes ` :`), making a held note a rest.
+- **About 20 of Haiku's right fixes are mechanical**, so code could do them for free: verse and part labels read as notes (`5a`, `S1`, `mf`); bar lines left out where a long bar has exactly two or three bars' beats; a short last bar finished with rests; parts silent where the sheet prints nothing; and sheets in 4/4 with half-bar lines that Abụ took for 2/4.
+- Scripts and results: the trial scripts (`select.py`, `trial.ts`, `compare.py`, `strict.py`) were kept outside the repository; `CHECK_SYSTEM`, `LINE_SYSTEM` and `LINE_SCHEMA` are exported from `abu-api/src/scan.ts` for them. The trial cost US$0.77.
