@@ -33,12 +33,12 @@ import { PlayButton } from '@/components/player-controls';
 import { Body, Button, Card, Chip, ErrorText, Kicker, MAX_WIDTH, Page, TopBar } from '@/components/ui';
 import { setScanDraft } from '@/scan/draft';
 import { joinLines, timeFor } from '@/scan/join';
-import { alignedRows, joinLine, problemsByPart, splitLine, tidyNotes, tidyTitle, withoutNameColumn, withWords, wordsOf, type LineRow, type LineWords } from '@/scan/line-text';
+import { alignedRows, freeRepair, joinLine, problemsByPart, splitLine, tidyNotes, tidyTitle, withWords, wordsOf, type LineRow, type LineWords } from '@/scan/line-text';
 import { findLinesOwn, readLineOwn } from '@/scan/own-reader';
 import { cutLine, loadPages, MAX_PAGES, pageForFinding, scanningHere, takePhoto } from '@/scan/pages';
 import { readTypedSheet, type PageText } from '@/scan/pdf-text';
 import type { Box, FoundLine } from '@/scan/types';
-import { parseKey, parseSolfa, partName } from '@/solfa';
+import { parseKey, parseSolfa, parseTime, partName } from '@/solfa';
 import { useSession } from '@/state/session';
 import { makeStyles, useColors, usePartInk } from '@/theme/theme';
 import { fonts, partColor } from '@/theme/tokens';
@@ -177,9 +177,9 @@ function Scanner() {
   const readOne = async (line: Line, head: Heading, songTime: string, ai: Readers, again = false): Promise<string> => {
     const passes = (t: string) => splitLine(t).some((r) => r.part && r.text.trim()) && !parseSolfa(t, { time: songTime }).errors.length;
     let own = withWords(line.draft, line.wordTexts);
-    // Free repairs first: a column of part names read as notes.
-    const named = !passes(own) && withoutNameColumn(own);
-    if (named && passes(named)) own = named;
+    // Free repairs first: a column of part names read as notes, beat marks left out, parts resting through an upbeat.
+    const repaired = !passes(own) && freeRepair(own, passes, parseTime(songTime)?.pulses ?? 4);
+    if (repaired) own = repaired;
     if (!again && passes(own)) {
       update(line.id, { status: 'read', text: own, checked: false });
       return own;

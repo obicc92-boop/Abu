@@ -1,11 +1,37 @@
 import { describe, expect, it } from '@jest/globals';
 
-import { alignedRows, joinLine, problemsByPart, splitLine, tidyNotes, tidyTitle, withoutNameColumn, withWords, wordsOf } from '../line-text';
+import { alignedRows, freeRepair, joinLine, problemsByPart, splitLine, tidyNotes, tidyTitle, withoutNameColumn, withRestingEdges, withSpacedBeats, withWords, wordsOf } from '../line-text';
 import { parseSolfa } from '@/solfa';
 
 describe('tidyNotes', () => {
   it('joins a bridge note typed with spaces', () => {
     expect(tidyNotes("d' = f :f . f |")).toBe("d'=f :f.f |");
+  });
+});
+
+describe('free repairs', () => {
+  const passes = (t: string) => !parseSolfa(t, { time: '4/4' }).errors.length;
+
+  it('puts back beat marks a typist left out, only where that gives a bar its beats', () => {
+    const line = ['S  s1 :t1.d :d :t1.s1 | d : m : r -.s1 | m : r : d : - |', 'A  s1 :s1.s1 :s1 :- | s1 : s1 : s1 -.s1 | s1 : f1 : m1 : - |'].join('\n');
+    expect(withSpacedBeats(line, 4)).toBe(['S  s1 :t1.d :d :t1.s1 | d : m : r :-.s1 | m : r : d : - |', 'A  s1 :s1.s1 :s1 :- | s1 : s1 : s1 :-.s1 | s1 : f1 : m1 : - |'].join('\n'));
+    // Spaces around "." aren't beat marks, and a bar that already has its beats is left alone.
+    expect(withSpacedBeats('S  d . r :m :f :s | m : - : r : d |', 4)).toBeNull();
+    // Three spaces where one beat is missing: which one? Left for the person.
+    expect(withSpacedBeats('S  d r m f : s | m : r : d : - |', 4)).toBeNull();
+  });
+
+  it('gives parts resting through the upbeat an empty bar there', () => {
+    const line = ['S  m | s : r / r : m | f : - / - : - |', 'A  m | r : t1 / t1 : d | r : - / - : - |', "T  : / : | : / d' : - |", 'B  : / : | : / m : - |'].join('\n');
+    expect(withRestingEdges(line)).toBe(['S  m | s : r / r : m | f : - / - : - |', 'A  m | r : t1 / t1 : d | r : - / - : - |', "T  x | : / : | : / d' : - |", 'B  x | : / : | : / m : - |'].join('\n'));
+    // Bars that only differ in the middle aren't moved.
+    expect(withRestingEdges(['S  d :r / m :f | s :- / - :- |', 'A  d :r / m :f |'].join('\n'))).toBeNull();
+  });
+
+  it('keeps a repair only when the line then passes', () => {
+    const fixable = ['S  m | d : m : r -.s1 | d : - : - : - |', 'A  s1 | s1 : s1 : s1 -.s1 | s1 : - : - : - |', 'T  d : d : t1 :-.t1 | d : - : - : - |'].join('\n');
+    expect(freeRepair(fixable, passes, 4)).toBe(['S  m | d : m : r :-.s1 | d : - : - : - |', 'A  s1 | s1 : s1 : s1 :-.s1 | s1 : - : - : - |', 'T  x | d : d : t1 :-.t1 | d : - : - : - |'].join('\n'));
+    expect(freeRepair('S  d r m f : s | m : r : d : - |', passes, 4)).toBeNull();
   });
 });
 

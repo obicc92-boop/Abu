@@ -125,6 +125,102 @@ export function withoutNameColumn(text: string): string | null {
   return joinLine(rows.map((r) => (r.part ? { part: r.part, text: r.text.slice(r.text.indexOf('|') + 1).trim() } : r)));
 }
 
+/** A row's bars (the text between bar lines), and whether it ends with a bar line. */
+function barsOfRow(text: string): { bars: string[]; closed: boolean } {
+  const pieces = text.split('|');
+  const closed = pieces.length > 1 && !pieces[pieces.length - 1].trim();
+  return { bars: closed ? pieces.slice(0, -1) : pieces, closed };
+}
+const beatCount = (bar: string) => bar.split(/[:/]/).length;
+/** A space between two notes or holds inside a beat (not one around "." or ","). */
+const GAP = /(?<=[^\s.,:/|])\s+(?=[^\s.,:/|])/g;
+
+/**
+ * The line with beat marks a typist left out: "d : m : r -.s1" for
+ * "d : m : r :-.s1". In a bar short of beats, the spaces between its notes
+ * become ":" when that gives the bar exactly the beats it needs (the time's,
+ * or for a line's first and last bar, as many as the other parts have there).
+ * Null if no bar changes. The caller keeps it only if the line then passes.
+ */
+export function withSpacedBeats(text: string, beatsPerBar: number): string | null {
+  const rows = splitLine(text);
+  const noteBars = rows.filter((r) => r.part).map((r) => barsOfRow(r.text).bars);
+  let changed = false;
+  const fixed = rows.map((r) => {
+    if (!r.part) return r;
+    const { bars, closed } = barsOfRow(r.text);
+    const out = bars.map((bar, j) => {
+      const gaps = bar.match(GAP)?.length ?? 0;
+      if (!gaps) return bar;
+      const have = beatCount(bar);
+      const edge = j === 0 || j === bars.length - 1;
+      const want = edge ? Math.max(...noteBars.map((b) => (b[j] === undefined ? 0 : beatCount(b[j])))) : beatsPerBar;
+      if (have >= want || have + gaps !== want) return bar;
+      changed = true;
+      return bar.replace(GAP, ' :');
+    });
+    return { part: r.part, text: `${out.join('|')}${closed ? '|' : ''}` };
+  });
+  return changed ? joinLine(fixed) : null;
+}
+
+/**
+ * The line with an empty bar for parts resting through its upbeat (or its
+ * short last bar): a sheet prints nothing there, so such a part reads one bar
+ * short. Only where that part's bars match the others' after the upbeat (or
+ * before the last bar), and that bar is shorter than the rest. Null if no
+ * part changes.
+ */
+export function withRestingEdges(text: string): string | null {
+  const rows = splitLine(text);
+  const notes = rows.filter((r) => r.part).map((r) => barsOfRow(r.text));
+  const most = Math.max(0, ...notes.map((n) => n.bars.length));
+  const full = notes.find((n) => n.bars.length === most);
+  if (!full || notes.every((n) => n.bars.length === most)) return null;
+  const ref = full.bars.map(beatCount);
+  const longest = Math.max(...ref);
+  const rest = (beats: number) => (beats <= 1 ? ' x ' : Array.from({ length: beats }, () => ' ').join(':'));
+  const same = (a: number[], b: number[]) => a.length === b.length && a.every((v, i) => v === b[i]);
+  let changed = false;
+  const fixed = rows.map((r) => {
+    if (!r.part) return r;
+    const { bars, closed } = barsOfRow(r.text);
+    if (bars.length !== most - 1) return r;
+    const counts = bars.map(beatCount);
+    if (ref[0] < longest && same(counts, ref.slice(1))) {
+      changed = true;
+      return { part: r.part, text: `${rest(ref[0]).trim()} | ${bars.join('|').trim()}${closed ? ' |' : ''}` };
+    }
+    if (ref[most - 1] < longest && same(counts, ref.slice(0, -1))) {
+      changed = true;
+      return { part: r.part, text: `${bars.join('|').trim()} | ${rest(ref[most - 1]).trim()} |` };
+    }
+    return r;
+  });
+  return changed ? joinLine(fixed) : null;
+}
+
+/**
+ * The free repairs for a line that fails the checker, tried in turn and
+ * together: a column of part names read as notes, missing beat marks, parts
+ * resting through an upbeat. The first that makes the line pass, or null.
+ */
+export function freeRepair(text: string, passes: (t: string) => boolean, beatsPerBar: number): string | null {
+  const steps: ((t: string) => string | null)[] = [withoutNameColumn, (t) => withSpacedBeats(t, beatsPerBar), withRestingEdges];
+  // Each repair alone, then each in turn on top of the ones before (in this order).
+  let layered = text;
+  for (const step of steps) {
+    const alone = step(text);
+    if (alone && passes(alone)) return alone;
+    const more = step(layered);
+    if (more) {
+      layered = more;
+      if (passes(layered)) return layered;
+    }
+  }
+  return null;
+}
+
 /** The checker's messages that are about one part ("Alto, bar 2 has 5 beats…"), and the rest. */
 export function problemsByPart(messages: string[], parts: string[]): { byPart: Record<string, string[]>; other: string[] } {
   const byPart: Record<string, string[]> = {};
