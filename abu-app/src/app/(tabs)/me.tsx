@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { api, type MyGroup } from '@/api/client';
 import { authClient } from '@/auth/client';
@@ -22,11 +22,13 @@ import { clearSheets, connectionKind } from '@/lib/sheets-cache';
 import { readSetting, writeSetting } from '@/lib/storage';
 import { partName } from '@/solfa';
 import { useSession } from '@/state/session';
-import { colors, fonts } from '@/theme/tokens';
+import { makeStyles, type ThemeChoice, useColors, useTheme } from '@/theme/theme';
+import { fonts, palettes } from '@/theme/tokens';
 
 const PERFORM_THEME = 'abu.performTheme';
 
 export default function Me() {
+  const styles = useStyles();
   const s = useSession();
   const [name, setName] = useState<string | null>(null);
   const save = useMutation({ mutationFn: (display_name: string) => api.updateMe({ display_name }), onSuccess: () => (setName(null), s.refresh()) });
@@ -47,6 +49,7 @@ export default function Me() {
           />
         </Card>
         <OnThisPhone />
+        <Appearance />
         <PerformLook />
         <About />
       </Page>
@@ -91,6 +94,7 @@ export default function Me() {
       </View>
 
       <OnThisPhone />
+      <Appearance />
       <Password />
       <PerformLook />
       <About />
@@ -109,6 +113,7 @@ export default function Me() {
 
 /** This week, a gentle streak, and the songs you know. Only you see it. */
 function YourPractice() {
+  const styles = useStyles();
   const summary = useQuery({ queryKey: ['myPractice', 'summary'], queryFn: api.practiceSummary });
   const songs = useQuery({ queryKey: ['myPractice'], queryFn: api.myPractice });
   const [all, setAll] = useState(false);
@@ -155,6 +160,8 @@ function YourPractice() {
 }
 
 function Stat({ value, label, gold }: { value: number; label: string; gold?: boolean }) {
+  const styles = useStyles();
+  const colors = useColors();
   return (
     <View style={styles.stat}>
       <Text style={[styles.statValue, gold && { color: colors.gold }]}>{value}</Text>
@@ -165,6 +172,7 @@ function Stat({ value, label, gold }: { value: number; label: string; gold?: boo
 
 /** One of your groups: tap to show it; change the part you sing there. */
 function GroupRow({ group: g, me, current }: { group: MyGroup; me: string; current: boolean }) {
+  const styles = useStyles();
   const s = useSession();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -226,6 +234,7 @@ function GroupRow({ group: g, me, current }: { group: MyGroup; me: string; curre
  * clearing it all.
  */
 function OnThisPhone() {
+  const styles = useStyles();
   const s = useSession();
   const queryClient = useQueryClient();
   const pwa = usePwa();
@@ -306,6 +315,8 @@ function OnThisPhone() {
 
 /** Change your password with the current one; other phones are signed out. */
 function Password() {
+  const styles = useStyles();
+  const colors = useColors();
   const [open, setOpen] = useState(false);
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
@@ -348,8 +359,65 @@ function Password() {
   );
 }
 
+const LOOK_CHOICES: { value: ThemeChoice; label: string }[] = [
+  { value: 'system', label: 'Match phone' },
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
+];
+
+/** Light or dark for the whole app on this phone: following the phone's own setting unless chosen. */
+function Appearance() {
+  const styles = useStyles();
+  const { choice, setChoice, scheme } = useTheme();
+  return (
+    <Card>
+      <Kicker>Appearance</Kicker>
+      <Text style={styles.small}>Dark is easier on the eyes at night and in a dim church. “Match phone” follows your phone’s own setting.</Text>
+      <View style={styles.looks} accessibilityRole="radiogroup">
+        {LOOK_CHOICES.map((c) => {
+          const on = choice === c.value;
+          return (
+            <Pressable
+              key={c.value}
+              onPress={() => setChoice(c.value)}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: on }}
+              accessibilityLabel={c.value === 'system' ? `Match phone, now ${scheme}` : c.label}
+              style={[styles.look, on && styles.lookOn]}
+            >
+              <LookPreview look={c.value} />
+              <Text style={[styles.lookLabel, on && styles.lookLabelOn]}>{c.label}</Text>
+              {c.value === 'system' ? <Text style={styles.lookNote}>Now {scheme}</Text> : null}
+            </Pressable>
+          );
+        })}
+      </View>
+    </Card>
+  );
+}
+
+/** A tiny page in each palette (both, side by side, for "Match phone"). */
+function LookPreview({ look }: { look: ThemeChoice }) {
+  const styles = useStyles();
+  const sides = look === 'system' ? [palettes.light, palettes.dark] : [palettes[look]];
+  return (
+    <View style={styles.preview}>
+      {sides.map((p, i) => (
+        <View key={i} style={[styles.previewSide, { backgroundColor: p.sand }]}>
+          <View style={[styles.previewCard, { backgroundColor: p.card, borderColor: p.line }]}>
+            <View style={[styles.previewLine, { backgroundColor: p.ink, width: '70%' }]} />
+            <View style={[styles.previewLine, { backgroundColor: p.muted, width: '45%' }]} />
+          </View>
+          <View style={[styles.previewButton, { backgroundColor: p.red }]} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
 /** Perform's background on this phone (Perform remembers changes too). */
 function PerformLook() {
+  const styles = useStyles();
   const [light, setLight] = useState(() => readSetting(PERFORM_THEME) === 'light');
   const choose = (on: boolean) => {
     setLight(on);
@@ -368,6 +436,7 @@ function PerformLook() {
 }
 
 function About() {
+  const styles = useStyles();
   const version = Constants.expoConfig?.version;
   return (
     <Card tone="sand">
@@ -380,21 +449,32 @@ function About() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   profile: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   name: { fontFamily: fonts.heavy, fontSize: 19, color: colors.ink },
   small: { fontFamily: fonts.body, fontSize: 13, lineHeight: 18, color: colors.muted },
-  link: { fontFamily: fonts.heavy, fontSize: 13.5, color: colors.red },
+  link: { fontFamily: fonts.heavy, fontSize: 13.5, color: colors.link },
   label: { fontFamily: fonts.heavy, fontSize: 13, color: colors.ink, marginTop: 4 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  looks: { flexDirection: 'row', gap: 8 },
+  look: { flex: 1, minWidth: 0, borderRadius: 12, borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.card, padding: 8, gap: 6, alignItems: 'center' },
+  lookOn: { borderColor: colors.ink, borderWidth: 2, padding: 7.5 },
+  lookLabel: { fontFamily: fonts.bold, fontSize: 13, color: colors.muted, textAlign: 'center' },
+  lookLabelOn: { fontFamily: fonts.heavy, color: colors.ink },
+  lookNote: { fontFamily: fonts.body, fontSize: 11.5, color: colors.muted, marginTop: -4 },
+  preview: { flexDirection: 'row', alignSelf: 'stretch', height: 58, borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: colors.line },
+  previewSide: { flex: 1, padding: 6, gap: 5 },
+  previewCard: { flex: 1, borderRadius: 5, borderWidth: 1, padding: 5, gap: 4 },
+  previewLine: { height: 4, borderRadius: 2 },
+  previewButton: { height: 8, borderRadius: 3, width: '60%' },
   stats: { flexDirection: 'row', gap: 8 },
   stat: { flex: 1, backgroundColor: colors.sand, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 8, alignItems: 'center' },
   statValue: { fontFamily: fonts.monoBold, fontSize: 26, color: colors.ink },
   statLabel: { fontFamily: fonts.bold, fontSize: 11.5, color: colors.muted, textAlign: 'center' },
-  groupRow: { backgroundColor: colors.white, borderRadius: 14, borderWidth: 1.5, borderColor: colors.line, padding: 14, gap: 8 },
+  groupRow: { backgroundColor: colors.card, borderRadius: 14, borderWidth: 1.5, borderColor: colors.line, padding: 14, gap: 8 },
   groupRowOn: { borderColor: colors.ink },
   groupTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   groupName: { fontFamily: fonts.bold, fontSize: 15, color: colors.ink },
   partLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   current: { fontFamily: fonts.bold, fontSize: 12, color: colors.ok },
-});
+}));
