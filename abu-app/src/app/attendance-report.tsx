@@ -15,7 +15,7 @@ import { rangeFrom, rateColor, REPORT_RANGES, type ReportRange } from '@/lib/att
 import { fmtDate, monthName } from '@/lib/dates';
 import { download } from '@/lib/download';
 import { kindLabel } from '@/lib/group-types';
-import { partPlural } from '@/solfa';
+import { partName, partPlural } from '@/solfa';
 import { useSession } from '@/state/session';
 import { colors, fonts, partColor } from '@/theme/tokens';
 
@@ -127,9 +127,7 @@ export default function AttendanceReportScreen() {
               <View style={styles.list}>
                 {r.members.map((m) => (
                   <View key={m.user_id} style={styles.member}>
-                    <View style={[styles.dot, { backgroundColor: m.part ? partColor(m.part) : colors.muted }]}>
-                      <Text style={styles.dotText}>{m.part ?? '–'}</Text>
-                    </View>
+                    <View style={[styles.dot, { backgroundColor: m.part ? partColor(m.part) : colors.barline }]} accessibilityLabel={m.part ? partName(m.part) : 'No part'} />
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <Text style={styles.name} numberOfLines={1}>
                         {m.display_name}
@@ -156,11 +154,7 @@ const order = (part: string) => (part ? (PART_ORDER.includes(part) ? PART_ORDER.
 function TallyRow({ label, tally, color, dot }: { label: string; tally: Tally; color?: string; dot?: string }) {
   return (
     <View style={styles.tally}>
-      {dot ? (
-        <View style={[styles.dot, { backgroundColor: color }]}>
-          <Text style={styles.dotText}>{dot}</Text>
-        </View>
-      ) : null}
+      {dot ? <View style={[styles.dot, { backgroundColor: color }]} /> : null}
       <View style={{ flex: 1 }}>
         <Text style={styles.name}>{label}</Text>
         <View style={styles.bar}>
@@ -180,8 +174,7 @@ const styles = StyleSheet.create({
   link: { fontFamily: fonts.heavy, fontSize: 14, color: colors.red },
   line: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderTopWidth: 1, borderTopColor: colors.line },
   tally: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 },
-  dot: { width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  dotText: { fontFamily: fonts.heavy, fontSize: 12, color: colors.white },
+  dot: { width: 14, height: 14, borderRadius: 7 },
   bar: { height: 6, borderRadius: 3, backgroundColor: colors.sand, marginTop: 4, overflow: 'hidden' },
   barFill: { height: 6, borderRadius: 3 },
   rate: { fontFamily: fonts.monoBold, fontSize: 15, minWidth: 48, textAlign: 'right' },

@@ -112,9 +112,7 @@ export default function AttendanceScreen() {
             const inPart = rows.filter((r) => r.part === p);
             return (
               <View key={p} style={styles.part} accessibilityLabel={`${partPlural(p)}: ${inPart.filter((r) => status(r) === 'present').length} of ${inPart.length} present`}>
-                <View style={[styles.dot, { backgroundColor: partColor(p) }]}>
-                  <Text style={styles.dotText}>{p}</Text>
-                </View>
+                <View style={[styles.dot, { backgroundColor: partColor(p) }]} />
                 <Text style={styles.partCount}>
                   {inPart.filter((r) => status(r) === 'present').length}/{inPart.length}
                 </Text>
@@ -223,8 +221,7 @@ const styles = StyleSheet.create({
   small: { fontFamily: fonts.body, fontSize: 12.5, color: colors.muted },
   parts: { flexDirection: 'row', gap: 14, flexWrap: 'wrap', marginTop: 4 },
   part: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  dot: { width: 24, height: 24, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
-  dotText: { fontFamily: fonts.heavy, fontSize: 11.5, color: colors.white },
+  dot: { width: 14, height: 14, borderRadius: 7 },
   partCount: { fontFamily: fonts.monoBold, fontSize: 14, color: colors.ink },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   list: { backgroundColor: colors.white, borderRadius: 14, borderWidth: 1, borderColor: colors.line, overflow: 'hidden' },

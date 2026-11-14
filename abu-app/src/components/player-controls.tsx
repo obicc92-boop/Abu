@@ -2,9 +2,9 @@ import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 
 import { partLevel, type MixSettings } from '@/audio/engine';
 import { partName } from '@/solfa';
-import { colors, fonts, partColor, partLetter } from '@/theme/tokens';
+import { colors, fonts, partColor, partInk } from '@/theme/tokens';
 
-/* ---------- Part mixer: tap a letter to mute; Solo; Mine ---------- */
+/* ---------- Part mixer: tap a part to mute it; Solo; Mine ---------- */
 
 interface MixerProps {
   parts: string[];
@@ -27,13 +27,15 @@ export function PartMixer({ parts, mix, onMute, onSolo, onMine }: MixerProps) {
               accessibilityRole="button"
               accessibilityLabel={`Mute or unmute ${partName(p)}`}
               accessibilityState={{ selected: !silent }}
-              style={[styles.letter, { backgroundColor: silent ? colors.barline : partColor(p) }]}
+              style={styles.partTap}
+              hitSlop={4}
             >
-              <Text style={styles.letterText}>{partLetter(p)}</Text>
+              {/* The part's colour, as in the score; hollow when muted. */}
+              <View style={[styles.swatch, silent ? { borderColor: colors.barline, backgroundColor: colors.white } : { borderColor: partColor(p), backgroundColor: partColor(p) }]} />
+              <Text style={[styles.partName, { color: silent ? colors.muted : partInk(p) }]} numberOfLines={1}>
+                {partName(p)}
+              </Text>
             </Pressable>
-            <Text style={[styles.partName, silent && { color: colors.muted }]} numberOfLines={1}>
-              {partName(p)}
-            </Text>
             <View style={styles.partButtons}>
               <SmallToggle label="Solo" on={mix.solo === p} onPress={() => onSolo(p)} a11y={`Solo ${partName(p)}`} />
               {parts.length > 1 ? (
@@ -139,9 +141,9 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   partMine: { borderColor: colors.ink },
-  letter: { width: 32, height: 32, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
-  letterText: { fontFamily: fonts.heavy, fontSize: 13, color: colors.white },
-  partName: { fontFamily: fonts.bold, fontSize: 11.5, color: colors.ink },
+  partTap: { alignItems: 'center', gap: 4, alignSelf: 'stretch' },
+  swatch: { width: 26, height: 26, borderRadius: 13, borderWidth: 2.5 },
+  partName: { fontFamily: fonts.heavy, fontSize: 11.5 },
   partButtons: { alignSelf: 'stretch', gap: 3, paddingHorizontal: 4 },
   small: { borderRadius: 6, paddingVertical: 3, backgroundColor: colors.sand, alignItems: 'center' },
   smallOn: { backgroundColor: colors.ink },

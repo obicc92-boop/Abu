@@ -9,7 +9,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useOnline } from '@/lib/online';
 import { partName } from '@/solfa';
-import { colors, fonts, partColor, partLetter } from '@/theme/tokens';
+import { colors, fonts, partColor } from '@/theme/tokens';
 
 import { BackIcon } from './icons';
 
@@ -177,11 +177,7 @@ export function PartPicker({ value, onChange, allowNone }: { value: string | nul
             accessibilityLabel={p ? partName(p) : 'I don’t sing'}
             style={[styles.partOption, on && styles.partOptionOn]}
           >
-            {p ? (
-              <View style={[styles.partDot, { backgroundColor: partColor(p) }]}>
-                <Text style={styles.partDotText}>{partLetter(p)}</Text>
-              </View>
-            ) : null}
+            {p ? <View style={[styles.partDot, { backgroundColor: partColor(p) }]} /> : null}
             <Text style={[styles.partLabel, on && { color: colors.ink }]}>{p ? partName(p) : 'I don’t sing'}</Text>
           </Pressable>
         );
@@ -256,8 +252,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
   },
   partOptionOn: { borderColor: colors.ink, borderWidth: 2 },
-  partDot: { width: 30, height: 30, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
-  partDotText: { fontFamily: fonts.heavy, fontSize: 13, color: colors.white },
+  partDot: { width: 22, height: 22, borderRadius: 11 },
   partLabel: { fontFamily: fonts.bold, fontSize: 15, color: colors.muted },
   partTag: { fontFamily: fonts.bold, fontSize: 13 },
   chip: { paddingHorizontal: 13, paddingVertical: 7, borderRadius: 999, borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.white },

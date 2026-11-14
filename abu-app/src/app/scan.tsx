@@ -40,7 +40,7 @@ import { readTypedSheet, type PageText } from '@/scan/pdf-text';
 import type { Box, FoundLine } from '@/scan/types';
 import { parseKey, parseSolfa, partName } from '@/solfa';
 import { useSession } from '@/state/session';
-import { colors, fonts, partColor, partLetter } from '@/theme/tokens';
+import { colors, fonts, partColor, partInk } from '@/theme/tokens';
 
 const TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic'];
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
@@ -737,9 +737,18 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
 
         <Card style={styles.flush}>
           <View style={[styles.rowBetween, styles.pad]}>
-            <View>
+            <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
               <Kicker>What Abụ read</Kicker>
               <Text style={styles.small}>Tap a row to fix it.</Text>
+              {/* Each part by its colour, as in the score. */}
+              <View style={styles.legend}>
+                {rows.flatMap((r) => (r.part ? [r.part] : [])).map((p) => (
+                  <View key={p} style={styles.legendItem}>
+                    <View style={[styles.legendDot, { backgroundColor: partColor(p) }]} />
+                    <Text style={[styles.legendText, { color: partInk(p) }]}>{partName(p)}</Text>
+                  </View>
+                ))}
+              </View>
             </View>
             {!empty && !parsed.errors.length ? <PlayButton playing={player.playing} onPress={player.togglePlay} size={42} /> : null}
           </View>
@@ -752,13 +761,7 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
             <View style={styles.tags}>
               {rows.map((r, i) => (
                 <View key={i} style={styles.tagCell}>
-                  {r.part ? (
-                    <View style={[styles.tag, { backgroundColor: partColor(r.part) }]}>
-                      <Text style={styles.tagText}>{partLetter(r.part)}</Text>
-                    </View>
-                  ) : (
-                    <Text style={styles.wordsTag}>W</Text>
-                  )}
+                  {r.part ? <View style={[styles.tag, { backgroundColor: partColor(r.part) }]} /> : null}
                 </View>
               ))}
             </View>
@@ -952,11 +955,13 @@ const styles = StyleSheet.create({
   pad: { paddingHorizontal: 14, paddingVertical: 10 },
   iconOnly: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.sand },
   rowsBox: { flexDirection: 'row', borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.line, backgroundColor: colors.sand },
-  tags: { width: 44, borderRightWidth: 1, borderColor: colors.line, backgroundColor: colors.white },
+  tags: { width: 18, borderRightWidth: 1, borderColor: colors.line, backgroundColor: colors.white },
   tagCell: { height: ROW_HEIGHT, alignItems: 'center', justifyContent: 'center' },
-  tag: { width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  tagText: { fontFamily: fonts.heavy, fontSize: 12.5, color: colors.white },
-  wordsTag: { fontFamily: fonts.heavy, fontSize: 12.5, color: colors.muted },
+  tag: { width: 6, height: ROW_HEIGHT - 12, borderRadius: 3 },
+  legend: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 12, rowGap: 2, marginTop: 4 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  legendDot: { width: 9, height: 9, borderRadius: 4.5 },
+  legendText: { fontFamily: fonts.bold, fontSize: 12 },
   rowInput: {
     height: ROW_HEIGHT,
     paddingHorizontal: 12,
