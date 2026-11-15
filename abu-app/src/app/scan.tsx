@@ -14,8 +14,9 @@
  *      has a key (Haiku checks, Opus reads from scratch), and an AI's answer
  *      is kept only if it passes. Otherwise the person fixes the line.
  * 3. Check: one line at a time, the picture above each part's row (they
- *    scroll sideways together), problems under the row they're in, play,
- *    read again, leave out, and "Looks right".
+ *    scroll sideways together), the parts' bars numbered and lined up, each
+ *    bar that doesn't add up marked with its beats, problems under the rows,
+ *    play, read again, leave out, and "Looks right".
  * 4. Finish: what's checked, then the song editor with the original sheet
  *    attached. Nothing is saved before Save.
  */
@@ -31,9 +32,10 @@ import { useSongPlayer } from '@/audio/use-song-player';
 import { AgainIcon, CameraIcon, CheckIcon, CloseIcon, FileIcon, PlusIcon, ScanIcon, ZoomIcon } from '@/components/icons';
 import { PlayButton } from '@/components/player-controls';
 import { Body, Button, Card, Chip, ErrorText, Kicker, MAX_WIDTH, Page, TopBar } from '@/components/ui';
+import { barNumbers, checkRows } from '@/scan/bar-check';
 import { setScanDraft } from '@/scan/draft';
 import { joinLines, timeFor } from '@/scan/join';
-import { alignedRows, barColumns, bestFree, joinLine, keepsParts, problemsByPart, splitLine, tidyNotes, tidyTitle, withWords, wordsOf, type LineRow, type LineWords } from '@/scan/line-text';
+import { alignedRows, barColumns, bestFree, joinLine, keepsParts, problemsByPart, splitLine, tidyNotes, tidyTitle, withBarsInStep, withWords, wordsOf, type LineRow, type LineWords } from '@/scan/line-text';
 import { findLinesOwn, readLineOwn } from '@/scan/own-reader';
 import { cutLine, loadPages, MAX_PAGES, pageForFinding, scanningHere, takePhoto } from '@/scan/pages';
 import { readTypedSheet, type PageText } from '@/scan/pdf-text';
@@ -73,6 +75,8 @@ const ROW_PAD = 12;
 const BAR_LINE = 2;
 /** What's measured for that width: long, so rounding hardly matters. */
 const MEASURED = '0'.repeat(100);
+/** The strip of bar numbers above the rows. */
+const NUMBERS_HEIGHT = 18;
 
 interface Line {
   id: string;
@@ -186,9 +190,13 @@ function Scanner() {
   const readOne = async (line: Line, head: Heading, songTime: string, ai: Readers, again = false): Promise<string> => {
     const passes = (t: string) => splitLine(t).some((r) => r.part && r.text.trim()) && !parseSolfa(t, { time: songTime }).errors.length;
     let own = withWords(line.draft, line.wordTexts);
-    // Free repairs first: the parts' bar lines lined up as printed; a column of part names read as notes,
-    // beat marks left out, parts resting through an upbeat.
-    if (!passes(own)) own = bestFree([own, ...(line.lined ? [withWords(line.lined, line.wordTexts)] : [])], passes, parseTime(songTime)?.pulses ?? 4);
+    // Free repairs first: bar lines every part lost put back in step; the parts' bar lines lined up as
+    // printed; a column of part names read as notes, beat marks left out, parts resting through an upbeat.
+    const beats = parseTime(songTime)?.pulses ?? 4;
+    if (!passes(own)) own = bestFree([own, ...(line.lined ? [withWords(line.lined, line.wordTexts)] : [])], passes, beats);
+    // Bar lines every part lost alike go back, at the same beats in every part, even when the line still
+    // fails for something else (only bar lines move): the person and the AIs then start from bars in step.
+    if (!passes(own)) own = withBarsInStep(own, beats) ?? own;
     if (!again && passes(own)) {
       update(line.id, { status: 'read', text: own, checked: false });
       return own;
@@ -652,6 +660,14 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
     parsed.errors.map((e) => e.message),
     rows.flatMap((r) => (r.part ? [r.part] : [])),
   );
+  // Each row's bars as shown (the row being typed in by what's typed), with the ones that don't add up.
+  const marks = checkRows(
+    rows.map((r, i) => ({ part: r.part, text: valueOf(i) })),
+    parsed.errors,
+    parsed.beatsPerBar,
+  );
+  // The bars' numbers, over where every part's bar starts.
+  const numbers = useMemo(() => barNumbers(rows.map((r, i) => ({ part: r.part, text: shown[i] }))), [rows, shown]);
   const checked = lines.filter((l) => l.checked || l.skipped).length;
 
   // The picture: tall enough to read (scroll sideways), or the whole line at once.
@@ -797,6 +813,7 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
               </View>
             </View>
             <View style={styles.tags}>
+              {numbers.length ? <View style={styles.numbersTop} /> : null}
               {rows.map((r, i) => (
                 <View key={i} style={styles.tagCell}>
                   {r.part ? <View style={[styles.tag, { backgroundColor: partColor(r.part) }]} /> : null}
@@ -805,34 +822,69 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
             </View>
             <ScrollView ref={reading} horizontal onScroll={(e) => follow('reading', e)} scrollEventThrottle={16} keyboardShouldPersistTaps="handled">
               <View style={{ width: textWidth }}>
-                {rows.map((r, i) => (
-                  <TextInput
-                    key={i}
-                    value={valueOf(i)}
-                    onFocus={() => setEditing({ id: line.id, row: i, value: shown[i] })}
-                    onChangeText={(t) => {
-                      setEditing({ id: line.id, row: i, value: t });
-                      setRow(i, t);
-                    }}
-                    onBlur={() => setEditing(null)}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    spellCheck={false}
-                    style={[styles.rowInput, !r.part && styles.wordsInput, r.part && byPart[r.part] && styles.rowInputBad]}
-                    accessibilityLabel={`${r.part ? partName(r.part) : 'Words'}, line ${current + 1}`}
-                  />
-                ))}
-                {/* Each bar line drawn through the parts' rows, as on the sheet, over the typed "|". It's left out
-                    where it crosses a row of words, and a row being typed in shows its own. Placed by a transform,
-                    which browsers don't round to whole pixels as they do a position: the line then covers the "|". */}
-                <View style={styles.barLines}>
-                  {rows.flatMap((r, i) =>
-                    r.part
-                      ? barColumns(valueOf(i)).map((c) => (
-                          <View key={`${i}-${c}`} style={[styles.barLine, { top: i * ROW_HEIGHT, transform: [{ translateX: ROW_PAD + (c + 0.5) * charWidth - BAR_LINE / 2 }] }]} />
-                        ))
-                      : [],
-                  )}
+                {numbers.length ? (
+                  <View style={styles.numbers} aria-hidden importantForAccessibility="no-hide-descendants">
+                    {numbers.map((n) => (
+                      <Text key={n.bar} style={[styles.number, { left: ROW_PAD + n.at * charWidth }]}>
+                        {n.bar}
+                      </Text>
+                    ))}
+                  </View>
+                ) : null}
+                <View>
+                  {/* Behind the rows' text: each bar that doesn't add up, from its bar line to the next and underlined,
+                      with its beats by its opening bar line (in sight as soon as the bar is) to count against the time;
+                      a part whose bars or beats don't match most parts', by a lighter line under its whole row. The
+                      rows' own background is clear, so the text stays on top. */}
+                  <View style={styles.overlay} aria-hidden importantForAccessibility="no-hide-descendants">
+                    {marks.flatMap((m, i) => [
+                      ...(m.whole ? [<View key={`row-${i}`} style={[styles.wholeMark, { top: i * ROW_HEIGHT }]} />] : []),
+                      ...m.bars
+                        .filter((b) => b.bad)
+                        .map((b) => {
+                          const left = b.from < 0 ? 0 : ROW_PAD + (b.from + 0.5) * charWidth;
+                          const right = b.closed ? ROW_PAD + (b.to + 0.5) * charWidth : ROW_PAD + b.to * charWidth + ROW_PAD / 2;
+                          return (
+                            <View key={`${i}-${b.bar}`} style={[styles.barTint, { top: i * ROW_HEIGHT, left, width: Math.max(0, right - left) }]}>
+                              {b.wrongBeats ? (
+                                <View style={styles.beats}>
+                                  <Text style={styles.beatsText}>{b.beats}</Text>
+                                </View>
+                              ) : null}
+                            </View>
+                          );
+                        }),
+                    ])}
+                  </View>
+                  {rows.map((r, i) => (
+                    <TextInput
+                      key={i}
+                      value={valueOf(i)}
+                      onFocus={() => setEditing({ id: line.id, row: i, value: shown[i] })}
+                      onChangeText={(t) => {
+                        setEditing({ id: line.id, row: i, value: t });
+                        setRow(i, t);
+                      }}
+                      onBlur={() => setEditing(null)}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      spellCheck={false}
+                      style={[styles.rowInput, !r.part && styles.wordsInput]}
+                      accessibilityLabel={`${r.part ? partName(r.part) : 'Words'}, line ${current + 1}`}
+                    />
+                  ))}
+                  {/* Each bar line drawn through the parts' rows, as on the sheet, over the typed "|". It's left out
+                      where it crosses a row of words, and a row being typed in shows its own. Placed by a transform,
+                      which browsers don't round to whole pixels as they do a position: the line then covers the "|". */}
+                  <View style={styles.overlay}>
+                    {rows.flatMap((r, i) =>
+                      r.part
+                        ? barColumns(valueOf(i)).map((c) => (
+                            <View key={`${i}-${c}`} style={[styles.barLine, { top: i * ROW_HEIGHT, transform: [{ translateX: ROW_PAD + (c + 0.5) * charWidth - BAR_LINE / 2 }] }]} />
+                          ))
+                        : [],
+                    )}
+                  </View>
                 </View>
               </View>
             </ScrollView>
@@ -1009,6 +1061,9 @@ const useStyles = makeStyles((colors) => ({
   iconOnly: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.sand },
   rowsBox: { flexDirection: 'row', borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.line, backgroundColor: colors.sand },
   tags: { width: 18, borderRightWidth: 1, borderColor: colors.line, backgroundColor: colors.card },
+  numbersTop: { height: NUMBERS_HEIGHT, borderBottomWidth: 1, borderColor: colors.line },
+  numbers: { height: NUMBERS_HEIGHT, borderBottomWidth: 1, borderColor: colors.line },
+  number: { position: 'absolute', top: 0, fontFamily: fonts.bold, fontSize: 10.5, lineHeight: NUMBERS_HEIGHT - 1, color: colors.muted },
   tagCell: { height: ROW_HEIGHT, alignItems: 'center', justifyContent: 'center' },
   tag: { width: 6, height: ROW_HEIGHT - 12, borderRadius: 3 },
   legend: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 12, rowGap: 2, marginTop: 4 },
@@ -1016,6 +1071,8 @@ const useStyles = makeStyles((colors) => ({
   legendDot: { width: 9, height: 9, borderRadius: 4.5 },
   legendText: { fontFamily: fonts.bold, fontSize: 12 },
   rowInput: {
+    // Placed, so it's drawn over the tints placed before it (a browser draws placed boxes last, in order).
+    position: 'relative',
     height: ROW_HEIGHT,
     paddingHorizontal: ROW_PAD,
     fontFamily: fonts.mono,
@@ -1025,8 +1082,12 @@ const useStyles = makeStyles((colors) => ({
     borderColor: colors.line,
     outlineColor: colors.red,
   },
-  rowInputBad: { backgroundColor: colors.redTint },
-  barLines: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, pointerEvents: 'none' },
+  overlay: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, pointerEvents: 'none' },
+  // Both marks stop above the row's own border, which is drawn over them; the bar's is the stronger.
+  barTint: { position: 'absolute', height: ROW_HEIGHT - 1, borderBottomWidth: 2, borderColor: colors.red, backgroundColor: colors.redTint },
+  wholeMark: { position: 'absolute', left: 0, right: 0, height: ROW_HEIGHT - 1, borderBottomWidth: 2, borderColor: colors.warnLine },
+  beats: { position: 'absolute', top: 2, left: 4, minWidth: 13, height: 12, borderRadius: 6, paddingHorizontal: 3, backgroundColor: colors.red, alignItems: 'center', justifyContent: 'center' },
+  beatsText: { fontFamily: fonts.heavy, fontSize: 10, lineHeight: 12, color: colors.onRed },
   barLine: { position: 'absolute', left: 0, width: BAR_LINE, height: ROW_HEIGHT, backgroundColor: colors.ink },
   measureBox: { position: 'absolute', width: 0, height: 0, overflow: 'hidden' },
   measureWide: { width: 4000, alignItems: 'flex-start' },

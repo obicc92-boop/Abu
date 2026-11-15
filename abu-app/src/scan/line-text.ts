@@ -299,19 +299,200 @@ export function withFullEmptyBars(text: string, beatsPerBar: number): string | n
 }
 
 /**
+ * A part's row as the checker counts its bars: the text between its bar
+ * lines, and which of those pieces are bars (an empty one, before an opening
+ * bar line or inside a doubled one, isn't).
+ */
+function checkedBars(text: string): { pieces: string[]; bars: number[] } {
+  const pieces = text.split('|');
+  return { pieces, bars: pieces.flatMap((p, k) => (p.trim() ? [k] : [])) };
+}
+
+/** Whether every mark in a piece of a row is a note, a hold or a rest (not a part's name read as notes). */
+const readsAsNotes = (piece: string) => piece.split(/[\s:|/.,=-]+/).every((t) => !t || t === 'x' || parseNote(t));
+
+/**
+ * Whether two marks this many beats apart are too close to be a bar line and
+ * a half-bar mark: one beat, or less than half a bar. A part's mark that far
+ * from where the others have theirs more likely means it lost a beat.
+ */
+const nearBeats = (apart: number, beatsPerBar: number) => apart === 1 || (apart > 0 && 2 * apart < beatsPerBar);
+
+/** A bar cut after each of these beats (counted from 1), at the beat marks there. */
+function cutAfter(bar: string, ends: number[]): string[] {
+  const out = [''];
+  bar.split(/([:/])/).forEach((bit, k) => {
+    if (k % 2 === 1 && ends.includes((k + 1) / 2)) out.push('');
+    else out[out.length - 1] += bit;
+  });
+  return out;
+}
+
+/**
+ * The line with the bar lines every part lost put back, for a sheet whose bar
+ * lines came out as half-bar marks (a table ruled by hand): where every
+ * part's bar has the same number of beats, more than the time's, it's cut
+ * every bar's worth of beats, at the same beats in every part. Only into
+ * whole bars, except that the line's first bar may start with an upbeat and
+ * its last may end short, and only where most parts have a half-bar mark at
+ * each cut: a song whose bars all run longer than its time says (6 beats
+ * given as 4/4) isn't cut up. A bar is left as it is where a part has no
+ * "/" at a cut but has one a beat or so from it (it more likely lost a beat
+ * and gained one, so its notes would land a beat off), and in a line of one
+ * bar that another upbeat fits as well (half a bar, in 4/4). Needs two parts
+ * or more (one has nothing to agree with), each with as many bars. Only bar
+ * lines move, to where every part's beats put them, so the app can keep it
+ * even if the line still fails. Null if no bar changes.
+ */
+export function withBarsInStep(text: string, beatsPerBar: number): string | null {
+  const rows = splitLine(text);
+  const parts = rows.flatMap((r) => (r.part ? [checkedBars(r.text)] : []));
+  if (parts.length < 2 || beatsPerBar < 1) return null;
+  const count = parts[0].bars.length;
+  if (parts.some((p) => p.bars.length !== count)) return null;
+  const barOf = (p: { pieces: string[]; bars: number[] }, j: number) => p.pieces[p.bars[j]];
+  let changed = false;
+  for (let j = 0; j < count; j++) {
+    const n = beatCount(barOf(parts[0], j));
+    if (n <= beatsPerBar || parts.some((p) => beatCount(barOf(p, j)) !== n)) continue;
+    const short = n % beatsPerBar;
+    const first = j === 0;
+    // A short piece only at the line's start (an upbeat) or its end; in a line of one bar it could be either.
+    if (short && first === (j === count - 1)) continue;
+    // The beats to cut after, a bar apart from this one.
+    const cutsFrom = (start: number) => Array.from({ length: Math.ceil((n - start) / beatsPerBar) }, (_, k) => start + k * beatsPerBar);
+    const ends = cutsFrom(short && first ? short : beatsPerBar);
+    // Each part's mark after each beat: most parts must have "/" at every cut.
+    const marks = parts.map((p) => barOf(p, j).match(/[:/]/g) ?? []);
+    const slashed = (b: number) => 2 * marks.filter((m) => m[b - 1] === '/').length > parts.length;
+    if (!ends.every(slashed)) continue;
+    // In a line of one bar, the "/" marks may fit another upbeat as well (half a bar, where half-bars are marked too): which is it?
+    if (count === 1 && Array.from({ length: beatsPerBar - 1 }, (_, u) => u + 1).some((u) => cutsFrom(u).every(slashed))) continue;
+    // A part with no "/" at a cut but one a beat or so from it is a beat off there.
+    if (ends.some((b) => marks.some((m) => m[b - 1] !== '/' && m.some((x, k) => x === '/' && nearBeats(Math.abs(k + 1 - b), beatsPerBar))))) continue;
+    const cuts = parts.map((p) => cutAfter(barOf(p, j), ends));
+    // A lone beat of rest would be an empty bar, which the checker drops: more likely an opening bar line read as a beat mark.
+    if (cuts.some((c) => c.some((piece) => !piece.trim()))) continue;
+    // A short piece must read as notes: a part's name read before the first bar ("S/A") is no upbeat.
+    if (short && cuts.some((c) => !readsAsNotes(first ? c[0] : c[c.length - 1]))) continue;
+    parts.forEach((p, i) => {
+      const bar = barOf(p, j);
+      p.pieces[p.bars[j]] = `${bar.match(/^\s*/)?.[0]}${cuts[i].map((c) => c.trim()).join(' | ')}${bar.match(/\s*$/)?.[0]}`;
+    });
+    changed = true;
+  }
+  if (!changed) return null;
+  let i = 0;
+  return joinLine(rows.map((r) => (r.part ? { part: r.part, text: parts[i++].pieces.join('|') } : r)));
+}
+
+/**
+ * A part's row as the checker counts its beats: how many, and the mark after
+ * each but the last (":", "/" or "|"), with where it is in the text (a
+ * doubled bar line is in more than one place).
+ */
+function beatMarks(text: string): { beats: number; marks: { mark: string; at: number[] }[] } {
+  const marks: { mark: string; at: number[] }[] = [];
+  let beats = 0;
+  let lines: number[] = [];
+  let at = 0;
+  for (const piece of text.split('|')) {
+    if (piece.trim()) {
+      if (beats) marks.push({ mark: '|', at: lines });
+      for (let k = 0; k < piece.length; k++) if (piece[k] === ':' || piece[k] === '/') marks.push({ mark: piece[k], at: [at + k] });
+      beats += beatCount(piece);
+      lines = [];
+    }
+    at += piece.length;
+    // The bar line after this piece (past the end after the last piece, where it's never used).
+    lines.push(at);
+    at += 1;
+  }
+  return { beats, marks };
+}
+
+/**
+ * The line with one part's bar lines moved to where the others have theirs:
+ * when every part has as many beats in all, a bar line that most parts have
+ * after a beat is given to the others there, in place of their ":" or "/",
+ * and a bar line that most parts don't have there becomes a beat mark ("/"
+ * in the middle of a bar of 4, 6 or 8 beats, ":" elsewhere). For a bar line
+ * read as a half-bar mark, or a half-bar mark read as a bar line. Needs three
+ * parts or more. A part whose bar line would only move a beat or so, or
+ * land a beat or so from a "/" it has where the others have ":", is left as
+ * it is (it more likely lost a beat and gained one), but a part could still
+ * be shifted this way, so the caller keeps it only if the line then passes.
+ * Null if no part changes, or if the parts' beats don't add up alike.
+ */
+export function withBarLinesInStep(text: string, beatsPerBar: number): string | null {
+  const rows = splitLine(text);
+  const parts = rows.flatMap((r, i) => (r.part ? [{ row: i, ...beatMarks(r.text) }] : []));
+  if (parts.length < 3 || parts.some((p) => p.beats !== parts[0].beats)) return null;
+  const most = (k: number, bar: boolean) => 2 * parts.filter((p) => (p.marks[k].mark === '|') === bar).length > parts.length;
+  const marks = parts[0].marks.map((_, k) => k);
+  // The beats (from 1) most parts end a bar after.
+  const lines = marks.filter((k) => most(k, true)).map((k) => k + 1);
+  const half = beatsPerBar >= 4 && beatsPerBar % 2 === 0 ? beatsPerBar / 2 : 0;
+  const midBar = (beat: number) => {
+    if (!half) return false;
+    const before = lines.filter((b) => b < beat).pop();
+    const after = lines.find((b) => b > beat);
+    if (before !== undefined) return beat - before === half;
+    return after !== undefined && after - beat === half;
+  };
+  const edits = parts.map(() => [] as { k: number; at: number; mark: string }[]);
+  for (const k of marks) {
+    const bar = most(k, true);
+    const beat = most(k, false);
+    parts.forEach((p, i) => {
+      const m = p.marks[k];
+      if (bar && m.mark !== '|') edits[i].push({ k, at: m.at[0], mark: '|' });
+      else if (beat && m.mark === '|' && m.at.length === 1) edits[i].push({ k, at: m.at[0], mark: midBar(k + 1) ? '/' : ':' });
+    });
+  }
+  // A part whose bar line would move a beat or so, or land a beat or so from a "/" it has where most parts have ":", more likely lost a beat before it and has one too many after: left as it is.
+  const mostColon = (k: number) => 2 * parts.filter((p) => p.marks[k].mark === ':').length > parts.length;
+  edits.forEach((e, i) => {
+    const near = (a: number, b: number) => nearBeats(Math.abs(a - b), beatsPerBar);
+    const astray = marks.filter((k) => parts[i].marks[k].mark === '/' && mostColon(k));
+    const moved = e.some((g) => g.mark === '|' && (e.some((l) => l.mark !== '|' && near(g.k, l.k)) || astray.some((k) => near(g.k, k))));
+    if (moved) edits[i] = [];
+  });
+  if (!edits.some((e) => e.length)) return null;
+  const fixed = rows.slice();
+  parts.forEach((p, i) => {
+    let t = rows[p.row].text;
+    // From the right, so each place is still where it was found.
+    for (const e of edits[i].sort((a, b) => b.at - a.at)) {
+      const mark = e.mark === '|' ? `${/\s/.test(t[e.at - 1] ?? ' ') ? '' : ' '}|${/\s/.test(t[e.at + 1] ?? ' ') ? '' : ' '}` : e.mark;
+      t = t.slice(0, e.at) + mark + t.slice(e.at + 1);
+    }
+    fixed[p.row] = { part: rows[p.row].part, text: t };
+  });
+  return joinLine(fixed);
+}
+
+/**
  * The free repairs for a line that fails the checker, tried in turn and
- * together: a column of part names read as notes, half-bar marks that are bar
- * lines, bar lines left out, missing beat marks, parts resting through an
- * upbeat, silent bars typed short. The first that makes the line pass, or null.
+ * together: a column of part names read as notes, bar lines every part lost
+ * alike, half-bar marks that are bar lines, bar lines left out, missing beat
+ * marks, parts resting through an upbeat, silent bars typed short, and one
+ * part's bar lines moved to where the others have theirs. The first that
+ * makes the line pass, or null. Bars every part agrees on are cut before any
+ * one part's are, so a part whose bar can't be cut on its own isn't left out
+ * of step with the others; moving one part's bar lines comes last, as it
+ * could hide a beat that part lost.
  */
 export function freeRepair(text: string, passes: (t: string) => boolean, beatsPerBar: number): string | null {
   const steps: ((t: string) => string | null)[] = [
     withoutNameColumn,
+    (t) => withBarsInStep(t, beatsPerBar),
     (t) => withHalfBarsAsBars(t, beatsPerBar),
     (t) => withGapsAsBars(t, beatsPerBar),
     (t) => withSpacedBeats(t, beatsPerBar),
     withRestingEdges,
     (t) => withFullEmptyBars(t, beatsPerBar),
+    (t) => withBarLinesInStep(t, beatsPerBar),
   ];
   // Each repair alone, then each in turn on top of the ones before (in this order).
   let layered = text;

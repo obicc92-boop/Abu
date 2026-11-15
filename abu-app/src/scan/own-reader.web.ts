@@ -5,7 +5,7 @@
  * line's rows of notes; Haiku then checks the reading against the picture.
  */
 import { groupRows, notesRows, pageRows, partsFor, skewOf } from './page-lines';
-import { barsFromBorders, findRows, greedy, notesLikeness, tableBorders, toText, type Gray, type RowBox } from './rows';
+import { barsFromTable, findRows, greedy, notesLikeness, ruledBorders, tableBorders, toText, type Gray, type RowBox } from './rows';
 import type { Box, FoundLine } from './types';
 
 interface Meta {
@@ -103,8 +103,9 @@ export async function readLineOwn(canvas: HTMLCanvasElement, parts: string[], wo
   const { ort, session, meta } = await reader();
   const gray = grayOf(canvas);
   const rows = findRows(gray, parts.length + wordsRows, parts.length);
-  const borders = rows.length >= 2 ? tableBorders(gray) : [];
-  const read: { top: number; tokens: string[]; sure: number; score: number }[] = [];
+  const borders = rows.length >= 2 ? tableBorders(gray, rows) : [];
+  const ruled = rows.length >= 2 ? ruledBorders(gray) : [];
+  const read: { top: number; bottom: number; y: number; tokens: string[]; xs: number[]; sure: number; score: number }[] = [];
   for (const row of rows) {
     const b = band(canvas, row, meta);
     const out = await session.run({ image: new ort.Tensor('float32', b.data, [1, 1, meta.height, b.width]) });
@@ -112,15 +113,18 @@ export async function readLineOwn(canvas: HTMLCanvasElement, parts: string[], wo
     const r = greedy(scores.data, Math.min(b.steps, scores.dims[1]), scores.dims[2], meta.tokens);
     // Each token's place in the line: its step in the band, back in the line's pixels.
     const xs = r.at.map((t) => b.left + (t + 0.5) * meta.stride * b.scale);
-    const tokens = barsFromBorders(r.tokens, xs, borders, 0.8 * row.size);
-    read.push({ top: row.top, ...r, tokens, score: notesLikeness(r) });
+    read.push({ top: row.top, bottom: row.bottom, y: (row.top + row.bottom) / 2, tokens: r.tokens, xs, sure: r.sure, score: notesLikeness(r) });
   }
   const chosen = [...read]
     .sort((a, b) => b.score - a.score)
     .slice(0, parts.length)
     .sort((a, b) => a.top - b.top);
+  // A table's borders are the bar lines in every part they run through, each row meeting a leaning
+  // border at its own height. The rows share a type size, so one `near` does for all.
+  const near = rows.length ? 0.8 * rows[0].size : 0;
+  const barred = barsFromTable(chosen, borders, near, ruled, gray);
   return {
-    text: chosen.map((r, i) => `${parts[i].padEnd(2)} ${toText(r.tokens)}`).join('\n'),
+    text: chosen.map((r, i) => `${parts[i].padEnd(2)} ${toText(barred[i].tokens)}`).join('\n'),
     sure: chosen.length ? Math.min(...chosen.map((r) => r.sure)) : 0,
   };
 }
