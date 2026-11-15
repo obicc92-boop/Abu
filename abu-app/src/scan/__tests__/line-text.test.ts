@@ -2,6 +2,7 @@ import { describe, expect, it } from '@jest/globals';
 
 import {
   alignedRows,
+  barColumns,
   freeRepair,
   joinLine,
   keepsParts,
@@ -158,11 +159,12 @@ describe('rows lined up for checking', () => {
       '     :      /       :      |       :      /       :s.l,t |',
       "d'.d :d'.d' /d'.t,l :s.f   | m     :.l    /s.s    :      |",
     ]);
-    // Every part's bar lines fall in the same columns.
-    const bars = (s: string) => [...s].flatMap((c, i) => (c === '|' ? [i] : []));
-    expect(bars(shown[2])).toEqual(bars(shown[0]));
-    expect(bars(shown[4])).toEqual(bars(shown[0]));
-    expect(bars(shown[3])).toEqual(bars(shown[0]));
+    // Every part's bar lines fall in the same columns, so they're drawn as one line through the parts.
+    expect(barColumns(shown[0])).toEqual([27, 57]);
+    expect(barColumns(shown[2])).toEqual(barColumns(shown[0]));
+    expect(barColumns(shown[4])).toEqual(barColumns(shown[0]));
+    expect(barColumns(shown[3])).toEqual(barColumns(shown[0]));
+    expect(barColumns(shown[1])).toEqual([]);
   });
 
   it('only adds spaces: each row reads the same', () => {

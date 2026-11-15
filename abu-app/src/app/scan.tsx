@@ -33,7 +33,7 @@ import { PlayButton } from '@/components/player-controls';
 import { Body, Button, Card, Chip, ErrorText, Kicker, MAX_WIDTH, Page, TopBar } from '@/components/ui';
 import { setScanDraft } from '@/scan/draft';
 import { joinLines, timeFor } from '@/scan/join';
-import { alignedRows, bestFree, joinLine, keepsParts, problemsByPart, splitLine, tidyNotes, tidyTitle, withWords, wordsOf, type LineRow, type LineWords } from '@/scan/line-text';
+import { alignedRows, barColumns, bestFree, joinLine, keepsParts, problemsByPart, splitLine, tidyNotes, tidyTitle, withWords, wordsOf, type LineRow, type LineWords } from '@/scan/line-text';
 import { findLinesOwn, readLineOwn } from '@/scan/own-reader';
 import { cutLine, loadPages, MAX_PAGES, pageForFinding, scanningHere, takePhoto } from '@/scan/pages';
 import { readTypedSheet, type PageText } from '@/scan/pdf-text';
@@ -64,9 +64,15 @@ interface Readers {
   cloudflare: boolean;
   anthropic: boolean;
 }
-/** Width of a character in the rows' monospace type, for sizing them so they never wrap. */
-const CHAR = 8.6;
+/** Width of a character in the rows' monospace type (0.6 of its size), until it's measured on the screen. */
+const CHAR = 8.7;
 const ROW_HEIGHT = 42;
+/** Space before a row's first character. */
+const ROW_PAD = 12;
+/** How thick the bar lines drawn through the rows are: enough to cover the typed "|" beneath. */
+const BAR_LINE = 2;
+/** What's measured for that width: long, so rounding hardly matters. */
+const MEASURED = '0'.repeat(100);
 
 interface Line {
   id: string;
@@ -616,6 +622,8 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
   const [zoom, setZoom] = useState(true);
   const [width, setWidth] = useState(0);
   const [showTimes, setShowTimes] = useState(false);
+  // A character's width in the rows' type, as drawn on this screen, so the bar lines land on the typed "|".
+  const [charWidth, setCharWidth] = useState(CHAR);
   const rows = useMemo(() => splitLine(line.text), [line.text]);
   // The parts' bars lined up in columns, as on the sheet; the row being typed in shows just what's typed.
   const shown = useMemo(() => alignedRows(rows), [rows]);
@@ -649,7 +657,7 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
   // The picture: tall enough to read (scroll sideways), or the whole line at once.
   const imgHeight = zoom ? 170 : Math.max(48, ((width || 1) * line.height) / line.width);
   const imgWidth = zoom ? (imgHeight * line.width) / line.height : width;
-  const textWidth = Math.max(width - 44, ...rows.map((_, i) => valueOf(i).length * CHAR + 28));
+  const textWidth = Math.max(width - 44, ...rows.map((_, i) => valueOf(i).length * charWidth + 2 * ROW_PAD + 4));
 
   // The picture and the rows scroll sideways together, so bars stay roughly lined up.
   const picture = useRef<ScrollViewInstance>(null);
@@ -773,6 +781,21 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
             </View>
           ) : null}
           <View style={styles.rowsBox}>
+            {/* Out of sight: a run of characters in the rows' type, measured once it's drawn (and again if the font arrives late). */}
+            <View style={styles.measureBox} aria-hidden importantForAccessibility="no-hide-descendants">
+              <View style={styles.measureWide}>
+                <Text
+                  numberOfLines={1}
+                  style={styles.measureText}
+                  onLayout={(e) => {
+                    const w = e.nativeEvent.layout.width / MEASURED.length;
+                    if (w > 0 && Math.abs(w - charWidth) > 0.001) setCharWidth(w);
+                  }}
+                >
+                  {MEASURED}
+                </Text>
+              </View>
+            </View>
             <View style={styles.tags}>
               {rows.map((r, i) => (
                 <View key={i} style={styles.tagCell}>
@@ -799,6 +822,18 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
                     accessibilityLabel={`${r.part ? partName(r.part) : 'Words'}, line ${current + 1}`}
                   />
                 ))}
+                {/* Each bar line drawn through the parts' rows, as on the sheet, over the typed "|". It's left out
+                    where it crosses a row of words, and a row being typed in shows its own. Placed by a transform,
+                    which browsers don't round to whole pixels as they do a position: the line then covers the "|". */}
+                <View style={styles.barLines}>
+                  {rows.flatMap((r, i) =>
+                    r.part
+                      ? barColumns(valueOf(i)).map((c) => (
+                          <View key={`${i}-${c}`} style={[styles.barLine, { top: i * ROW_HEIGHT, transform: [{ translateX: ROW_PAD + (c + 0.5) * charWidth - BAR_LINE / 2 }] }]} />
+                        ))
+                      : [],
+                  )}
+                </View>
               </View>
             </ScrollView>
           </View>
@@ -982,7 +1017,7 @@ const useStyles = makeStyles((colors) => ({
   legendText: { fontFamily: fonts.bold, fontSize: 12 },
   rowInput: {
     height: ROW_HEIGHT,
-    paddingHorizontal: 12,
+    paddingHorizontal: ROW_PAD,
     fontFamily: fonts.mono,
     fontSize: 14.5,
     color: colors.ink,
@@ -991,6 +1026,11 @@ const useStyles = makeStyles((colors) => ({
     outlineColor: colors.red,
   },
   rowInputBad: { backgroundColor: colors.redTint },
+  barLines: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, pointerEvents: 'none' },
+  barLine: { position: 'absolute', left: 0, width: BAR_LINE, height: ROW_HEIGHT, backgroundColor: colors.ink },
+  measureBox: { position: 'absolute', width: 0, height: 0, overflow: 'hidden' },
+  measureWide: { width: 4000, alignItems: 'flex-start' },
+  measureText: { fontFamily: fonts.mono, fontSize: 14.5 },
   wordsInput: { fontFamily: fonts.body, fontStyle: 'italic', fontSize: 14, color: colors.muted },
   problem: { fontFamily: fonts.body, fontSize: 13.5, lineHeight: 19, color: colors.redDeep },
   doubt: { borderRadius: 999, backgroundColor: colors.warnTint, paddingHorizontal: 10, paddingVertical: 4 },

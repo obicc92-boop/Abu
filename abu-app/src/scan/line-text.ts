@@ -75,6 +75,16 @@ export function alignedRows(rows: LineRow[]): string[] {
   });
 }
 
+/**
+ * Where a row's bar lines ("|") are, in characters from its start. Check the
+ * reading draws each one as a line through the parts' rows, as on the sheet.
+ */
+export function barColumns(text: string): number[] {
+  const out: number[] = [];
+  for (let k = 0; k < text.length; k++) if (text[k] === '|') out.push(k);
+  return out;
+}
+
 /** A line's rows of words, each with the part's row it comes after (0 for the first part). */
 export interface LineWords {
   after: number;
