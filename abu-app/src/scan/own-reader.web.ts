@@ -4,7 +4,7 @@
  * build (public/ort, copied at build time), free and on the phone. It reads a
  * line's rows of notes; Haiku then checks the reading against the picture.
  */
-import { groupRows, notesRows, pageRows, partsFor, skewOf } from './page-lines';
+import { groupLines, notesRows, pageRows, partsFor, skewOf } from './page-lines';
 import { barsFromTable, findRows, greedy, notesLikeness, ruledBorders, tableBorders, toText, type Gray, type RowBox } from './rows';
 import type { Box, FoundLine } from './types';
 
@@ -169,7 +169,7 @@ export async function findLinesOwn(original: HTMLCanvasElement, parts = 0): Prom
     ctx.drawImage(original, -page.width / 2, -page.height / 2);
     small = shrink(page);
   }
-  const { rows, rules } = pageRows(grayOf(small));
+  const { rows, rules, long } = pageRows(grayOf(small));
   const big = (r: RowBox): RowBox => ({ top: r.top * k, bottom: r.bottom * k, baseline: r.baseline * k, size: r.size * k, left: r.left * k, right: r.right * k });
   const reads = [];
   for (const row of rows) {
@@ -185,14 +185,18 @@ export async function findLinesOwn(original: HTMLCanvasElement, parts = 0): Prom
     left: Math.min(...g.map((i) => rows[i].left)) * k,
     right: Math.max(...g.map((i) => rows[i].right)) * k,
   });
-  const lines = groupRows(rows, isNotes, rules, parts).map((g) => {
+  const grouped = groupLines(rows, isNotes, rules, long, parts);
+  const lines = grouped.lines.map((g) => {
     let seen = 0;
     const wordRows: FoundLine['wordRows'] = [];
     for (const i of g) {
       if (isNotes[i]) seen++;
       else wordRows.push({ box: boxOf([i]), after: Math.max(0, seen - 1) });
     }
-    return { box: boxOf(g), parts: partsFor(seen), words: wordRows.length, wordRows };
+    // No more parts than the person said each line has: a row of words read like notes is left to the line's
+    // reader, which takes the rows that read most like notes.
+    const n = grouped.parts ? Math.min(seen, grouped.parts) : seen;
+    return { box: boxOf(g), parts: partsFor(n), words: g.length - n, wordRows: wordRows.map((w) => ({ ...w, after: Math.min(w.after, n - 1) })) };
   });
   return { page, lines };
 }

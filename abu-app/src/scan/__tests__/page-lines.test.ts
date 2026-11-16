@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 
-import { groupRows, notesRows, pageRows, partsFor, skewOf } from '../page-lines';
+import { groupLines, groupRows, notesRows, pageRows, partsFor, skewOf } from '../page-lines';
 import type { Gray, RowBox } from '../rows';
 
 /** A white page with rows of "writing" (short strokes, every third column) and ruled lines across it. */
@@ -40,6 +40,15 @@ describe('rows on a page', () => {
       expect(Math.abs(r.top - want[i][0])).toBeLessThanOrEqual(2);
       expect(Math.abs(r.bottom - want[i][1])).toBeLessThanOrEqual(2);
     });
+  });
+
+  it('tells a ruled line that can box a system from a slur', () => {
+    // A line across the page at 120; a slur across a fifth of it under a row, at 92.
+    const img = page(600, 300, layout(2, 4, 14, 6, 30, 40), [120]);
+    for (let x = 200; x < 320; x++) img.data[92 * 600 + x] = 20;
+    const { long } = pageRows(img);
+    expect(long).toContain(120);
+    expect(long).not.toContain(92);
   });
 
   it('sets ruled lines aside as places to split', () => {
@@ -158,6 +167,129 @@ describe('grouping rows into lines of music', () => {
     const rows = [box(10, 30), ...layout(1, 5, 14, 6, 0, 60).map(([t, b]) => box(t, b)), box(300, 314)];
     const isNotes = [false, true, true, true, true, false, false];
     expect(groupRows(rows, isNotes, [])).toEqual([[1, 2, 3, 4, 5]]);
+  });
+
+  describe('on a page whose systems are boxed by ruled lines', () => {
+    /** Rows top to bottom from [top, bottom] pairs, and the ruled lines between the boxes. */
+    const boxed = (systems: number[]) => {
+      const rows: RowBox[] = [];
+      const long: number[] = [];
+      let y = 20;
+      systems.forEach((n, k) => {
+        if (k) {
+          long.push(y + 3);
+          y += 8;
+        }
+        for (let r = 0; r < n; r++) {
+          rows.push(box(y, y + 14));
+          y += 20;
+        }
+      });
+      return { rows, long };
+    };
+
+    it('cuts each box as a line, with its own number of parts', () => {
+      // S A W T B; then a semi-chorus S A W T W; then S A W T B. Four parts at a time would put the
+      // second box's last words row and the third box's soprano in one line.
+      const { rows, long } = boxed([5, 5, 5]);
+      const isNotes = [true, true, false, true, true, true, true, false, true, false, true, true, false, true, true];
+      const { lines, parts } = groupLines(rows, isNotes, long, long, 4);
+      expect(lines).toEqual([
+        [0, 1, 2, 3, 4],
+        [5, 6, 7, 8, 9],
+        [10, 11, 12, 13, 14],
+      ]);
+      expect(parts).toBe(4);
+      expect(lines.map((l) => l.filter((i) => isNotes[i]).length)).toEqual([4, 3, 4]);
+      expect(groupRows(rows, isNotes, long, 4)[1]).not.toEqual([5, 6, 7, 8, 9]);
+    });
+
+    it('keeps a box as one line when a row of words in it reads like notes', () => {
+      const { rows, long } = boxed([5, 5, 5]);
+      const isNotes = rows.map(() => true);
+      expect(groupLines(rows, isNotes, long, long, 4).lines).toEqual([
+        [0, 1, 2, 3, 4],
+        [5, 6, 7, 8, 9],
+        [10, 11, 12, 13, 14],
+      ]);
+    });
+
+    it('splits a box holding two systems (no ruled line between them) at its widest gap', () => {
+      const { rows, long } = boxed([5, 10, 5]);
+      // A wider gap between the two systems in the middle box.
+      for (let i = 10; i < rows.length; i++) rows[i] = { ...rows[i], top: rows[i].top + 10, bottom: rows[i].bottom + 10 };
+      const isNotes = rows.map((_, i) => [0, 1, 3, 4].includes(i % 5));
+      expect(groupLines(rows, isNotes, long, long.map((y, k) => (k ? y + 10 : y)), 4).lines).toEqual([
+        [0, 1, 2, 3, 4],
+        [5, 6, 7, 8, 9],
+        [10, 11, 12, 13, 14],
+        [15, 16, 17, 18, 19],
+      ]);
+    });
+
+    it('splits boxes holding two systems at a time, judged by a box holding one', () => {
+      // Systems of S A W T B, wider gaps between them; ruled lines only after the first and third.
+      const rows = layout(5, 5).map(([t, b]) => box(t, b));
+      const isNotes = rows.map((_, i) => i % 5 !== 2);
+      const after = (k: number) => rows[5 * k + 4].bottom + 4;
+      const long = [after(0), after(2)];
+      expect(groupLines(rows, isNotes, long, long, 4).lines).toEqual(groupRows(rows, isNotes, long, 4));
+    });
+
+    it('joins a system cut in two by a ruled line under one part’s row', () => {
+      // The first system has a ruled line under its soprano as well as round it.
+      const { rows, long } = boxed([1, 4, 5, 5]);
+      for (let i = 1; i < rows.length; i++) rows[i] = { ...rows[i], top: rows[i].top - 4, bottom: rows[i].bottom - 4 };
+      const lines = [long[0] - 4, ...long.slice(1).map((y) => y - 4)];
+      const isNotes = [true, true, false, true, true, true, true, false, true, true, true, true, false, true, true];
+      expect(groupLines(rows, isNotes, lines, lines, 4).lines).toEqual([
+        [0, 1, 2, 3, 4],
+        [5, 6, 7, 8, 9],
+        [10, 11, 12, 13, 14],
+      ]);
+    });
+
+    it('takes boxes of two rows of notes for two-part lines, even with four parts asked for', () => {
+      const { rows, long } = boxed([3, 3, 3]);
+      const isNotes = rows.map((_, i) => i % 3 !== 2);
+      expect(groupLines(rows, isNotes, long, long, 4).lines).toEqual([
+        [0, 1, 2],
+        [3, 4, 5],
+        [6, 7, 8],
+      ]);
+    });
+
+    it('leaves a footer far under the last box out, without splitting its system', () => {
+      const { rows, long } = boxed([5, 5, 5]);
+      rows.push(box(rows[rows.length - 1].bottom + 60, rows[rows.length - 1].bottom + 74));
+      const isNotes = rows.map((_, i) => i < 15 && i % 5 !== 2);
+      expect(groupLines(rows, isNotes, long, long, 4).lines).toEqual([
+        [0, 1, 2, 3, 4],
+        [5, 6, 7, 8, 9],
+        [10, 11, 12, 13, 14],
+      ]);
+    });
+
+    it('says how many parts a line has at most only when the person said', () => {
+      const { rows, long } = boxed([5, 5, 5]);
+      const isNotes = rows.map((_, i) => i % 5 !== 2);
+      expect(groupLines(rows, isNotes, long, long, 4).parts).toBe(4);
+      expect(groupLines(rows, isNotes, long, long, 0).parts).toBe(0);
+    });
+
+    it('keeps a box’s rows from its ruled line, even one not read as notes', () => {
+      // The second box's soprano read as words: it stays in its line, for the line's reader to read again.
+      const { rows, long } = boxed([5, 5, 5]);
+      const isNotes = rows.map((_, i) => i !== 5 && i % 5 !== 2);
+      expect(groupLines(rows, isNotes, long, long, 4).lines[1]).toEqual([5, 6, 7, 8, 9]);
+    });
+
+    it('groups as before when a ruled line runs under every row', () => {
+      const rows = layout(2, 4).map(([t, b]) => box(t, b));
+      const isNotes = rows.map(() => true);
+      const under = rows.slice(0, -1).map((r) => r.bottom + 3);
+      expect(groupLines(rows, isNotes, under, under, 4)).toEqual({ lines: groupRows(rows, isNotes, under, 4), parts: 4 });
+    });
   });
 
   it('names the parts', () => {
