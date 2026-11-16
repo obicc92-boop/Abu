@@ -272,6 +272,54 @@ export async function readWords(env: Env, image: ArrayBuffer, type: ImageType): 
     .slice(0, 400);
 }
 
+const HEADING_PROMPT = `This picture is the top of a tonic sol-fa choir sheet, above the music (the first row of the music may show at the bottom). Copy what is written there, in exactly these four lines:
+Title: the song's title
+Composer: who wrote or arranged it
+Key: the key, as written (for example "Doh is G" or "Key F")
+Time: the time signature, as written (for example 3/4, 4/4, 6/8, 2/4 or C)
+Leave the rest of a line empty if that isn't written on the sheet. No other text.`;
+
+/** A sheet's heading as read: what's missing is "". */
+export interface Heading {
+  title: string;
+  composer: string;
+  /** The key's note, as "G", "B♭" or "F♯". */
+  key: string;
+  /** As "3/4". */
+  time: string;
+}
+
+/** "Key", "Doh is" and the like, then the key's note standing alone ("Key: by Jude" has none). */
+const KEY_NOTE = /(?:\b[Kk][Ee][Yy]\b|\b[Dd][Oo][Hh]?\b)\s*(?:of|is|=|:)?\s*(?:[Dd][Oo][Hh]?\s*(?:is|=)\s*)?([A-Ga-g])\s*(#|♯|b|♭|-?\s*sharp|-?\s*flat)?(?![A-Za-z])/;
+
+/** The key's note from what was read: "Key Ab", "Doh is B♭", "Key: Doh is F", or a bare "E flat" on the key's own line. */
+export function keyOf(answer: string, keyLine: string): string {
+  const m = answer.match(KEY_NOTE) ?? keyLine.match(/^\s*([A-G])\s*(#|♯|b|♭|-?\s*sharp|-?\s*flat)?(?![A-Za-z])/);
+  if (!m) return '';
+  const acc = (m[2] ?? '').replace(/[\s-]/g, '').toLowerCase();
+  return m[1].toUpperCase() + (acc === '#' || acc === '♯' || acc === 'sharp' ? '♯' : acc === 'b' || acc === '♭' || acc === 'flat' ? '♭' : '');
+}
+
+/** The time signature from what was read, wherever it is ("Key Eb 4/4", "Time: 3/4", "common time"). */
+export function timeOf(answer: string): string {
+  const m = answer.replace(/\u2044/g, '/').match(/(?<![\d/])(2|3|4|6|9|12)\s*\/\s*(2|4|8)(?![\d/])/);
+  if (m) return `${m[1]}/${m[2]}`;
+  return /common time|\btime:\s*c\b/i.test(answer) ? '4/4' : '';
+}
+
+/**
+ * A sheet's heading (title, composer, key, time) from a picture of the top
+ * of its first page, with Cloudflare's reader. On 51 handwritten pages it
+ * found the time on 28 (all right; the rest are written stacked or faint)
+ * and the key on 37 of 50 (one wrong).
+ */
+export async function readHeading(env: Env, image: ArrayBuffer, type: ImageType): Promise<Heading> {
+  const answer = await askCloudflare(env, image, type, HEADING_PROMPT, null, 200);
+  const line = (name: string) => (answer.match(new RegExp(`^\\s*\\**${name}\\**\\s*:\\s*(.*)$`, 'im'))?.[1] ?? '').replace(/^["“'`*]+|["”'`*]+$/g, '').trim();
+  const clean = (t: string) => (/^(?:none|n\/a|-|unknown|not (?:written|shown|given))\.?$/i.test(t) ? '' : t.slice(0, 120));
+  return { title: clean(line('Title')), composer: clean(line('Composer')), key: keyOf(answer, line('Key')), time: timeOf(answer) };
+}
+
 /* ---------- Asking Claude ---------- */
 
 function base64(buf: ArrayBuffer): string {

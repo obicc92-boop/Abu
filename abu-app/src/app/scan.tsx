@@ -306,6 +306,21 @@ function Scanner() {
             onPicture = page.lines.map((l) => ({ box: { top: l.top * small.scale, bottom: l.bottom * small.scale, left: l.left * small.scale, right: l.right * small.scale }, parts: l.parts, words: l.words, wordRows: [] }));
           }
           for (const l of onPicture) await add(p, l.box, l);
+          // The heading above the first page's music (title, composer, key, time), read by Cloudflare's reader:
+          // Abụ's model reads only notes. On 51 handwritten pages it found the time on 28, all right, and the key
+          // on 36 of 50, one wrong.
+          if (p === 0 && ai.cloudflare && onPicture.length && (!head.title || !head.key || !head.time)) {
+            const h = pages[p].height;
+            const top = Math.min(...onPicture.map((l) => l.box.top));
+            try {
+              const cut = await cutLine(pages[p], { left: 0, top: 0, right: pages[p].width, bottom: Math.min(h, Math.max(top + 0.01 * h, 0.12 * h)) });
+              URL.revokeObjectURL(cut.url);
+              const read = await api.scanHeading(cut.blob);
+              head = { title: head.title || read.title, composer: head.composer || read.composer, key: head.key || read.key, time: head.time || read.time };
+            } catch {
+              // No heading read: the time comes from the bars, and the person can set the key.
+            }
+          }
         }
         setLines([...found]);
         setDone({ n: p + 1, of: pages.length });

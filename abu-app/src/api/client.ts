@@ -359,6 +359,9 @@ export const api = {
   },
   /** Cloudflare's reader reads a row of words (a JPEG of the row). */
   scanWords: (image: Blob) => request<{ words: string }>('/scan/words', { method: 'POST', body: image, headers: { 'Content-Type': 'image/jpeg' } }),
+  /** The sheet's title, composer, key and time, from a picture of the top of its first page (Cloudflare's reader); "" where none was found. */
+  scanHeading: (image: Blob) =>
+    request<{ title: string; composer: string; key: string; time: string }>('/scan/heading', { method: 'POST', body: image, headers: { 'Content-Type': 'image/jpeg' } }),
   /** Today's allowance, and which AI readers the Worker has (the app tries Cloudflare's, then Claude). */
   scanAllowance: () => request<{ pages: number; lines: number; readers?: { cloudflare: boolean; anthropic: boolean } }>('/scan/allowance'),
   /** One play-through, on today's date on this phone (for the week and streak on Me). */

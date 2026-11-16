@@ -1,7 +1,9 @@
 /**
- * The daily allowance for scanning sheets. Reading costs money (about 3 US
- * cents to find the lines on a page and 1.5 cents to read a line), so each
- * person, and Abụ as a whole, has a limit per day (UTC).
+ * The daily allowance for scanning sheets. Reading costs money (a
+ * handwritten line that fails Abụ's checker goes to Haiku, then Opus: about
+ * 2.7 US cents, measured 16 November 2026; a typed one about 1.5), so each
+ * person, and Abụ as a whole, has a limit per day (UTC). Cloudflare's reader
+ * (rows of words, a sheet's heading, first corrections) counts too.
  */
 import { AppError } from '../errors';
 
@@ -10,8 +12,8 @@ export const LIMITS = {
   pages: 40,
   /** Lines one person can have read in a day (re-reads count). */
   lines: 400,
-  /** Lines read for everyone together in a day: about US$30 at most. */
-  allLines: 2000,
+  /** Lines read for everyone together in a day: about US$32 at most, if every one went to Claude. */
+  allLines: 1200,
 };
 
 export type ScanUse = 'page' | 'line';

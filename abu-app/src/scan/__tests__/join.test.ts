@@ -54,4 +54,15 @@ describe('the time', () => {
     expect(timeFor('', ['S  d | d :r | m :f | s |'])).toBe('2/4');
     expect(timeFor('', [])).toBe('4/4');
   });
+
+  it('allows for half-bar marks read as bar lines, and bar lines lost', () => {
+    // 4/4, some half-bar marks read as bar lines: more bars of 2 beats than of 4, but the bars of 4 have a
+    // half-bar mark in the middle, which a bar of 2/4 can't.
+    const halves = ['S  d | d :r /m :f | s :- | l :t | d\' :- /- :- | s |', 'A  d | m :f | s :l /t :d | r :m | f :- /- :- | s |'];
+    expect(guessBeats(halves)).toBe(4);
+    // 3/4 with a bar line lost now and then: a bar of 6 beats is two of 3.
+    expect(guessBeats(['S  d | d :r :m | f :s :l :t :d\' :r\' | m :- :- | s |', 'A  d | m :f :s | l :- :- | t :d\' :- | s |'])).toBe(3);
+    // 12/8, each bar 12 beats with a mark every 3.
+    expect(guessBeats(['S  d | d :r :m /f :s :l /t :d :r /m :f :s | d :- :- /- :- :- /r :- :- /m :- :- | s |'])).toBe(12);
+  });
 });

@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ensureUser } from '../src/domain/groups';
 import { scanAllowance, useScan } from '../src/domain/scan';
-import { checkLine, cleanPage, fixLine, lineText, readLine, readPage, readWords, rowsAnswer } from '../src/scan';
+import { checkLine, cleanPage, fixLine, keyOf, lineText, readHeading, readLine, readPage, readWords, rowsAnswer, timeOf } from '../src/scan';
 import { call, signUp } from './helpers';
 
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
@@ -115,6 +115,33 @@ describe('reading with Cloudflare’s reader', () => {
     expect(await readWords(withAi, JPEG.buffer, 'image/jpeg')).toBe('Blessing and honour,');
     const { env: again } = cloudflare('A -men, A -men.');
     expect(await readWords(again, JPEG.buffer, 'image/jpeg')).toBe('A -men, A -men.');
+  });
+
+  it('reads a sheet’s heading: title, composer, key and time', async () => {
+    const { env: withAi, run } = cloudflare('Title: Adam lay ybounen\nComposer: Boris Ord\nKey:\nTime: Allegretto 3/4');
+    expect(await readHeading(withAi, JPEG.buffer, 'image/jpeg')).toEqual({ title: 'Adam lay ybounen', composer: 'Boris Ord', key: '', time: '3/4' });
+    expect(JSON.stringify((run.mock.calls[0] as [string, { messages: { content: unknown }[] }])[1].messages[0].content)).toContain('time signature');
+    // The time and key are found wherever they were put.
+    const { env: again } = cloudflare('Title: EKELE MARIA\nComposer: Johnpaul Okwor\nKey: G 3/4 moderato\nTime:');
+    expect(await readHeading(again, JPEG.buffer, 'image/jpeg')).toEqual({ title: 'EKELE MARIA', composer: 'Johnpaul Okwor', key: 'G', time: '3/4' });
+    const { env: none } = cloudflare('Title: Bless The Lord\nComposer: none\nKey:\nTime: Taize');
+    expect(await readHeading(none, JPEG.buffer, 'image/jpeg')).toEqual({ title: 'Bless The Lord', composer: '', key: '', time: '' });
+  });
+
+  it('finds the key’s note and the time however they’re written', () => {
+    expect(keyOf('Key: Key Ab', 'Key Ab')).toBe('A♭');
+    expect(keyOf('Key: Doh is F\nTime: 4/4', 'Doh is F')).toBe('F');
+    expect(keyOf('Key: E flat', 'E flat')).toBe('E♭');
+    expect(keyOf('Title: Key F 4/4 (Meno Allegro)', '')).toBe('F');
+    expect(keyOf('Key: F#', 'F#')).toBe('F♯');
+    expect(keyOf('Key: Bb 4 (Moderato)', 'Bb 4 (Moderato)')).toBe('B♭');
+    expect(keyOf('Key: Jude', 'Jude')).toBe('');
+    expect(keyOf('Key: By Jude Nnam', 'By Jude Nnam')).toBe('');
+    expect(keyOf('Key: key G', 'key G')).toBe('G');
+    expect(timeOf('Key: Key Eb 2/4')).toBe('2/4');
+    expect(timeOf('Time: (Common time)')).toBe('4/4');
+    expect(timeOf('Time: 12/8')).toBe('12/8');
+    expect(timeOf('Key: F 4 J=72')).toBe('');
   });
 
   it('says when today’s free reading is used up', async () => {

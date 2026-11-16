@@ -73,7 +73,7 @@ import {
 } from './domain/songs';
 import { newId } from './domain/access';
 import { scanAllowance, useScan } from './domain/scan';
-import { checkImage, checkLine, cloudflareReady, fixLine, partOf, readLine, readPage, readWords, scanningReady, scanReaders } from './scan';
+import { checkImage, checkLine, cloudflareReady, fixLine, partOf, readHeading, readLine, readPage, readWords, scanningReady, scanReaders } from './scan';
 import { AppError, badRequest, notFound } from './errors';
 
 type App = { Bindings: Env; Variables: { userId: string } };
@@ -248,6 +248,16 @@ app.post('/scan/words', signedIn, async (c) => {
   const type = checkImage(contentType(c), image.byteLength);
   await useScan(c.env.DB, c.get('userId'), 'line');
   return c.json({ words: await readWords(c.env, image, type) });
+});
+
+/** Reads a sheet's heading (title, composer, key, time) from a picture of the top of its first page, with Cloudflare's reader. */
+app.post('/scan/heading', signedIn, async (c) => {
+  cloudflareReady(c.env);
+  checkImage(contentType(c), Number(c.req.header('content-length') ?? 1) || 1);
+  const image = await c.req.arrayBuffer();
+  const type = checkImage(contentType(c), image.byteLength);
+  await useScan(c.env.DB, c.get('userId'), 'line');
+  return c.json(await readHeading(c.env, image, type));
 });
 
 /** Finds the lines of music on a page. The body is the picture; ?w= and ?h= give its size in pixels. */
