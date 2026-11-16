@@ -3,6 +3,7 @@ import { describe, expect, it } from '@jest/globals';
 import {
   alignedRows,
   barColumns,
+  changedShare,
   freeRepair,
   joinLine,
   keepsParts,
@@ -304,5 +305,17 @@ describe('rows lined up for checking', () => {
   it('lines up whole bars when the parts don’t agree on the beats in one', () => {
     const [a, b] = alignedRows(splitLine('S  d :r :m | f :s |\nA  d :r | m :f |'));
     expect(a.indexOf('|')).toBe(b.indexOf('|'));
+  });
+});
+
+describe('how much a correction changed', () => {
+  const draft = 'S  d :r /m :f | s :- /- :- |\nA  d :t1 /d :r | m :- /- :- |';
+  it('counts the symbols added, taken out or swapped, over the reading’s', () => {
+    expect(changedShare(draft, draft)).toBe(0);
+    // One note swapped in 32 symbols; spacing and words rows don't count.
+    expect(changedShare('S  d :r /m :f | s :- /- :- |\nW  Glo-ry\nA  d :t1 /d :m | m :- /- :- |', draft)).toBe(1 / 32);
+    // A rewrite changes most of it.
+    expect(changedShare('S  m :f /s :l | t :d\' /r\' :m\' |\nA  s :l /t :d\' | r\' :- /- :- |', draft)).toBeGreaterThan(0.2);
+    expect(changedShare('S  d :r |', '')).toBe(1);
   });
 });

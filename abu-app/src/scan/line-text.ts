@@ -549,6 +549,31 @@ export function keepsParts(answer: string, reading: string): boolean {
   return true;
 }
 
+/** A row's symbols, one each: a note with its octave marks, a beat mark, a half-bar or bar line, a hold or a split. */
+const SYMBOL = /(?:de|re|fe|se|le|ta|ra|ma|lo|[drmfsltx])[',_1-9¹₁]*|[:|/.,\-]/g;
+
+/**
+ * How much of a reading an answer changed: the fewest symbols added, taken
+ * out or swapped to turn the reading's rows of notes into the answer's, over
+ * the reading's symbols (words rows and spacing don't count). On handwritten
+ * lines, Haiku's corrections that changed a tenth or less were right or one
+ * to three symbols off, and most that changed a third or more were wrong on
+ * ten symbols or more though they added up (16 November 2026).
+ */
+export function changedShare(answer: string, reading: string): number {
+  const symbols = (t: string) => splitLine(t).flatMap((r) => (r.part ? (r.text.match(SYMBOL) ?? []) : []));
+  const a = symbols(reading);
+  const b = symbols(answer);
+  if (!a.length) return b.length ? 1 : 0;
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[b.length] / a.length;
+}
+
 /** The checker's messages that are about one part ("Alto, bar 2 has 5 beats…"), and the rest. */
 export function problemsByPart(messages: string[], parts: string[]): { byPart: Record<string, string[]>; other: string[] } {
   const byPart: Record<string, string[]> = {};

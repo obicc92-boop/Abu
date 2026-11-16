@@ -35,7 +35,7 @@ import { Body, Button, Card, Chip, ErrorText, Kicker, MAX_WIDTH, Page, TopBar } 
 import { barNumbers, checkRows } from '@/scan/bar-check';
 import { setScanDraft } from '@/scan/draft';
 import { joinLines, timeFor } from '@/scan/join';
-import { alignedRows, barColumns, bestFree, joinLine, keepsParts, problemsByPart, splitLine, tidyNotes, tidyTitle, withBarsInStep, withWords, wordsOf, type LineRow, type LineWords } from '@/scan/line-text';
+import { alignedRows, barColumns, bestFree, changedShare, joinLine, keepsParts, problemsByPart, splitLine, tidyNotes, tidyTitle, withBarsInStep, withWords, wordsOf, type LineRow, type LineWords } from '@/scan/line-text';
 import { findLinesOwn, readLineOwn } from '@/scan/own-reader';
 import { cutLine, loadPages, MAX_PAGES, pageForFinding, scanningHere, takePhoto } from '@/scan/pages';
 import { readTypedSheet, type PageText } from '@/scan/pdf-text';
@@ -215,7 +215,10 @@ function Scanner() {
         const r = await ask();
         const text = withWords(r.text, line.wordTexts);
         // Kept only if it adds up and still has every part (an answer that drops or empties a part adds up too).
-        if (passes(text) && keepsParts(text, draft)) {
+        // A correction (Cloudflare's or Haiku's) is kept only if it changed a fifth of the reading or less: on
+        // handwriting the ones that rewrote more were mostly wrong though they added up; Opus reads it afresh.
+        const corrected = via === 'cloudflare' || via === 'haiku';
+        if (passes(text) && keepsParts(text, draft) && !(corrected && changedShare(text, draft) > 0.2)) {
           update(line.id, { status: 'read', text, doubts: r.doubts, checked: false, via });
           return text;
         }
