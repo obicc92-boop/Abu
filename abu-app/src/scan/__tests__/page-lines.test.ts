@@ -122,6 +122,21 @@ describe('telling notes from words', () => {
     ];
     expect(notesRows(reads)).toEqual([true, false, true, false]);
   });
+
+  it('weighs how each row read, with its height and width, when they are given', () => {
+    const row = (score: number, text: string, height = 26, width = 0.9) => ({ score, beats: (text.match(/:/g) ?? []).length, text, height, width });
+    const reads = [
+      row(0.97, 'm :- /r :d | t1 :- /- :- | d :r /m :f | s :- /- :- |'),
+      row(0.95, 'd :- /t1 :l1 | s1 :- /- :- | l1 :t1 /d :r | m :- /- :- |'),
+      // A row of words read with stray marks: confident, but its beats are few and mostly empty.
+      row(0.9, ': : | : /d : | : / : |'),
+      row(0.96, 's :- /f :m | r :- /- :- | m :f /s :l | t :- /- :- |'),
+      // A heading across part of the page.
+      row(0.4, 'd |', 30, 0.4),
+      row(0.98, 'd :- /s1 :l1 | s1 :- /- :- | f1 :r1 /d1 :t2 | d1 :- /- :- |'),
+    ];
+    expect(notesRows(reads)).toEqual([true, true, false, true, false, true]);
+  });
 });
 
 describe('grouping rows into lines of music', () => {

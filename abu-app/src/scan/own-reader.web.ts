@@ -176,7 +176,7 @@ export async function findLinesOwn(original: HTMLCanvasElement, parts = 0): Prom
     const b = band(page, big(row), meta);
     const out = await session.run({ image: new ort.Tensor('float32', b.data, [1, 1, meta.height, b.width]) });
     const r = greedy(out.tokens.data, Math.min(b.steps, out.tokens.dims[1]), out.tokens.dims[2], meta.tokens);
-    reads.push({ score: notesLikeness(r), beats: r.tokens.filter((t) => t === ':').length });
+    reads.push({ score: notesLikeness(r), beats: r.tokens.filter((t) => t === ':').length, text: toText(r.tokens), height: row.bottom - row.top, width: (row.right - row.left) / small.width });
   }
   const isNotes = notesRows(reads);
   const boxOf = (g: number[]): Box => ({

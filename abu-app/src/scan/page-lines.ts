@@ -276,16 +276,59 @@ export interface RowRead {
   score: number;
   /** Beat marks (":") read in the row. */
   beats: number;
+  /** The row as read, in Abụ text (rows.ts `toText`). */
+  text?: string;
+  /** The row's height, in the page's pixels. */
+  height?: number;
+  /** How much of the page's width the row spans (0 to 1). */
+  width?: number;
 }
 
+const NOTE_NAME = /(?:de|re|fe|se|le|ta|ra|ma|lo|[drmfslt])/g;
+
 /**
- * Which rows are notes: read confidently, with about as many beat marks as
- * the page's other rows of notes (a row of words can read with a stray ":").
+ * How a row's reading weighs for being a row of notes, learnt from 9,451 rows
+ * of 252 handwritten pages that Claude Opus labelled (16 November 2026), on
+ * how it read: its confidence, its beat marks against the page's usual, how
+ * many of its beats hold a note or a hold, its bar lines and notes, and its
+ * height and width.
+ */
+const WEIGHTS = { score: 1.9785, beats: 2.7763, filled: 2.7145, bars: 0.5681, height: 0.2951, width: -2.6618, notes: 0.6616, bias: -3.657 };
+/** Rows weighing at least this likely are notes. */
+const NOTES_AT = 0.3;
+
+/**
+ * Which rows are notes. With each row's reading, height and width, by the
+ * weights above: on 51 hand-labelled pages, 1,155 of 1,181 rows of notes
+ * kept, and 146 of 833 rows of words or headings taken for notes (the beat
+ * marks alone: 1,149 and 159). Without them, a row read confidently with
+ * about as many beat marks as the page's other rows of notes (a row of words
+ * can read with a stray ":").
  */
 export function notesRows(reads: RowRead[]): boolean[] {
   const sure = reads.filter((r) => r.score >= 0.6 && r.beats >= 2).map((r) => r.beats);
-  const least = sure.length ? Math.max(2, 0.4 * median(sure)) : 2;
-  return reads.map((r) => r.score >= 0.4 && r.beats >= least);
+  const full = reads.length > 0 && reads.every((r) => r.text !== undefined && r.height !== undefined && r.width !== undefined);
+  if (!full) {
+    const least = sure.length ? Math.max(2, 0.4 * median(sure)) : 2;
+    return reads.map((r) => r.score >= 0.4 && r.beats >= least);
+  }
+  const usual = sure.length ? median(sure) : 2;
+  const usualHeight = median(reads.map((r) => r.height!)) || 1;
+  return reads.map((r) => {
+    const text = r.text!;
+    const slots = text.split(/[:|/]/);
+    const filled = slots.filter((piece) => /(?:de|re|fe|se|le|ta|ra|ma|lo|[drmfslt])/.test(piece) || piece.includes('-')).length / Math.max(1, slots.length);
+    const z =
+      WEIGHTS.bias +
+      WEIGHTS.score * r.score +
+      WEIGHTS.beats * Math.min(2, r.beats / usual) +
+      WEIGHTS.filled * filled +
+      WEIGHTS.bars * Math.min(3, (text.match(/\|/g)?.length ?? 0) / Math.max(1, usual / 2)) +
+      WEIGHTS.height * Math.min(3, r.height! / usualHeight) +
+      WEIGHTS.width * r.width! +
+      WEIGHTS.notes * Math.min(3, (text.match(NOTE_NAME)?.length ?? 0) / Math.max(1, usual));
+    return 1 / (1 + Math.exp(-z)) >= NOTES_AT;
+  });
 }
 
 /**

@@ -224,3 +224,22 @@ cd .. && .venv/bin/python -I scripts/handwriting/eval_reader.py runs/rows2/best.
 ```
 
 `synth-sub` and `real-sub` are 10,000 and 15,000 rows picked from `synth` and `real`, with their pictures linked rather than copied, so the handwritten rows aren't drowned out. `"folder*20"` repeats a folder's rows 20 times.
+
+**More handwriting, retrained again** (`runs/rows3`, 16 November 2026, approved by the owner with an estimate of US$15 to 30):
+
+- **New pages:** 700 more previews from choirpdfs.com's public bucket (not the test or earlier training pages), sorted by eye in contact sheets: 301 handwritten sol-fa, 266 of them upright and clear. Their rows were cut as the app cuts them (10,097), and the first 252 pages' 9,579 rows went to Opus through the Batches API: 5,336 rows of notes, 3,227 of words and 1,016 other, for **US$30.20** on the trial key. Spot checks against the pictures were right, including rows Opus marked unsure. The training folder is `data/rows/hand2` (5,333 rows).
+- **Training:** from `rows2`, two passes over 50,496 rows (`synth-sub`, `real-sub`, `hand*4`, `hand2*4`), 4,208 steps, about 95 minutes on the CPU.
+
+| Measured on | `rows2` | `rows3` (now in the app) |
+|---|---|---|
+| Handwritten rows from unseen pages (166) | 12.8% of tokens wrong, 11.4% of rows exact | **10.1% wrong, 19.3% exact** |
+| Handwritten rows read by eye (24) | 6.3% wrong, 3 exact | **4.2% wrong, 7 exact** |
+| Typed rows from unseen sheets (733) | 3.3% wrong, 53.3% exact | **2.8% wrong, 64.5% exact** |
+| The 50 typed test lines, read as the app reads them | 95.1% of bars, 38 lines exact, 12 silent mistakes | 95.4% of bars, 33 lines exact, 15 silent mistakes |
+
+  Five times the handwritten rows took a fifth off the handwritten error, not more. On the typed test lines it trades a few: some octave marks lost, a half-bar read as a bar line in 6/8. Typed PDFs are read from their text, so this matters only for typed photos.
+
+```sh
+cd train && ../.venv/bin/python -I train.py --data ../data/rows/synth-sub ../data/rows/real-sub "../data/rows/hand*4" "../data/rows/hand2*4" \
+  --held ../data/rows/hand-held --out ../runs/rows3 --init ../runs/rows2/best.pt --epochs 2 --lr 6e-4 --every 500
+```
