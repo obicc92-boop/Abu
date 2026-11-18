@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))  # this folder (run wit
 
 import torch  # noqa: E402
 
-from rowreader import ABOVE, BELOW, HEIGHT, SIDE, STRIDE, RowReader  # noqa: E402
+from rowreader import ABOVE, BELOW, HEIGHT, SIDE, STRIDE, reader_from  # noqa: E402
 from solfa_tokens import TOKENS  # noqa: E402
 
 
@@ -27,8 +27,7 @@ def main():
     p.add_argument('--out', required=True)
     args = p.parse_args()
     state = torch.load(args.model, map_location='cpu')
-    model = RowReader()
-    model.load_state_dict(state['model'])
+    model = reader_from(args.model)
     model.eval()
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)

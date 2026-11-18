@@ -221,6 +221,14 @@ class RowReader(nn.Module):
         return self.head(self.drop(f))  # N, T, classes
 
 
+def reader_from(path) -> RowReader:
+    """A RowReader the size of the weights saved at path (the hidden size is the head's width), with them loaded."""
+    weights = torch.load(path, map_location='cpu')['model']
+    model = RowReader(weights['head.weight'].shape[1])
+    model.load_state_dict(weights)
+    return model
+
+
 def greedy(logits: torch.Tensor, length: int):
     """CTC's best path: the tokens, and how sure the model was of the least sure of them."""
     probs = logits[:length].softmax(-1)

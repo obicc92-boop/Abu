@@ -55,7 +55,8 @@ def main():
     p.add_argument('--every', type=int, default=1000)
     p.add_argument('--threads', type=int, default=6)
     p.add_argument('--photos', type=float, default=0.3)
-    p.add_argument('--init', default=None, help='start from these weights (a fresh optimizer and schedule)')
+    p.add_argument('--init', default=None, help='start from these weights (a fresh optimizer and schedule); layers of another size start afresh')
+    p.add_argument('--hidden', type=int, default=192, help='width of the layers after the picture layers')
     args = p.parse_args()
     torch.set_num_threads(args.threads)
     out = Path(args.out)
@@ -66,15 +67,17 @@ def main():
     loader = torch.utils.data.DataLoader(train_set, batch_sampler=WidthBatches(train_set.rows, args.batch), num_workers=args.workers, collate_fn=collate, persistent_workers=True)
     held = torch.utils.data.DataLoader(held_set, batch_size=args.batch, shuffle=False, num_workers=2, collate_fn=collate)
 
-    model = RowReader()
+    model = RowReader(args.hidden)
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
     total = args.epochs * len(loader)
     sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=args.lr, total_steps=total, pct_start=0.05)
     step = 0
     ckpt = out / 'reader.pt'
     if args.init and not ckpt.exists():
-        model.load_state_dict(torch.load(args.init, map_location='cpu')['model'])
-        print(f'starting from {args.init}')
+        own = model.state_dict()
+        fits = {k: v for k, v in torch.load(args.init, map_location='cpu')['model'].items() if k in own and own[k].shape == v.shape}
+        model.load_state_dict(fits, strict=False)
+        print(f'starting from {args.init}' + ('' if len(fits) == len(own) else f' ({len(fits)} of {len(own)} weight sets fit)'))
     if ckpt.exists():
         state = torch.load(ckpt, map_location='cpu')
         model.load_state_dict(state['model'])

@@ -126,6 +126,98 @@ function strokeHeight(ink: Uint8Array, ruled: Uint8Array, w: number, h: number):
 /** A ruled line across this much of the page's width can be the line between two systems. */
 const SYSTEM_RULE = 0.35;
 
+/**
+ * Lines drawn by hand across the page, most often between systems with no ruler: thin strokes that slope
+ * and wave, broken for a few pixels where writing touches or crosses them. Each is followed as a long path
+ * through thin ink (in vertical runs of a few pixels; a letter's upright isn't), with gaps of up to six
+ * pixels bridged, moving at most a pixel up or down at each step, and is a line only if it's ink for most
+ * of its length (a row of dots and dashes isn't) and runs nearly level. Returns each one at least `least` long: its middle y, and
+ * its pixels (the stroke itself in each column, not marks above or below that touch it). Ink in `skip`
+ * (lines down the page) is passed over: a line drawn across crosses them.
+ */
+function drawnLines(ink: Uint8Array, skip: Uint8Array, w: number, h: number, least: number): { y: number; pixels: number[] }[] {
+  const thick = Math.max(3, Math.round(h / 300));
+  const thin = new Uint8Array(w * h);
+  for (let x = 0; x < w; x++) {
+    let start = -1;
+    for (let y = 0; y <= h; y++) {
+      const on = y < h && ink[y * w + x] && !skip[y * w + x];
+      if (on && start < 0) start = y;
+      if (!on && start >= 0) {
+        if (y - start <= thick) for (let k = start; k < y; k++) thin[k * w + x] = 1;
+        start = -1;
+      }
+    }
+  }
+  const open = spread(thin, w, h, 3, true);
+  // The longest path ending at each pixel, and the step up or down into it.
+  const length = new Int32Array(w * h);
+  const step = new Int8Array(w * h);
+  for (let x = 0; x < w; x++)
+    for (let y = 0; y < h; y++) {
+      const i = y * w + x;
+      if (!open[i]) continue;
+      let l = 0;
+      let d = 0;
+      if (x > 0) {
+        l = length[i - 1];
+        if (y > 0 && length[i - w - 1] > l) [l, d] = [length[i - w - 1], -1];
+        if (y < h - 1 && length[i + w - 1] > l) [l, d] = [length[i + w - 1], 1];
+      }
+      length[i] = l + 1;
+      step[i] = d;
+    }
+  // Paths' ends, longest first; each followed back until it meets one already taken.
+  const ends: number[] = [];
+  for (let x = 0; x < w; x++)
+    for (let y = 0; y < h; y++) {
+      const i = y * w + x;
+      if (length[i] < least) continue;
+      let goesOn = false;
+      if (x + 1 < w) for (let d = -1; d <= 1; d++) if (y + d >= 0 && y + d < h && open[(y + d) * w + x + 1] && step[(y + d) * w + x + 1] === -d) goesOn = true;
+      if (!goesOn) ends.push(i);
+    }
+  ends.sort((a, b) => length[b] - length[a]);
+  const taken = new Uint8Array(w * h);
+  const lines: { y: number; pixels: number[] }[] = [];
+  for (const end of ends) {
+    if (taken[end]) continue;
+    const path: number[] = [];
+    let x = end % w;
+    let y = (end - x) / w;
+    while (x >= 0 && open[y * w + x] && !taken[y * w + x]) {
+      path.push(y);
+      const next = y + step[y * w + x];
+      for (let d = -thick; d <= thick; d++) if (y + d >= 0 && y + d < h) taken[(y + d) * w + x] = 1;
+      x--;
+      y = next;
+    }
+    if (path.length < least) continue;
+    let inked = 0;
+    path.forEach((py, k) => {
+      const px = x + path.length - k;
+      if (thin[py * w + px] || (py > 0 && thin[(py - 1) * w + px]) || (py + 1 < h && thin[(py + 1) * w + px])) inked++;
+    });
+    // A line between systems runs nearly level, even drawn by hand on a page straightened first (a
+    // signature's flourish doesn't).
+    if (Math.max(...path) - Math.min(...path) > 0.08 * path.length + 2 * thick) continue;
+    if (inked < 0.7 * path.length) continue;
+    // In each column, the run of thin ink the path goes through (or touches).
+    const pixels: number[] = [];
+    path.forEach((py, k) => {
+      const px = x + path.length - k;
+      const at = [py, py - 1, py + 1].find((q) => q >= 0 && q < h && thin[q * w + px]);
+      if (at === undefined) return;
+      let top = at;
+      let bottom = at;
+      while (top > 0 && thin[(top - 1) * w + px]) top--;
+      while (bottom < h - 1 && thin[(bottom + 1) * w + px]) bottom++;
+      for (let q = top; q <= bottom; q++) pixels.push(q * w + px);
+    });
+    lines.push({ y: Math.round(median(path)), pixels });
+  }
+  return lines;
+}
 
 /**
  * The page's rows of writing, top to bottom, and the ruled lines across it
@@ -178,8 +270,18 @@ export function pageRows(img: Gray): { rows: RowBox[]; rules: number[]; long: nu
     if (wide >= SYSTEM_RULE * w) long.push(y);
   }
   const ruled = spread(tall, w, h, lean, true);
+  const down = ruled.map((v, i) => (ink[i] && v ? 1 : 0));
   const across = spread(wideRuns, w, h, lean, false);
   for (let i = 0; i < ruled.length; i++) ruled[i] = ink[i] && (ruled[i] || across[i]) ? 1 : 0;
+  // A line drawn by hand, unless it's one already found ruled straight (whose ink is set aside already).
+  for (const { y, pixels } of drawnLines(ink, down, w, h, Math.ceil(SYSTEM_RULE * w))) {
+    if (long.some((l) => Math.abs(l - y) <= lean)) continue;
+    for (const i of pixels) ruled[i] = 1;
+    rules.push(y);
+    long.push(y);
+  }
+  rules.sort((a, b) => a - b);
+  long.sort((a, b) => a - b);
   const stroke = strokeHeight(ink, ruled, w, h);
   const raw = new Float32Array(h);
   for (let y = 0; y < h; y++) {
@@ -395,10 +497,14 @@ export function groupRows(rows: RowBox[], isNotes: boolean[], rules: number[], p
  * gaps near where each system should end. Boxes of two rows of notes are
  * lines of two parts, even with four asked for (two-part hymns are common).
  * Where the ruled lines don't box systems (none, or one under every row),
- * `groupRows` groups them as before. Measured on 50 handwritten pages and a
- * scanned one, labelled row by row (16 November 2026): 262 of 326 systems
- * cut exactly with four parts given (259 with "Not sure"), against 51 (38)
- * by `groupRows` alone, and no page worse.
+ * `groupRows` groups them as before. Boxes most of which hold one part and
+ * its words are lines of their own when some box holds a system (a cantor's
+ * verses after a refrain), and a box is cut into several systems only when
+ * it has the rows of notes for them (a system with words under every part is
+ * tall). Measured on 50 handwritten pages labelled row by row (18 November
+ * 2026): 284 of 318 systems cut exactly with four parts given (274 with "Not
+ * sure"), against 263 (258) the day before; on 140 other pages, judged by eye
+ * where the cutting changed, 39 → 63 systems right on the 17 pages changed.
  */
 export function groupLines(rows: RowBox[], isNotes: boolean[], rules: number[], long: number[], parts = 0): { lines: number[][]; parts: number } {
   const before = () => ({ lines: groupRows(rows, isNotes, rules, parts), parts });
@@ -427,8 +533,15 @@ export function groupLines(rows: RowBox[], isNotes: boolean[], rules: number[], 
   // Ruled lines that box systems leave two rows of notes or more in most boxes (fewer: a line under every
   // row), and not many more than a system's (words read like notes can double them, but not much more).
   const usualCount = median(found.map((b) => b.notes.length));
-  if (found.length < 2 || usualCount < 2 || usualCount > 2.5 * (parts || 4)) return before();
-  const p = parts || Math.round(usualCount);
+  if (found.length < 2 || median(found.map((b) => b.rows.length)) < 2 || usualCount > 2.5 * (parts || 4)) return before();
+  let p = parts || Math.round(usualCount);
+  // Boxes holding one part and its words, most of them, with a box or more holding a system (a cantor's
+  // verses after a refrain for the choir): each is a line, judged against the boxes holding a system. With
+  // none holding one, the boxes are the parts' own (a staff under each part's row of sol-fa): grouped as before.
+  if (usualCount < 2) {
+    p = parts || 4;
+    if (!found.some((b) => b.notes.length >= Math.max(2, p - 1))) return before();
+  }
   const height = (b: { rows: number[]; notes: number[] }) => rows[b.rows[b.rows.length - 1]].bottom - rows[b.notes[0]].top;
   const single = found.filter((b) => b.notes.length >= Math.max(1, p - 1) && b.notes.length <= p + 2);
   // A system's height, from the boxes holding about one (when even one does: boxes may hold two at a time).
@@ -445,7 +558,10 @@ export function groupLines(rows: RowBox[], isNotes: boolean[], rules: number[], 
   }
   const lines: number[][] = [];
   for (const b of merged) {
-    const k = Math.max(1, Math.min(b.notes.length, Math.round(height(b) / usual)));
+    // A system with a row of words under every part is taller than most: a box is several only with the
+    // rows of notes for them (counted as at most four parts each: rows of words read as notes can make
+    // more seem usual).
+    const k = Math.max(1, Math.min(Math.floor(b.notes.length / Math.max(1, Math.min(p, 4) - 1)), Math.round(height(b) / usual)));
     if (k === 1) {
       lines.push(b.rows);
       continue;

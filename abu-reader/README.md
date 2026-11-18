@@ -243,3 +243,20 @@ cd .. && .venv/bin/python -I scripts/handwriting/eval_reader.py runs/rows2/best.
 cd train && ../.venv/bin/python -I train.py --data ../data/rows/synth-sub ../data/rows/real-sub "../data/rows/hand*4" "../data/rows/hand2*4" \
   --held ../data/rows/hand-held --out ../runs/rows3 --init ../runs/rows2/best.pt --epochs 2 --lr 6e-4 --every 500
 ```
+
+**Cutting pages into lines, measured again** (18 November 2026). The test pages were rebuilt from the same random draws (seeds 3, 11 and 5 over the site's song list, `data/choirpdfs/hw50.json`), and the row labels made on 16 November (`data/choirpdfs/labels.json`, system and kind for every row) still match the rows found. The scripts, kept in git this time:
+
+| Script | What it does |
+|---|---|
+| `scripts/handwriting/find-lines.ts` | Finds the lines on page pictures as the app's `findLinesOwn` does, reading each row with the model (`MODEL=` another one; readings cached by page, model and rows), and writes rows, readings, ruled lines and lines per page. `PAGE_LINES=` runs another copy of `page-lines.ts`, to compare versions. |
+| `scripts/handwriting/regroup.ts` | Groups the rows again without reading the pictures, for trying changes to grouping quickly. |
+| `scripts/handwriting/score-lines.py` | Scores a grouping against the labels: systems cut exactly. `--boxes` follows rows by where they are when finding rows has changed. |
+| `scripts/handwriting/compare-lines.py`, `overlay.py` | Draw two groupings side by side (pages cut differently only), or one over its pages, for judging by eye. |
+
+On the 50 labelled pages (one page of the 51 labelled, a sheet of the owner's, is left out: its picture was lost), systems cut exactly with four parts given went **263 → 284 of 318**, with "Not sure" 258 → 274, after three changes to `page-lines.ts` (lines drawn by hand followed, boxes of one part each as lines when some box holds a system, a box split only with the rows of notes for it). On 140 fresh pages (`data/choirpdfs/fresh.json`, seed 20261118) the new cutting differed on 17; judged blind by eye, systems right on those 39 → 63, 7 pages better and 2 worse.
+
+```sh
+# from abu-app
+npx tsx --tsconfig tsconfig.json ../abu-reader/scripts/handwriting/find-lines.ts ../abu-reader/data/choirpdfs/hw50.json ../abu-reader/data/choirpdfs/cut 4
+python3 ../abu-reader/scripts/handwriting/score-lines.py ../abu-reader/data/choirpdfs/labels.json --boxes ../abu-reader/data/choirpdfs/cut-rows3/pages.json ../abu-reader/data/choirpdfs/cut/pages.json
+```

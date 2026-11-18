@@ -51,6 +51,19 @@ describe('rows on a page', () => {
     expect(long).not.toContain(92);
   });
 
+  it('follows a line drawn by hand between systems, though it slopes and waves', () => {
+    // Too slanted for a ruled line: 34 pixels down across the page, wobbling a pixel or so.
+    const img = page(600, 340, layout(2, 4, 14, 6, 50, 40));
+    for (let x = 20; x < 580; x++) {
+      const y = Math.round(122 + (34 * (x - 20)) / 560 + Math.sin(x / 15));
+      img.data[y * 600 + x] = 20;
+      img.data[(y + 1) * 600 + x] = 20;
+    }
+    const { rows, long } = pageRows(img);
+    expect(rows).toHaveLength(8);
+    expect(long.some((y) => y > 130 && y < 150)).toBe(true);
+  });
+
   it('sets ruled lines aside as places to split', () => {
     const { rows, rules } = pageRows(page(600, 300, layout(2, 4, 14, 6, 30, 40), [120]));
     expect(rows).toHaveLength(8);
@@ -297,6 +310,25 @@ describe('grouping rows into lines of music', () => {
       const { rows, long } = boxed([5, 5, 5]);
       const isNotes = rows.map((_, i) => i !== 5 && i % 5 !== 2);
       expect(groupLines(rows, isNotes, long, long, 4).lines[1]).toEqual([5, 6, 7, 8, 9]);
+    });
+
+    it('cuts each box as a line when most hold one part and its words (a cantor’s verses after a refrain)', () => {
+      const { rows, long } = boxed([5, 2, 2, 2, 2]);
+      const isNotes = rows.map((_, i) => (i < 5 ? i !== 2 : i % 2 === 1));
+      expect(groupLines(rows, isNotes, long, long, 4).lines).toEqual([[0, 1, 2, 3, 4], [5, 6], [7, 8], [9, 10], [11, 12]]);
+      expect(groupLines(rows, isNotes, long, long, 0).lines).toEqual([[0, 1, 2, 3, 4], [5, 6], [7, 8], [9, 10], [11, 12]]);
+    });
+
+    it('groups as before when every box holds one part (a staff under each part’s row of sol-fa)', () => {
+      const { rows, long } = boxed([2, 2, 2, 2, 2, 2, 2, 2]);
+      const isNotes = rows.map((_, i) => i % 2 === 1);
+      expect(groupLines(rows, isNotes, long, long, 4)).toEqual({ lines: groupRows(rows, isNotes, long, 4), parts: 4 });
+    });
+
+    it('keeps a system with a row of words under every part as one line, though it is taller', () => {
+      const { rows, long } = boxed([5, 5, 8, 5]);
+      const isNotes = rows.map((_, i) => (i < 10 || i >= 18 ? i % 5 !== 2 : i % 2 === 0));
+      expect(groupLines(rows, isNotes, long, long, 4).lines[2]).toEqual([10, 11, 12, 13, 14, 15, 16, 17]);
     });
 
     it('groups as before when a ruled line runs under every row', () => {

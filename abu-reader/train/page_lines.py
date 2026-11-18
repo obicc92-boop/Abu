@@ -27,7 +27,7 @@ import torch  # noqa: E402
 from PIL import Image, ImageDraw  # noqa: E402
 
 from pipeline import NOTES, band, greedy_at, read_line, to_tensor  # noqa: E402
-from rowreader import RowReader  # noqa: E402
+from rowreader import reader_from  # noqa: E402
 
 PAGE_EDGE = 2400  # the app keeps pages this big on their longer side
 FIND_EDGE = 1200  # rows are found on a page this big
@@ -287,8 +287,7 @@ def main():
     ap.add_argument('--four', action='store_true', help='tell it every page has four parts')
     args = ap.parse_args()
     torch.set_num_threads(4)
-    model = RowReader()
-    model.load_state_dict(torch.load(args.model, map_location='cpu')['model'])
+    model = reader_from(args.model)
     model.eval()
     data = Path(args.set)
     answers = json.loads((data / 'answers.json').read_text())

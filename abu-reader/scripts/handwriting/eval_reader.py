@@ -4,13 +4,12 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'train'))  # abu-reader/train
 import torch
-from rowreader import RowReader, Rows, collate
+from rowreader import Rows, collate, reader_from
 from train import evaluate
 
 if __name__ == '__main__':
     torch.set_num_threads(6)
-    model = RowReader()
-    model.load_state_dict(torch.load(sys.argv[1], map_location='cpu')['model'])
+    model = reader_from(sys.argv[1])
     for folder in sys.argv[2:]:
         loader = torch.utils.data.DataLoader(Rows([folder], train=False), batch_size=24, shuffle=False, num_workers=0, collate_fn=collate)
         err, exact, n = evaluate(model, loader)

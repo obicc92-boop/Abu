@@ -22,7 +22,7 @@ import numpy as np  # noqa: E402
 import torch  # noqa: E402
 from PIL import Image  # noqa: E402
 
-from rowreader import ABOVE, BELOW, HEIGHT, SIDE, STRIDE, RowReader, band, to_tensor  # noqa: E402
+from rowreader import ABOVE, BELOW, HEIGHT, SIDE, STRIDE, band, reader_from, to_tensor  # noqa: E402
 from solfa_tokens import TOKENS  # noqa: E402
 from solfa_tokens import NOTES, to_text  # noqa: E402
 
@@ -166,8 +166,7 @@ def main():
     ap.add_argument('--name', required=True)
     args = ap.parse_args()
     torch.set_num_threads(2)
-    model = RowReader()
-    model.load_state_dict(torch.load(args.model, map_location='cpu')['model'])
+    model = reader_from(args.model)
     model.eval()
     data = Path(args.set)
     out = HERE.parent / 'runs' / 'claude-read' / f'{args.name}-clean'
