@@ -7,9 +7,9 @@
  * 2. Reading, the app doing all it can before any AI:
  *    - a typed PDF is read from its own text (free, instant, exact);
  *    - on photos and scans, the lines are found by where the ink is and read
- *      by Abụ's own model in the browser, and rows of words are read by
- *      Cloudflare's reader (Abụ's model reads only notes);
- *    - a line that passes Abụ's checker is kept as read. Only a line that
+ *      by SolfaScores' own model in the browser, and rows of words are read by
+ *      Cloudflare's reader (SolfaScores' model reads only notes);
+ *    - a line that passes SolfaScores' checker is kept as read. Only a line that
  *      fails goes to an AI: Cloudflare's reader, then Claude if the Worker
  *      has a key (Haiku checks, Opus reads from scratch), and an AI's answer
  *      is kept only if it passes. Otherwise the person fixes the line.
@@ -51,7 +51,7 @@ const TIMES = ['2/4', '3/4', '4/4', '6/8'];
 /** Doh names the server accepts, by semitone. */
 const KEY_PARAM = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
 const READING_AT_ONCE = 3;
-/** Voice parts in each line, for photos and scans (0: Abụ works it out). Most choir sheets are SATB. */
+/** Voice parts in each line, for photos and scans (0: SolfaScores works it out). Most choir sheets are SATB. */
 const PART_CHOICES: { n: number; label: string }[] = [
   { n: 4, label: '4 · SATB' },
   { n: 3, label: '3' },
@@ -95,11 +95,11 @@ interface Line {
   canvas: unknown;
   width: number;
   height: number;
-  /** What the app read itself: from the PDF's text, or with Abụ's own model. */
+  /** What the app read itself: from the PDF's text, or with SolfaScores' own model. */
   draft: string;
   /** From a PDF's text: the same with the parts' bar lines lined up by where they're printed, tried if `draft` fails. */
   lined?: string;
-  /** Who read it: the PDF's text, Abụ's own reader, or an AI that corrected it. */
+  /** Who read it: the PDF's text, SolfaScores' own reader, or an AI that corrected it. */
   via?: 'text' | 'own' | 'cloudflare' | 'haiku' | 'strong';
   status: 'waiting' | 'reading' | 'read' | 'failed';
   text: string;
@@ -131,7 +131,7 @@ export default function ScanScreen() {
       <Page>
         <TopBar back title="Scan a sheet" />
         <Card>
-          <Body>Scanning works in the web app for now. Open abu.adalingo.workers.dev in your phone’s browser to scan a sheet.</Body>
+          <Body>Scanning works in the web app for now. Open solfascores.com in your phone’s browser to scan a sheet.</Body>
         </Card>
       </Page>
     );
@@ -180,7 +180,7 @@ function Scanner() {
   };
 
   /**
-   * A line's reading, with AI only as the last resort. A reading that passes Abụ's checker is kept as it is
+   * A line's reading, with AI only as the last resort. A reading that passes SolfaScores' checker is kept as it is
    * (the AIs broke more right lines than they fixed when sent every line). One that fails, or one the
    * person asks to read again, goes to Cloudflare's reader, then Claude if the Worker has a key (Haiku
    * checks it, Opus reads it from scratch); an answer is kept only if it passes and keeps every part
@@ -291,7 +291,7 @@ function Scanner() {
           const s = pages[p].pointScale ?? 1;
           for (const l of onPage) await add(p, { left: l.box[0] * s, top: l.box[1] * s, right: l.box[2] * s, bottom: l.box[3] * s }, l);
         } else {
-          // 2. A photo or scanned page: the lines found by where the ink is, with Abụ's own model.
+          // 2. A photo or scanned page: the lines found by where the ink is, with SolfaScores' own model.
           let onPicture: FoundLine[] = [];
           try {
             const found = await findLinesOwn(pages[p].canvas, partsWanted);
@@ -299,7 +299,7 @@ function Scanner() {
             pages[p] = { ...pages[p], canvas: found.page };
             onPicture = found.lines;
           } catch {
-            // Abụ's reader didn't load: Claude finds the lines if it can.
+            // SolfaScores' reader didn't load: Claude finds the lines if it can.
           }
           if (!onPicture.length && ai.anthropic) {
             // 3. The last resort: Claude finds the lines.
@@ -310,7 +310,7 @@ function Scanner() {
           }
           for (const l of onPicture) await add(p, l.box, l);
           // The heading above the first page's music (title, composer, key, time), read by Cloudflare's reader:
-          // Abụ's model reads only notes. On 51 handwritten pages it found the time on 28, all right, and the key
+          // SolfaScores' model reads only notes. On 51 handwritten pages it found the time on 28, all right, and the key
           // on 36 of 50, one wrong.
           if (p === 0 && ai.cloudflare && onPicture.length && (!head.title || !head.key || !head.time)) {
             const h = pages[p].height;
@@ -334,7 +334,7 @@ function Scanner() {
       }
       setHeading(head);
 
-      // Abụ's own model reads the lines found in pictures, in the browser (free).
+      // SolfaScores' own model reads the lines found in pictures, in the browser (free).
       setStage('reading');
       const waiting = found.filter((l) => l.status === 'waiting');
       for (let i = 0; i < waiting.length; i++) {
@@ -345,7 +345,7 @@ function Scanner() {
           waiting[i].draft = '';
         }
       }
-      // Rows of words in pictures: Abụ's model reads only notes, so Cloudflare's reader reads them.
+      // Rows of words in pictures: SolfaScores' model reads only notes, so Cloudflare's reader reads them.
       if (ai.cloudflare) {
         const rows = waiting.flatMap((l) => l.wordRows.map((w, k) => ({ l, w, k })));
         let next = 0;
@@ -479,7 +479,7 @@ function ChooseStep(props: {
             <ScanIcon color={colors.link} />
             <Text style={styles.heroTitle}>Turn a sol-fa sheet into a song</Text>
             <View style={styles.steps}>
-              {['Photograph or choose the sheet', 'Abụ reads every line', 'You check it, then save'].map((s, i) => (
+              {['Photograph or choose the sheet', 'SolfaScores reads every line', 'You check it, then save'].map((s, i) => (
                 <View key={s} style={styles.step}>
                   <View style={styles.stepNo}>
                     <Text style={styles.stepNoText}>{i + 1}</Text>
@@ -539,7 +539,7 @@ function ChooseStep(props: {
           </Card>
           {error ? <ErrorText message={error} /> : null}
           <Button label="Read the sheet" onPress={props.onRead} />
-          <Text style={styles.tip}>Abụ reads the sheet itself, and asks an AI only about lines it can’t get right. Then you check each line before anything is saved.</Text>
+          <Text style={styles.tip}>SolfaScores reads the sheet itself, and asks an AI only about lines it can’t get right. Then you check each line before anything is saved.</Text>
         </>
       )}
       {pagesLeft !== undefined ? <Text style={[styles.tip, { textAlign: 'center' }]}>You can scan {pagesLeft} more page{pagesLeft === 1 ? '' : 's'} today.</Text> : null}
@@ -634,9 +634,9 @@ interface CheckProps {
 
 const READ_BY: Record<NonNullable<Line['via']>, string> = {
   text: 'Read from the PDF’s own text.',
-  own: 'Read by Abụ’s own reader.',
-  cloudflare: 'Read by Abụ’s own reader, corrected by Cloudflare’s AI.',
-  haiku: 'Read by Abụ’s own reader, corrected by Claude.',
+  own: 'Read by SolfaScores itself.',
+  cloudflare: 'Read by SolfaScores, corrected by Cloudflare’s AI.',
+  haiku: 'Read by SolfaScores, corrected by Claude.',
   strong: 'Read by Claude.',
 };
 
@@ -795,7 +795,7 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
         <Card style={styles.flush}>
           <View style={[styles.rowBetween, styles.pad]}>
             <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-              <Kicker>What Abụ read</Kicker>
+              <Kicker>What SolfaScores read</Kicker>
               <Text style={styles.small}>Tap a row to fix it.</Text>
               {/* Each part by its colour, as in the score. */}
               <View style={styles.legend}>

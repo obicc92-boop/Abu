@@ -133,7 +133,7 @@ function Editor({ song, draft }: { song?: Song; draft: ScanDraft | null }) {
       />
       {!editing && !draft && Platform.OS === 'web' ? (
         <Card tone="sand">
-          <Body>Have the sheet as a PDF or photo? Abụ can read it for you to check.</Body>
+          <Body>Have the sheet as a PDF or photo? SolfaScores can read it for you to check.</Body>
           <Button small kind="ghost" label="Scan a sheet instead" onPress={() => router.push('/scan')} style={{ alignSelf: 'flex-start' }} />
         </Card>
       ) : null}
@@ -233,7 +233,7 @@ function Editor({ song, draft }: { song?: Song; draft: ScanDraft | null }) {
             <Chip label="Just me" on={from === null} onPress={() => setFrom(null)} />
           </View>
           <Body muted>
-            {from ? 'Everyone in the group can fix the sol-fa later.' : 'Saved to My songs. Every song on Abụ is open to everyone.'}
+            {from ? 'Everyone in the group can fix the sol-fa later.' : 'Saved to My songs. Every song on SolfaScores is open to everyone.'}
           </Body>
           {canAddToRep ? (
             <View style={styles.toggle}>
@@ -283,7 +283,7 @@ function Help({ onExample }: { onExample: () => void }) {
     'd\' is the high doh and t1 the low ti (d¹ and t₁ work too).',
     '[Verse] or [Chorus] on its own line starts a section.',
     'Key change: key: D on its own line before the bar, or the bridge note as printed, old name = new name (s=d).',
-    'Write tenor as on the sheet; Abụ plays it an octave lower.',
+    'Write tenor as on the sheet; SolfaScores plays it an octave lower.',
   ];
   return (
     <View style={styles.help}>

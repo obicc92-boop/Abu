@@ -2,7 +2,7 @@
 import { createAuthClient } from 'better-auth/react';
 
 export const authClient = createAuthClient({
-  baseURL: `${typeof window === 'undefined' ? 'https://abu.adalingo.workers.dev' : window.location.origin}/api/auth`,
+  baseURL: `${typeof window === 'undefined' ? 'https://solfascores.com' : window.location.origin}/api/auth`,
 });
 
 /** The browser sends the cookie itself. */

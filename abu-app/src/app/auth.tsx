@@ -89,7 +89,7 @@ export default function Auth() {
       </Card>
       <Pressable onPress={() => (setError(null), setMode(signingUp ? 'sign-in' : 'sign-up'))} accessibilityRole="button" style={styles.switch}>
         <Body muted style={{ textAlign: 'center' }}>
-          {signingUp ? 'Already have an account? ' : 'New to Abụ? '}
+          {signingUp ? 'Already have an account? ' : 'New to SolfaScores? '}
           <Text style={styles.switchStrong}>{signingUp ? 'Sign in' : 'Create an account'}</Text>
         </Body>
       </Pressable>

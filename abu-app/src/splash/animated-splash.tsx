@@ -2,7 +2,7 @@
  * The opening animation. Its first frame matches the still splash screen
  * (red, with the music book in the middle), so the hand-over is seamless.
  * Then the book bounces, a glow and sound rings spread from it, notes and
- * sol-fa syllables burst out across the screen, gold glitter twinkles, "Abụ"
+ * sol-fa syllables burst out across the screen, gold glitter twinkles, "SolfaScores"
  * rises in, and everything fades into the app. About two seconds; a tap skips
  * it, and phones set to reduce motion get a plain fade.
  */
@@ -87,7 +87,7 @@ export function AnimatedSplash({ onDone }: { onDone: () => void }) {
 
   return (
     <Animated.View style={[styles.root, rootStyle]}>
-      <Pressable style={styles.fill} onPress={skip} accessibilityRole="button" accessibilityLabel="Abụ. Tap to skip">
+      <Pressable style={styles.fill} onPress={skip} accessibilityRole="button" accessibilityLabel="SolfaScores. Tap to skip">
         {reduceMotion ? null : (
           <>
             <Glow />
@@ -265,7 +265,7 @@ function Wordmark() {
   const style = useAnimatedStyle(() => ({ opacity: a.value, transform: [{ translateY: 14 * (1 - a.value) }] }));
   return (
     <Animated.View style={[styles.wordmarkBox, style]}>
-      <Text style={styles.wordmark}>Abụ</Text>
+      <Text style={styles.wordmark}>SolfaScores</Text>
     </Animated.View>
   );
 }

@@ -1,8 +1,8 @@
 /**
- * Abụ's own row reader, the parts that are plain logic (abu-reader/train has
+ * SolfaScores' own row reader, the parts that are plain logic (abu-reader/train has
  * the model and its training; pipeline.py is the same steps in Python):
  * finding the rows in a picture of a line of music, turning the model's
- * output into tokens, and tokens into Abụ text.
+ * output into tokens, and tokens into SolfaScores text.
  */
 
 export interface Gray {
@@ -540,7 +540,7 @@ export function barsFromTable(
 
 const NOTES = new Set(['d', 'r', 'm', 'f', 's', 'l', 't', 'de', 're', 'fe', 'se', 'le', 'ra', 'ma', 'lo', 'ta']);
 
-/** Tokens as an Abụ row: "s1 | d :-.r /m :d' |". */
+/** Tokens as a SolfaScores row: "s1 | d :-.r /m :d' |". */
 export function toText(tokens: string[]): string {
   let out = '';
   for (let i = 0; i < tokens.length; i++) {

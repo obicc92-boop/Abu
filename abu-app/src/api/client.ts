@@ -1,5 +1,5 @@
 /**
- * The Abụ API (the Cloudflare Worker in ../abu-api). Every call sends the
+ * The SolfaScores API (the Cloudflare Worker in ../abu-api). Every call sends the
  * session; errors come back with a message that's safe to show.
  */
 import { authCookie } from '@/auth/client';
@@ -343,14 +343,14 @@ export const api = {
     if (o.key) q.set('key', o.key);
     return request<ScanLineReading>(`/scan/line?${q}`, { method: 'POST', body: image, headers: { 'Content-Type': 'image/jpeg' } });
   },
-  /** Haiku checks the reading Abụ's own model made of a line (a JPEG), fixing what it got wrong. */
+  /** Haiku checks the reading SolfaScores' own model made of a line (a JPEG), fixing what it got wrong. */
   scanCheck: (image: Blob, o: { parts: string[]; time?: string; key?: string; draft: string }) => {
     const q = new URLSearchParams({ parts: o.parts.join(','), draft: o.draft });
     if (o.time) q.set('time', o.time);
     if (o.key) q.set('key', o.key);
     return request<ScanLineReading>(`/scan/check?${q}`, { method: 'POST', body: image, headers: { 'Content-Type': 'image/jpeg' } });
   },
-  /** Cloudflare's reader corrects a line Abụ's own model read that fails the checker (a JPEG of the line). */
+  /** Cloudflare's reader corrects a line SolfaScores' own model read that fails the checker (a JPEG of the line). */
   scanFix: (image: Blob, o: { parts: string[]; time?: string; key?: string; draft: string }) => {
     const q = new URLSearchParams({ parts: o.parts.join(','), draft: o.draft });
     if (o.time) q.set('time', o.time);
@@ -452,5 +452,5 @@ export function inviteLink(code: string): string {
 
 /** The ready-made WhatsApp message for inviting members. */
 export function inviteMessage(groupName: string, code: string): string {
-  return `Join ${groupName} on Abụ to learn your part and see our song orders. Open ${inviteLink(code)} or enter the code ${code}.`;
+  return `Join ${groupName} on SolfaScores to learn your part and see our song orders. Open ${inviteLink(code)} or enter the code ${code}.`;
 }

@@ -1,7 +1,7 @@
 /**
  * After `expo export`, makes the website work without data. Workbox (Expo's
  * recommendation) writes dist/sw.js, a service worker that keeps every file
- * of this build on the phone, versioned, so Abụ opens offline and each deploy
+ * of this build on the phone, versioned, so SolfaScores opens offline and each deploy
  * replaces the old files cleanly. Original sheets are kept too: the network
  * first, the saved copy when there's no connection.
  *

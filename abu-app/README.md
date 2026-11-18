@@ -1,4 +1,4 @@
-# Abụ app
+# SolfaScores app
 
 Expo (SDK 58) + Expo Router + TypeScript. Web first, then Android and iOS from the same code. See `../CLAUDE.md` for the product decisions.
 

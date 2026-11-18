@@ -126,7 +126,7 @@ function EventView({ details }: { details: EventDetails }) {
         onPress={() =>
           void Linking.openURL(
             whatsappUrl(
-              `${e.title}: ${fmtDate(e.starts_at)} at ${fmtTime(e.starts_at)}${e.venue ? `, ${e.venue}` : ''}.${items.length ? ' The song order is on Abụ:' : ''} ${eventLink(e.id)}`,
+              `${e.title}: ${fmtDate(e.starts_at)} at ${fmtTime(e.starts_at)}${e.venue ? `, ${e.venue}` : ''}.${items.length ? ' The song order is on SolfaScores:' : ''} ${eventLink(e.id)}`,
             ),
           )
         }
@@ -204,7 +204,7 @@ function WhoIsComing({ details }: { details: EventDetails }) {
   const cant = people.filter((m) => reply.get(m.user_id) === 'cant');
   const none = people.filter((m) => !reply.has(m.user_id));
   const names = (list: typeof people) => list.map((m) => m.display_name).join(', ');
-  const reminder = `Please reply on Abụ: are you coming to ${e.title} on ${fmtDate(e.starts_at)} at ${fmtTime(e.starts_at)}? Tap Going or Can’t come: ${eventLink(e.id)}`;
+  const reminder = `Please reply on SolfaScores: are you coming to ${e.title} on ${fmtDate(e.starts_at)} at ${fmtTime(e.starts_at)}? Tap Going or Can’t come: ${eventLink(e.id)}`;
 
   return (
     <Card>

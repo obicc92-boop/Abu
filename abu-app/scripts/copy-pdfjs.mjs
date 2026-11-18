@@ -1,7 +1,7 @@
 /**
  * Copies pdf.js and ONNX Runtime Web from node_modules into public/pdfjs/ and
- * public/ort/, so the web app can read PDFs and run Abụ's own row reader for
- * scanning from Abụ's own site (no other server involved). Runs
+ * public/ort/, so the web app can read PDFs and run SolfaScores' own row reader for
+ * scanning from SolfaScores' own site (no other server involved). Runs
  * before every web build; the copies aren't committed (see .gitignore). Only
  * someone scanning a PDF downloads them, and they're left out of the offline
  * copy of the app (scripts/offline-build.mjs).
@@ -22,7 +22,7 @@ for (const f of ['openjpeg.wasm', 'openjpeg_nowasm_fallback.js', 'jbig2.wasm', '
 cpSync(join(from, 'standard_fonts'), join(to, 'standard_fonts'), { recursive: true });
 console.log('pdf.js copied to public/pdfjs');
 
-// ONNX Runtime's WebAssembly build, which runs Abụ's own row reader (public/reader/rows.onnx) in the browser.
+// ONNX Runtime's WebAssembly build, which runs SolfaScores' own row reader (public/reader/rows.onnx) in the browser.
 const ort = join(app, 'node_modules', 'onnxruntime-web', 'dist');
 const ortTo = join(app, 'public', 'ort');
 mkdirSync(ortTo, { recursive: true });

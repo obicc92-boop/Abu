@@ -1,5 +1,5 @@
 /**
- * Abụ's own row reader in the browser: the small model trained in
+ * SolfaScores' own row reader in the browser: the small model trained in
  * abu-reader/train (public/reader/rows.onnx) run by ONNX Runtime's WebAssembly
  * build (public/ort, copied at build time), free and on the phone. It reads a
  * line's rows of notes; Haiku then checks the reading against the picture.
@@ -34,7 +34,7 @@ function script(src: string): Promise<void> {
     const s = document.createElement('script');
     s.src = src;
     s.onload = () => resolve();
-    s.onerror = () => reject(new Error('Abụ’s reader didn’t load. Check your connection.'));
+    s.onerror = () => reject(new Error('The sheet reader didn’t load. Check your connection.'));
     document.head.appendChild(s);
   });
 }
@@ -50,7 +50,7 @@ function reader() {
     const [session, meta] = await Promise.all([
       ort.InferenceSession.create('/reader/rows.onnx', { executionProviders: ['wasm'] }),
       fetch('/reader/rows.json').then((r) => {
-        if (!r.ok) throw new Error('Abụ’s reader didn’t load.');
+        if (!r.ok) throw new Error('The sheet reader didn’t load.');
         return r.json() as Promise<Meta>;
       }),
     ]);
@@ -98,7 +98,7 @@ function band(canvas: HTMLCanvasElement, row: RowBox, meta: Meta): { data: Float
   return { data, width: padded, steps: Math.floor(width / meta.stride), left, scale: w / width };
 }
 
-/** A line's rows of notes, read by Abụ's own model: one row of Abụ text per part, and how sure it was. */
+/** A line's rows of notes, read by SolfaScores' own model: one row of SolfaScores text per part, and how sure it was. */
 export async function readLineOwn(canvas: HTMLCanvasElement, parts: string[], wordsRows = 1): Promise<{ text: string; sure: number }> {
   const { ort, session, meta } = await reader();
   const gray = grayOf(canvas);
@@ -134,7 +134,7 @@ const FIND_EDGE = 1200;
 
 /**
  * The lines of music on a page picture, found by where the ink is and read
- * by Abụ's own model to tell rows of notes from rows of words (page-lines.ts;
+ * by SolfaScores' own model to tell rows of notes from rows of words (page-lines.ts;
  * no AI). `parts` is how many voice parts each line has, or 0 to work it
  * out. A tilted page (a photo) is straightened first, and comes back as
  * `page` to cut the lines from. Boxes are in the page's pixels; each row of

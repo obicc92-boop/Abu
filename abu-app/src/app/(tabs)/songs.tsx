@@ -1,5 +1,5 @@
 /**
- * Songs: the library. Every song shared on Abụ is open to everyone, signed in
+ * Songs: the library. Every song shared on SolfaScores is open to everyone, signed in
  * or not. Filters: your group's repertoire, My songs, songs with sol-fa, tags.
  */
 import { useQuery } from '@tanstack/react-query';
@@ -54,7 +54,7 @@ export default function Songs() {
     <Page>
       <TopBar
         title="Songs"
-        subtitle="Every song shared on Abụ is open to you."
+        subtitle="Every song shared on SolfaScores is open to you."
         right={
           signedIn ? (
             <View style={{ flexDirection: 'row', gap: 6 }}>

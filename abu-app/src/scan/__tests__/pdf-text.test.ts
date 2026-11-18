@@ -18,7 +18,7 @@ describe('rows of notes as typed', () => {
     expect(isSolfa('O come let us sing')).toBe(false);
   });
 
-  it('writes a row in Abụ’s format', () => {
+  it('writes a row in SolfaScores’ format', () => {
     // Without a table, a typed "|" is a bar line.
     expect(toAbu('d :r |m :f', false)).toBe('d :r | m :f |');
     // In a table, the borders (¦) are the bars and a typed "|" is the medium accent.

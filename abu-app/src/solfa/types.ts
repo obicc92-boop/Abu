@@ -78,7 +78,7 @@ export interface KeyChange {
 export interface Tempo {
   /** As written, e.g. "84" or "Adagio". */
   text: string;
-  /** Beats per minute, or null for words Abụ can't turn into a speed ("Joyfully"). */
+  /** Beats per minute, or null for words SolfaScores can't turn into a speed ("Joyfully"). */
   bpm: number | null;
 }
 

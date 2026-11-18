@@ -1,6 +1,6 @@
 /**
  * Pages of a sheet as pictures, in the browser: a PDF is drawn page by page
- * with pdf.js (served from Abụ's own site, public/pdfjs), with its own text
+ * with pdf.js (served from SolfaScores' own site, public/pdfjs), with its own text
  * and drawn lines kept for reading typed sheets (pdf-text.ts); a photo is
  * turned the right way up and kept. Lines are cut out of the pages to be read.
  */

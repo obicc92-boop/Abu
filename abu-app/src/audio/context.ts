@@ -6,7 +6,7 @@ import type * as AudioApi from 'react-native-audio-api';
 
 import type { AudioContextLike } from './types';
 
-export const NO_AUDIO_MESSAGE = 'Sound needs the Abụ app build. It doesn’t play in Expo Go.';
+export const NO_AUDIO_MESSAGE = 'Sound needs the SolfaScores app build. It doesn’t play in Expo Go.';
 
 let shared: AudioContextLike | null = null;
 

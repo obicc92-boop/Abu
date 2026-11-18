@@ -1,4 +1,4 @@
-/** On phones Abụ is an app already: nothing to install, and updates come from the store. */
+/** On phones SolfaScores is an app already: nothing to install, and updates come from the store. */
 export interface PwaState {
   updateReady: boolean;
   canInstall: boolean;

@@ -1,9 +1,9 @@
 /**
- * Joins the lines read from a scanned sheet into one song in Abụ's format.
+ * Joins the lines read from a scanned sheet into one song in SolfaScores' format.
  *
  * Many sheets print the upbeat of a line in the first column of the next
  * line and leave the last beat of the line before it empty (or short).
- * Read line by line, each line then starts with a short bar, which Abụ's
+ * Read line by line, each line then starts with a short bar, which SolfaScores'
  * checker only allows at the very start of a song, so the upbeat goes back
  * where it's sung, with its words.
  */

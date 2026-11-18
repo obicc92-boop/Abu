@@ -1,10 +1,10 @@
-# Abụ app plan
+# SolfaScores app plan
 
 Agreed with the owner on 11 November 2026. It covers how the app is organised, from first open to every tab, and the look. The decisions table in `CLAUDE.md` is the short version; the prototype (`prototype/index.html`) still shows the detailed behaviour of screens that already exist there.
 
-## What Abụ is for
+## What SolfaScores is for
 
-Choirs and music groups that read tonic sol-fa use Abụ to learn their parts, run rehearsals and services, and organise the group. The first users are Nigerian church choirs (Catholic, Anglican, Pentecostal) and bands; then the rest of Africa and beyond.
+Choirs and music groups that read tonic sol-fa use SolfaScores to learn their parts, run rehearsals and services, and organise the group. The first users are Nigerian church choirs (Catholic, Anglican, Pentecostal) and bands; then the rest of Africa and beyond.
 
 What sets it apart from the choir apps that exist abroad (cori, Choir Genius, Chorus Connection, Chorilo):
 
@@ -43,12 +43,12 @@ People with no group keep the same tab positions. **Schedule** becomes **Setlist
 
 Goal: a new member hears their own part within a minute.
 
-1. **Welcome:** the Abụ mark and name on the red motif, the line "Learn your part. Keep your choir together.", and three large choices:
+1. **Welcome:** the SolfaScores mark and name on the red motif, the line "Learn your part. Keep your choir together.", and three large choices:
    - I have a group code or link
    - I lead a choir or band
    - Just me
 
-   A fourth, **Look around first**, lets anyone browse and play the public library without an account. Abụ asks them to sign up only when they save a song or join a group.
+   A fourth, **Look around first**, lets anyone browse and play the public library without an account. SolfaScores asks them to sign up only when they save a song or join a group.
 2. **Sign in** with Google or email.
 3. **Join a group:**
    - An invite link from the choir's WhatsApp group fills in the code; a code can also be typed.
@@ -84,7 +84,7 @@ Goal: a new member hears their own part within a minute.
 
 ### Songs
 - **Search** by title, first line, composer or tag.
-- **Views:** Our repertoire, All of Abụ, My saved songs.
+- **Views:** Our repertoire, All of SolfaScores, My saved songs.
 - **Filters:**
   - has sol-fa
   - language: Igbo, Yoruba, Hausa, English, Latin, Pidgin
@@ -159,7 +159,7 @@ Drafts: `design/brand-draft.html` (sources in `design/brand/`).
   - words beside icons, never icons alone
 - **Small moments:** the beat highlight, a soft vibration on taps, a gold tick for "I know my part".
 - **Opening animation** (built): the still splash hands over to an animation of the same frame.
-  - The book bounces, a glow and sound rings spread from it, notes and sol-fa syllables burst out across the screen with gold glitter, and "Abụ" rises in crowned with sparkles.
+  - The book bounces, a glow and sound rings spread from it, notes and sol-fa syllables burst out across the screen with gold glitter, and "SolfaScores" rises in crowned with sparkles.
   - About two seconds, and a tap skips it.
   - A plain fade when the phone is set to reduce motion; once per visit on the web.
   - Code: `abu-app/src/splash/`.
@@ -224,12 +224,12 @@ Known gaps in the phone app: it keeps songs and orders offline but not sheets ye
 
 **2. Onboarding the pilot choir.**
 
-1. The choirmaster creates the choir in Abụ (the web app at abu.adalingo.workers.dev works today; installing it from Chrome puts it on the home screen).
+1. The choirmaster creates the choir in SolfaScores (the web app at solfascores.com works today; installing it from Chrome puts it on the home screen).
 2. At the next rehearsal, show the QR code (Group tab, then "Show QR code to scan at rehearsal"), or share the invite on the choir's WhatsApp group.
 3. Plan the next service and its song order, and switch on self check-in if wanted.
 4. After the first week, look at the To do, the replies and the attendance report, and note what the choir found hard.
 
-**3. Optional before the pilot:** an Abụ domain on Cloudflare instead of abu.adalingo.workers.dev (it can also send the sign-in emails later).
+**3. Done: the app's own domain.** SolfaScores is at solfascores.com (owner's decision, 18 November 2026), on the owner's Cloudflare account; the old address, abu.adalingo.workers.dev, sends browsers there. The same domain can send the sign-in emails later.
 
 ### What the owner needs to do
 
@@ -238,7 +238,7 @@ Everything runs on the owner's Cloudflare account, which Wrangler on the develop
 - **During milestone 2:**
   - Google sign-in needs an OAuth client in Google Cloud; Google's side can't live on Cloudflare. Step-by-step instructions will come at that point.
   - Email sign-in codes go out through Cloudflare's email service, which needs a domain on Cloudflare to send from.
-- **Before the pilot:** optionally, an Abụ domain on Cloudflare to use instead of abu.adalingo.workers.dev. The same domain can send the sign-in emails.
+- **Before the pilot:** done. The domain is solfascores.com, and it can send the sign-in emails.
 
 ## Order of work after the MVP
 

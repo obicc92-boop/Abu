@@ -2,11 +2,11 @@
  * Typed sol-fa sheets read from the PDF's own text, with no pictures and no
  * AI: free, instant and exact when the sheet was typed (in Word, mostly) and
  * saved as a PDF. A port of abu-reader/scripts/pdf-text.py, which was
- * measured on the owner's sheets (92% of bars pass Abụ's checker as read).
+ * measured on the owner's sheets (92% of bars pass SolfaScores' checker as read).
  *
  * What it knows (from the owner's sheets):
  * - Table borders are bar lines. A typed "|" inside a bar is the medium
- *   accent, written "/" in Abụ. With no table, a typed "|" is a bar line.
+ *   accent, written "/" in SolfaScores. With no table, a typed "|" is a bar line.
  * - Octave marks are small figures or ticks set above or below a note, or
  *   the characters ¹ ² ₁ ₂. They become d' (up) and t1 (down).
  * - Four rows of notes are soprano, alto, tenor and bass, top to bottom.
@@ -63,7 +63,7 @@ export interface TypedSheet {
   key: string;
   time: string;
   /**
-   * Each line as Abụ text (S, A, T, B rows with W rows of words), with its parts and where it's printed;
+   * Each line as SolfaScores text (S, A, T, B rows with W rows of words), with its parts and where it's printed;
    * `lined` is the same with the parts' bar lines lined up by where they're printed, when that differs.
    */
   lines: { page: number; box: TypedLine['box']; parts: string[]; words: number; text: string; lined?: string }[];
@@ -665,7 +665,7 @@ const LABELS = /(^|[\s|:/¦┆])(?:CHR?|CHORUS|Chorus|VERSE|Verse|REFRAIN|Refrai
 /** A run of letters that sol-fa syllables can make ("rm", "d't"): anything else in a row of notes is a word. */
 const NOTE_RUN = new RegExp(`^(?:${NOTE})+$`);
 
-/** A row of notes as typed, in Abụ's format. */
+/** A row of notes as typed, in SolfaScores' format. */
 export function toAbu(text: string, drawnBars: boolean): string {
   let t = text.replace(/[–—−‒’ʼ]/g, (c) => DASHES[c]);
   // The click letter "ǀ" right after a note is a low octave mark ("sǀ" is s1); on its own, a bar line.
@@ -930,7 +930,7 @@ export function readSystems(pages: PageText[]): { header: string[]; systems: Sys
   return { header, systems, printed, music };
 }
 
-/** A typed sheet read from its pages' text: the heading, and each line in Abụ's format with where it's printed. */
+/** A typed sheet read from its pages' text: the heading, and each line in SolfaScores' format with where it's printed. */
 export function readTypedSheet(pages: PageText[]): TypedSheet {
   const { header, systems, printed, music } = readSystems(pages);
   const { key, time } = headerInfo(header);

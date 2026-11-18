@@ -40,13 +40,14 @@ export async function verifyPassword({ hash, password }: { hash: string; passwor
 
 function build(env: Env) {
   return betterAuth({
-    appName: 'Abụ',
+    appName: 'SolfaScores',
     database: env.DB,
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,
     basePath: '/api/auth',
-    // The website itself, and the phone apps (abu:// deep links).
-    trustedOrigins: [env.BETTER_AUTH_URL, 'abu://'],
+    // The website itself, its old address (pages opened there before the move to
+    // solfascores.com, and the app installed from it), and the phone apps (solfascores:// links).
+    trustedOrigins: [env.BETTER_AUTH_URL, 'https://abu.adalingo.workers.dev', 'solfascores://'],
     emailAndPassword: {
       enabled: true,
       minPasswordLength: 8,

@@ -262,14 +262,14 @@ function OnThisPhone() {
     <Card>
       <Kicker>On this phone</Kicker>
       {pwa.installed ? (
-        <Text style={styles.small}>Abụ is installed on this phone, so it opens like an app, even without data.</Text>
+        <Text style={styles.small}>SolfaScores is installed on this phone, so it opens like an app, even without data.</Text>
       ) : pwa.canInstall ? (
         <>
-          <Text style={styles.small}>Install Abụ to open it like an app from your home screen. It works without data in church.</Text>
-          <Button small label="Install Abụ" onPress={() => void install()} style={{ alignSelf: 'flex-start' }} />
+          <Text style={styles.small}>Install SolfaScores to open it like an app from your home screen. It works without data in church.</Text>
+          <Button small label="Install SolfaScores" onPress={() => void install()} style={{ alignSelf: 'flex-start' }} />
         </>
       ) : pwa.ios ? (
-        <Text style={styles.small}>To install Abụ on this iPhone or iPad: in Safari, tap Share, then “Add to Home Screen”.</Text>
+        <Text style={styles.small}>To install SolfaScores on this iPhone or iPad: in Safari, tap Share, then “Add to Home Screen”.</Text>
       ) : null}
 
       {signedIn ? (
@@ -278,7 +278,7 @@ function OnThisPhone() {
           <Text style={styles.small}>
             {summary
               ? `${summary.songs} ${summary.songs === 1 ? 'song' : 'songs'}, ${summary.orders} ${summary.orders === 1 ? 'song order' : 'song orders'} for the next three weeks, ${summary.notices} ${summary.notices === 1 ? 'notice' : 'notices'} and ${summary.sheets} ${summary.sheets === 1 ? 'sheet' : 'sheets'}. Updated ${sinceText(summary.at)}.`
-              : 'Nothing saved yet. Abụ saves your coming services, their songs and your notices while you’re online.'}
+              : 'Nothing saved yet. SolfaScores saves your coming services, their songs and your notices while you’re online.'}
             {summary?.sheetsWaiting ? ` ${summary.sheetsWaiting} ${summary.sheetsWaiting === 1 ? 'sheet waits' : 'sheets wait'} for Wi-Fi.` : ''}
           </Text>
           {save.error ? <ErrorText message={save.error.message} /> : null}
@@ -440,9 +440,9 @@ function About() {
   const version = Constants.expoConfig?.version;
   return (
     <Card tone="sand">
-      <Kicker>About Abụ</Kicker>
+      <Kicker>About SolfaScores</Kicker>
       <Text style={styles.small}>
-        Abụ means “song” in Igbo. Learn your part in tonic sol-fa, and keep your choir together.{version ? ` Version ${version}.` : ''}
+        Learn your part in tonic sol-fa, and keep your choir together.{version ? ` Version ${version}.` : ''}
       </Text>
       <Text style={styles.small}>Your practice is private to you. Leaders see only totals for each part ({['S', 'A', 'T', 'B'].map(partName).join(', ')}).</Text>
     </Card>

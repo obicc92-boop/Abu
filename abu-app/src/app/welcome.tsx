@@ -26,7 +26,7 @@ export default function Welcome() {
       <View style={styles.body}>
         <View style={styles.hero}>
           <BrandMark size={96} />
-          <Text style={styles.name}>Abụ</Text>
+          <Text style={styles.name}>SolfaScores</Text>
           <Text style={styles.tagline}>Learn your part. Keep your choir together.</Text>
         </View>
         <View style={styles.actions}>

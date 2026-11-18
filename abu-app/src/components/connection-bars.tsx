@@ -29,7 +29,7 @@ export function ConnectionBars() {
       ) : null}
       {online && updateReady ? (
         <View style={[styles.bar, styles.update]}>
-          <Text style={[styles.text, { flex: 1 }]}>A new version of Abụ is ready.</Text>
+          <Text style={[styles.text, { flex: 1 }]}>A new version of SolfaScores is ready.</Text>
           <Pressable onPress={applyUpdate} accessibilityRole="button" style={styles.button} hitSlop={6}>
             <Text style={styles.buttonText}>Update</Text>
           </Pressable>

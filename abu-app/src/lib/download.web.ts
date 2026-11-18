@@ -1,5 +1,5 @@
 /**
- * Downloads a file from Abụ's own API (signed in) without opening a blank tab:
+ * Downloads a file from SolfaScores' own API (signed in) without opening a blank tab:
  * a link with `download` saves it in place, and the session cookie goes with it.
  */
 export function download(url: string): void {

@@ -1,4 +1,4 @@
-/** On Home in a browser: offer to install Abụ, once, until it's installed or dismissed. */
+/** On Home in a browser: offer to install SolfaScores, once, until it's installed or dismissed. */
 import { useState } from 'react';
 import { Text, View } from 'react-native';
 
@@ -23,11 +23,11 @@ export function InstallHint() {
   };
   return (
     <Card>
-      <Kicker color={colors.redDeep}>Install Abụ</Kicker>
+      <Kicker color={colors.redDeep}>Install SolfaScores</Kicker>
       <Text style={styles.text}>
         {pwa.canInstall
-          ? 'Put Abụ on your home screen. It opens like an app and works without data in church.'
-          : 'Put Abụ on your home screen: in Safari, tap Share, then “Add to Home Screen”. It works without data in church.'}
+          ? 'Put SolfaScores on your home screen. It opens like an app and works without data in church.'
+          : 'Put SolfaScores on your home screen: in Safari, tap Share, then “Add to Home Screen”. It works without data in church.'}
       </Text>
       <View style={styles.row}>
         {pwa.canInstall ? <Button small label="Install" onPress={() => void install()} /> : null}

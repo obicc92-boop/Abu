@@ -475,7 +475,7 @@ describe('reading the model’s output', () => {
     expect(r.sure).toBeGreaterThan(0.99);
   });
 
-  it('writes tokens as an Abụ row', () => {
+  it('writes tokens as a SolfaScores row', () => {
     expect(toText(['s', '_', '|', 'd', ':', '-', '.', 'r', '/', 'm', ':', 'd', '^'])).toBe("s1 | d :-.r /m :d' |");
     expect(toText(['s', '_', '_', ':', 'd'])).toBe('s2 :d |');
     expect(toText([])).toBe('');

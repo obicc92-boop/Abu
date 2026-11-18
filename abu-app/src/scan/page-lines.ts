@@ -7,7 +7,7 @@
  * 1. `pageRows`: the page's rows of writing, from its ink. Ruled lines are
  *    set aside (kept as places where lines of music may split), rows that
  *    touch are split, slivers (underlines, slurs) dropped.
- * 2. Abụ's own model reads each row, which tells rows of notes from rows of
+ * 2. SolfaScores' own model reads each row, which tells rows of notes from rows of
  *    words (own-reader.web.ts).
  * 3. `groupLines`: on a page whose systems are boxed by ruled lines across
  *    it, the lines are cut there, each with its own number of parts (a
@@ -378,7 +378,7 @@ export interface RowRead {
   score: number;
   /** Beat marks (":") read in the row. */
   beats: number;
-  /** The row as read, in Abụ text (rows.ts `toText`). */
+  /** The row as read, in SolfaScores text (rows.ts `toText`). */
   text?: string;
   /** The row's height, in the page's pixels. */
   height?: number;

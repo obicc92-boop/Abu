@@ -226,7 +226,7 @@ function timeAndKey(c: { req: { query: (name: string) => string | undefined } })
   return { time: time || undefined, key: key || undefined };
 }
 
-/** Corrects a line Abụ's own model read that fails the checker (?draft=), with Cloudflare's reader; the body is the line's picture. */
+/** Corrects a line SolfaScores' own model read that fails the checker (?draft=), with Cloudflare's reader; the body is the line's picture. */
 app.post('/scan/fix', signedIn, async (c) => {
   cloudflareReady(c.env);
   const parts = lineParts(c);
@@ -285,7 +285,7 @@ app.post('/scan/line', signedIn, async (c) => {
   return c.json(await readLine(c.env, image, type, { parts, ...opts }));
 });
 
-/** Checks a line Abụ's own model read (?draft=, the reading as text), with the line's picture as the body. */
+/** Checks a line SolfaScores' own model read (?draft=, the reading as text), with the line's picture as the body. */
 app.post('/scan/check', signedIn, async (c) => {
   scanningReady(c.env);
   const parts = lineParts(c);

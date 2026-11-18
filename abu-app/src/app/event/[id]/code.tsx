@@ -52,7 +52,7 @@ export default function CheckInCodeScreen() {
           {code.data?.code ?? (code.error ? '' : '····')}
         </Text>
         {code.error ? <Text style={styles.note}>{code.error.message}</Text> : null}
-        <Text style={styles.note}>Members open this rehearsal in Abụ, tap “Check in” and enter the code.</Text>
+        <Text style={styles.note}>Members open this rehearsal in SolfaScores, tap “Check in” and enter the code.</Text>
         {e && !checkInOpen(e.starts_at) ? <Text style={styles.warn}>Check-in opens 3 hours before the start and closes 6 hours after.</Text> : null}
       </View>
       <View style={styles.foot}>

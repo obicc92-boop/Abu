@@ -1,5 +1,5 @@
 /**
- * The installable website: the service worker that keeps Abụ on the phone
+ * The installable website: the service worker that keeps SolfaScores on the phone
  * (scripts/offline-build.mjs writes it), "New version ready", and "Install".
  */
 import { useSyncExternalStore } from 'react';
@@ -12,7 +12,7 @@ interface InstallPrompt extends Event {
 export interface PwaState {
   /** A new version is downloaded and waits for "Update". */
   updateReady: boolean;
-  /** The browser can install Abụ (Android Chrome and others). */
+  /** The browser can install SolfaScores (Android Chrome and others). */
   canInstall: boolean;
   /** Opened from the home screen, as an app. */
   installed: boolean;
@@ -89,7 +89,7 @@ export function applyUpdate(): void {
   waiting.postMessage({ type: 'SKIP_WAITING' });
 }
 
-/** Shows the browser's own "Install Abụ?" question. Returns whether it was installed. */
+/** Shows the browser's own "Install SolfaScores?" question. Returns whether it was installed. */
 export async function install(): Promise<boolean> {
   if (!installPrompt) return false;
   const prompt = installPrompt;

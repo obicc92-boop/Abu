@@ -1,5 +1,5 @@
 /**
- * MusicXML (and compressed .mxl) to Abụ sol-fa: read the score, find the
+ * MusicXML (and compressed .mxl) to SolfaScores sol-fa: read the score, find the
  * soprano, alto, tenor and bass, write them as sol-fa, then check the text
  * plays back exactly the notes that were meant.
  */
@@ -26,7 +26,7 @@ export function unzipMxl(bytes: Uint8Array): string {
 }
 
 export interface Conversion extends SolfaText {
-  /** The text reads back as exactly the planned notes, with no errors from Abụ's checker. */
+  /** The text reads back as exactly the planned notes, with no errors from SolfaScores' checker. */
   verified: boolean;
   /** What the check found, if anything. */
   mismatches: string[];
@@ -45,7 +45,7 @@ export function musicXmlToSolfa(input: string | Uint8Array, opts: { barsPerLine?
 
 const isZip = (b: Uint8Array) => b[0] === 0x50 && b[1] === 0x4b;
 
-/** Reads the text back with Abụ's own reader and compares every note with the plan. */
+/** Reads the text back with SolfaScores' own reader and compares every note with the plan. */
 export function checkText(out: SolfaText): string[] {
   const parsed = parseSolfa(out.text);
   const problems = parsed.errors.map((e) => e.message);

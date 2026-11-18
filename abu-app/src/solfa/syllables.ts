@@ -4,7 +4,7 @@
  */
 
 /**
- * Semitones above doh for every syllable Abụ accepts.
+ * Semitones above doh for every syllable SolfaScores accepts.
  * Raised (Curwen): de re fe se le. Lowered: ra ma ta, with `ba` accepted as `ta`.
  * Also accepted because people type them: di ri fi si (raised), me (= ma),
  * lo (lowered lah), la (= l), te (= t).

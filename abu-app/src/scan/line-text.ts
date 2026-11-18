@@ -121,7 +121,7 @@ export function withWords(text: string, words: LineWords[]): string {
 
 /**
  * The line without a column of part names printed before its first bar
- * ("S", "A", "T", "B"), which Abụ's own model reads as bare notes or nothing:
+ * ("S", "A", "T", "B"), which SolfaScores' own model reads as bare notes or nothing:
  * only when every row's first column is one bare letter or empty (no beat or
  * octave marks), and at least one is empty. Otherwise null. The caller keeps
  * it only if the line then passes the checker (an upbeat column already does).

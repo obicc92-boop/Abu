@@ -94,7 +94,7 @@ export function splashParticles(seed = 2026, bursts = 20, sparkles = 34): { burs
       duration: Math.round(between(320, 480)),
     });
   }
-  // A small crown of glitter around "Abụ" as it rises in, under the book.
+  // A small crown of glitter around "SolfaScores" as it rises in, under the book.
   for (let i = 0; i < 6; i++) {
     glints.push({
       x: between(0.3, 0.7),

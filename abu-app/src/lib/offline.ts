@@ -1,7 +1,7 @@
 /**
  * Offline data. The query cache (songs, song orders, notices, your groups...)
  * is saved on the phone and restored when the app opens, so whatever you've
- * seen, or Abụ saved for upcoming services, is there without a connection.
+ * seen, or SolfaScores saved for upcoming services, is there without a connection.
  */
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
 import { onlineManager, QueryClient, type Query } from '@tanstack/react-query';

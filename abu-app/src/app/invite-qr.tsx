@@ -39,7 +39,7 @@ export default function InviteQrScreen() {
       {code ? (
         <View style={styles.middle}>
           <QrCode value={inviteLink(code)} size={260} />
-          <Text style={styles.note}>Point your phone camera at the code, then tap the link to join on Abụ.</Text>
+          <Text style={styles.note}>Point your phone camera at the code, then tap the link to join on SolfaScores.</Text>
           <Text style={styles.or}>Or enter the code</Text>
           <Text style={styles.code} accessibilityLabel={`Group code ${code.split('').join(' ')}`}>
             {code}

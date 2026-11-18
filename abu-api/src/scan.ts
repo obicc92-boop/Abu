@@ -1,17 +1,17 @@
 /**
  * The AI help for scanning sheets (see docs/scan-plan.md), used only where the
  * app can't do the job itself. The app reads typed PDFs from their own text
- * and finds and reads lines in pictures with Abụ's own model, in the browser.
- * Then, only for a line that still fails Abụ's checker:
+ * and finds and reads lines in pictures with SolfaScores' own model, in the browser.
+ * Then, only for a line that still fails SolfaScores' checker:
  *
  * 1. Cloudflare's own reader (Workers AI, Mistral Small 3.1) corrects it. It
- *    also reads rows of words in pictures, which Abụ's model can't.
+ *    also reads rows of words in pictures, which SolfaScores' model can't.
  * 2. Claude, only if the Worker has an Anthropic key: Haiku checks the line,
  *    and Opus reads it from scratch if that still fails. Haiku can also find
  *    the lines on a page the app couldn't.
  *
  * Measured in abu-reader/README.md. Claude answers in JSON to a fixed schema;
- * Cloudflare's reader answers in Abụ's own rows.
+ * Cloudflare's reader answers in SolfaScores' own rows.
  */
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -19,7 +19,7 @@ import { AppError, badRequest } from './errors';
 
 /** The strong reader: reads a line from scratch, for lines the cheaper path can't get right. */
 const STRONG = 'claude-opus-5-5';
-/** The cheap one: finds the lines on a page, and checks the reading Abụ's own model made of a line. */
+/** The cheap one: finds the lines on a page, and checks the reading SolfaScores' own model made of a line. */
 const CHEAP = 'claude-haiku-5-5';
 export const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
 export type ImageType = (typeof IMAGE_TYPES)[number];
@@ -85,11 +85,11 @@ export interface PageReading {
 
 /* ---------- Reading one line ---------- */
 
-export const LINE_SYSTEM = `You read one line of music from a picture of a tonic sol-fa choir sheet (typed or handwritten) and write it in Abụ's sol-fa text format. Copy exactly what is printed or written; never correct or improve the music.
+export const LINE_SYSTEM = `You read one line of music from a picture of a tonic sol-fa choir sheet (typed or handwritten) and write it in SolfaScores' sol-fa text format. Copy exactly what is printed or written; never correct or improve the music.
 
 The picture shows one line of music: one row of notes per part, top to bottom, often with rows of words between them. Give each row of notes, in the order given, with its part name.
 
-Abụ's format:
+SolfaScores' format:
 - \`|\` is a bar line. Table borders and vertical lines between bars are bar lines. Don't start a row with \`|\`; end every row with \`|\`.
 - \`:\` separates beats. The medium accent inside a bar (often typed as a short \`|\` or \`!\` within a table cell, or drawn as a short bar) is written \`/\`. So a 4-beat bar is \`d :r /m :f\`.
 - Inside a beat, \`.\` splits it into halves and \`,\` splits a half into quarters: \`d.r\`, \`d.,r\`, \`d,r.m,f\`, \`.d\` (nothing in the first half). Three notes in one beat: \`d.r.m\`.
@@ -140,7 +140,7 @@ export const CHECK_SYSTEM = `${LINE_SYSTEM}
 A small model has already read this line; its reading comes with the picture. It is usually close, but check it bar by bar against the picture and correct every mistake: wrong or missing notes, octave marks, holds, rests, beat marks and bar lines. Keep what it got right exactly as it is. List the bars you corrected or still can't read with confidence as doubts.`;
 
 export interface LineReading {
-  /** The line in Abụ's format: one row per part, the words under the first. */
+  /** The line in SolfaScores' format: one row per part, the words under the first. */
   text: string;
   /** Bars the reader wasn't sure of, to check first. */
   doubts: { part: string; bar: number }[];
@@ -172,7 +172,7 @@ export function cleanPage(raw: { title?: string; composer?: string; key?: string
   return { title: one(raw.title), composer: one(raw.composer), key: one(raw.key).slice(0, 3), time: time ? `${time[1]}/${time[2]}` : '', lines };
 }
 
-/** The reading as Abụ text: "S  d :r |", with the words under the first row. */
+/** The reading as SolfaScores text: "S  d :r |", with the words under the first row. */
 export function lineText(raw: { rows?: { part?: string; notes?: string }[]; words?: string }, parts: string[]): string {
   const out: string[] = [];
   (raw.rows ?? []).forEach((row, i) => {
@@ -219,14 +219,14 @@ async function askCloudflare(env: Env, image: ArrayBuffer, type: ImageType, prom
     const message = String((e as Error)?.message ?? e);
     console.error('scan: Cloudflare reader failed', message);
     // The free daily allowance of Workers AI (on the Workers Free plan, calls stop there). Not a 429: that
-    // means Abụ's own allowance is used up, and the app stops reading; this one only skips this reader.
+    // means SolfaScores' own allowance is used up, and the app stops reading; this one only skips this reader.
     if (/4006|daily free allocation|neurons/i.test(message)) throw new AppError(503, 'Today’s free AI reading is used up. Check the rest of the lines by eye, or try tomorrow.');
     throw new AppError(503, 'Cloudflare’s reader is busy or out of reach. Try again in a minute.');
   }
   return (out?.choices?.[0]?.message?.content ?? out?.response ?? '').trim();
 }
 
-/** Cloudflare's reader's answer, rows as "S  d :r |" and "W  words", as a line in Abụ's format. */
+/** Cloudflare's reader's answer, rows as "S  d :r |" and "W  words", as a line in SolfaScores' format. */
 export function rowsAnswer(answer: string, parts: string[]): string {
   const rows: { part: string; notes: string }[] = [];
   let words = '';
@@ -242,7 +242,7 @@ export function rowsAnswer(answer: string, parts: string[]): string {
   return lineText({ rows, words }, parts);
 }
 
-/** Corrects a line Abụ's own model read that fails Abụ's checker (Cloudflare's reader). */
+/** Corrects a line SolfaScores' own model read that fails SolfaScores' checker (Cloudflare's reader). */
 export async function fixLine(env: Env, image: ArrayBuffer, type: ImageType, opts: { parts: string[]; time?: string; key?: string; draft: string }): Promise<LineReading> {
   const beats = opts.time?.split('/')[0];
   const prompt = [
@@ -387,7 +387,7 @@ export async function readPage(env: Env, image: ArrayBuffer, type: ImageType, wi
   return cleanPage(raw as Parameters<typeof cleanPage>[0], width, height);
 }
 
-/** One line of music, read into Abụ sol-fa. */
+/** One line of music, read into SolfaScores sol-fa. */
 export async function readLine(env: Env, image: ArrayBuffer, type: ImageType, opts: { parts: string[]; time?: string; key?: string }): Promise<LineReading> {
   const beats = opts.time?.split('/')[0];
   const prompt = [
@@ -401,7 +401,7 @@ export async function readLine(env: Env, image: ArrayBuffer, type: ImageType, op
   return shapeReading(raw, opts.parts);
 }
 
-/** Checks the reading Abụ's own model made of a line against its picture (Haiku), fixing what it got wrong. */
+/** Checks the reading SolfaScores' own model made of a line against its picture (Haiku), fixing what it got wrong. */
 export async function checkLine(env: Env, image: ArrayBuffer, type: ImageType, opts: { parts: string[]; time?: string; key?: string; draft: string }): Promise<LineReading> {
   const beats = opts.time?.split('/')[0];
   const prompt = [

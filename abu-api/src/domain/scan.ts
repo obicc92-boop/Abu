@@ -1,8 +1,8 @@
 /**
  * The daily allowance for scanning sheets. Reading costs money (a
- * handwritten line that fails Abụ's checker goes to Haiku, then Opus: about
+ * handwritten line that fails SolfaScores' checker goes to Haiku, then Opus: about
  * 2.7 US cents, measured 16 November 2026; a typed one about 1.5), so each
- * person, and Abụ as a whole, has a limit per day (UTC). Cloudflare's reader
+ * person, and SolfaScores as a whole, has a limit per day (UTC). Cloudflare's reader
  * (rows of words, a sheet's heading, first corrections) counts too.
  */
 import { AppError } from '../errors';
@@ -32,7 +32,7 @@ export async function useScan(db: D1Database, userId: string, use: ScanUse, limi
   }
   if (use === 'line') {
     const all = await db.prepare(`select coalesce(sum(lines), 0) as lines from scan_usage where day = ?`).bind(day).first<{ lines: number }>();
-    if ((all?.lines ?? 0) >= limits.allLines) throw new AppError(429, 'Abụ has read as many lines as it can today. Try again tomorrow.');
+    if ((all?.lines ?? 0) >= limits.allLines) throw new AppError(429, 'SolfaScores has read as many lines as it can today. Try again tomorrow.');
   }
   await db
     .prepare(

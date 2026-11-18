@@ -123,7 +123,7 @@ describe('format table: key', () => {
 
   it('reports a key it can’t read', () => {
     const song = parse(['key: Z', 'S  d :r /m :f |']);
-    expect(messages(song.errors)).toEqual(['Line 1: “Z” isn’t a key Abụ knows. Write it like “key: E♭” or “Doh is D”.']);
+    expect(messages(song.errors)).toEqual(['Line 1: “Z” isn’t a key SolfaScores knows. Write it like “key: E♭” or “Doh is D”.']);
   });
 });
 
@@ -148,12 +148,12 @@ describe('format table: time', () => {
     const song = parse(['S  s1 | d :- :m | r :d :r | m :- :- |'], {});
     expect(song.meta).toMatchObject({ time: '3/4', timeSource: 'guess' });
     expect(song.errors).toEqual([]);
-    expect(messages(song.warnings)).toEqual(['No time given, so Abụ guessed 3/4 from the bars. Add “time: 3/4” if that’s right.']);
+    expect(messages(song.warnings)).toEqual(['No time given, so SolfaScores guessed 3/4 from the bars. Add “time: 3/4” if that’s right.']);
   });
 
   it('reports a time it can’t read', () => {
     expect(messages(parse(['time: fast', 'S  d :r /m :f |']).errors)).toContain(
-      'Line 1: “fast” isn’t a time Abụ knows. Write it like “time: 4/4”.',
+      'Line 1: “fast” isn’t a time SolfaScores knows. Write it like “time: 4/4”.',
     );
   });
 });
@@ -180,7 +180,7 @@ describe('format table: barlines and beats', () => {
       'Soprano, bar 2 has 2 beats; 4/4 needs 4.',
       'Soprano, bar 3 has 2 beats; 4/4 needs 4.',
     ]);
-    expect(messages(song.warnings)).toContain('In Abụ, “|” is only a barline. For the half-bar accent, use “/”, e.g. “d :r /m :f |”.');
+    expect(messages(song.warnings)).toContain('In SolfaScores, “|” is only a barline. For the half-bar accent, use “/”, e.g. “d :r /m :f |”.');
   });
 });
 
@@ -249,7 +249,7 @@ describe('format table: octaves', () => {
     ]);
   });
 
-  it('warns when a paper-style “s,” low mark is typed, since “,” splits beats in Abụ', () => {
+  it('warns when a paper-style “s,” low mark is typed, since “,” splits beats in SolfaScores', () => {
     const song = parse(['S  d :s, /d :- |']);
     expect(messages(song.warnings)).toEqual(['Soprano, bar 1: in “s,” the comma splits a half beat. For a low note, write “s1”.']);
   });
@@ -471,7 +471,7 @@ describe('format table: repeats and jumps', () => {
     const song = parse(['S  {coda} d :r /m :f |']);
     expect(song.errors).toEqual([]);
     expect(song.events.S).toHaveLength(4);
-    expect(messages(song.warnings)).toEqual(['Line 1: “{coda}” isn’t a mark Abụ knows. Use {segno}, {ds}, {dc}, {fine}, {1.} or {2.}.']);
+    expect(messages(song.warnings)).toEqual(['Line 1: “{coda}” isn’t a mark SolfaScores knows. Use {segno}, {ds}, {dc}, {fine}, {1.} or {2.}.']);
   });
 });
 

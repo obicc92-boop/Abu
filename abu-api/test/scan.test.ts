@@ -45,7 +45,7 @@ describe('the daily allowance', () => {
     expect(await scanAllowance(env.DB, 'scan-a', limits)).toEqual({ pages: 0, lines: 0 });
   });
 
-  it('stops everyone once Abụ’s daily total is reached', async () => {
+  it('stops everyone once SolfaScores’ daily total is reached', async () => {
     await ensureUser(env.DB, { id: 'scan-b', name: 'Scanner B' });
     await ensureUser(env.DB, { id: 'scan-c', name: 'Scanner C' });
     const day = new Date().toISOString().slice(0, 10);
@@ -92,7 +92,7 @@ function cloudflare(answer: string, error?: string) {
 }
 
 describe('reading with Cloudflare’s reader', () => {
-  it('corrects a line the own model read, as rows in Abụ’s format', async () => {
+  it('corrects a line the own model read, as rows in SolfaScores’ format', async () => {
     const { env: withAi, run } = cloudflare('```\nS  s1 | d :-.r /m :d |\nA  s1 | d :t1 /d :d\nW  O come let us\n```');
     const r = await fixLine(withAi, JPEG.buffer, 'image/jpeg', { parts: ['S', 'A'], time: '4/4', key: 'G', draft: 'S  s1 | d :r /m :d |\nA  s1 | d :t1 /d :d |' });
     expect(r.text).toBe('S  s1 | d :-.r /m :d |\nW  O come let us\nA  s1 | d :t1 /d :d |');
@@ -185,7 +185,7 @@ describe('reading with Claude', () => {
     expect(request.messages[0].content[0].source).toMatchObject({ type: 'base64', media_type: 'image/jpeg' });
   });
 
-  it('reads a line into Abụ text with the words under the first row', async () => {
+  it('reads a line into SolfaScores text with the words under the first row', async () => {
     claudeReplies({
       rows: [
         { part: 'S', notes: 's1 | d :-.r /m :d | f :m /r :-' },
@@ -207,7 +207,7 @@ describe('reading with Claude', () => {
     expect(JSON.parse(String(fetch.mock.calls[0][1]?.body)).model).toBe('claude-opus-5-5');
   });
 
-  it('has Haiku check the reading Abụ’s own model made, with the picture', async () => {
+  it('has Haiku check the reading SolfaScores’ own model made, with the picture', async () => {
     const fetch = claudeReplies({ rows: [{ part: 'S', notes: "d :r /m :f | s :- /- :- |" }], words: 'Glo-ry to God', doubts: [{ part: 'S', bar: 1 }] });
     const line = await checkLine(withKey, JPEG.buffer, 'image/jpeg', { parts: ['S'], time: '4/4', draft: 'S  d :r /m :f | s :- /- :- |' });
     expect(line).toEqual({ text: 'S  d :r /m :f | s :- /- :- |\nW  Glo-ry to God', doubts: [{ part: 'S', bar: 1 }] });

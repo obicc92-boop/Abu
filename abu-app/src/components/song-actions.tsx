@@ -40,7 +40,7 @@ export function SongActions({ songId, song }: { songId: string; song?: Song }) {
 
   const share = () => {
     const title = song?.title ?? 'this song';
-    Linking.openURL(`https://wa.me/?text=${encodeURIComponent(`Learn your part for ${title} on Abụ: ${songLink(songId)}`)}`);
+    Linking.openURL(`https://wa.me/?text=${encodeURIComponent(`Learn your part for ${title} on SolfaScores: ${songLink(songId)}`)}`);
   };
 
   return (

@@ -55,7 +55,7 @@ interface MotifProps {
 }
 
 /**
- * The Abụ motif (adire rings and dots, uli lines), filling its parent.
+ * The SolfaScores motif (adire rings and dots, uli lines), filling its parent.
  * Put it first inside a card that has `overflow: 'hidden'`. Use it on the
  * welcome screen, the next-service card and empty screens only; never
  * behind the score, words or lists.

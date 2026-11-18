@@ -1,16 +1,18 @@
 {
   "expo": {
-    "name": "Abụ",
-    "slug": "abu",
+    "name": "SolfaScores",
+    "slug": "solfascores",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "abu",
+    "scheme": "solfascores",
     "userInterfaceStyle": "automatic",
     "ios": {
+      "bundleIdentifier": "com.solfascores.app",
       "icon": "./assets/images/icon.png"
     },
     "android": {
+      "package": "com.solfascores.app",
       "adaptiveIcon": {
         "backgroundColor": "#D93A1E",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

@@ -1,5 +1,5 @@
 /**
- * Writes soprano, alto, tenor and bass lines as Abụ sol-fa text (see
+ * Writes soprano, alto, tenor and bass lines as SolfaScores sol-fa text (see
  * docs/solfa-format.md): each beat in the simplest form that fits (whole,
  * halves, thirds, quarters or sixths), holds, rests, octave marks, raised and
  * lowered notes named from how they're spelt, and verse 1 under the soprano.
@@ -27,7 +27,7 @@ export interface SolfaText {
   bars: number;
   /** Where the text can't say exactly what the score says (rhythms rounded, time changes...). */
   problems: string[];
-  /** The notes the text should play, per part: the check compares Abụ's reading of the text with these. */
+  /** The notes the text should play, per part: the check compares SolfaScores' reading of the text with these. */
   planned: Record<string, PlannedNote[]>;
 }
 
@@ -58,7 +58,7 @@ const octaveMark = (o: number) => (o > 0 ? "'".repeat(Math.min(o, 2)) : o < 0 ? 
 
 type Slot = { kind: 'start'; token: string } | { kind: 'hold' } | { kind: 'rest' };
 
-/** One beat's slots as Abụ writes them: "d", "-", "", "d.r", "d.,r", "d.r.m", "d,r.m,f"... */
+/** One beat's slots as SolfaScores writes them: "d", "-", "", "d.r", "d.,r", "d.r.m", "d,r.m,f"... */
 function writeBeat(slots: Slot[]): string {
   const first = (s: Slot) => (s.kind === 'start' ? s.token : s.kind === 'hold' ? '-' : 'x');
   const later = (s: Slot, prevRest: boolean) => (s.kind === 'start' ? s.token : s.kind === 'rest' && !prevRest ? 'x' : '');
@@ -81,7 +81,7 @@ interface BeatNote {
 export function toSolfa(score: XScore, lines: VoiceLine[], opts: { barsPerLine?: number } = {}): SolfaText {
   const problems: string[] = [];
   const time = score.times[0] ?? { at: 0, beats: 4, beatType: 4 };
-  if (score.times.some((t) => t.beats !== time.beats || t.beatType !== time.beatType)) problems.push('The time signature changes; Abụ keeps one time per song.');
+  if (score.times.some((t) => t.beats !== time.beats || t.beatType !== time.beatType)) problems.push('The time signature changes; SolfaScores keeps one time per song.');
   const beatQ = 4 / time.beatType;
   const bpb = time.beats;
 
@@ -107,7 +107,7 @@ export function toSolfa(score: XScore, lines: VoiceLine[], opts: { barsPerLine?:
     return barStart[i] + shift[i] + (q - measures[i].start) / beatQ;
   };
 
-  // Keys: doh moves to the nearest place at each change, as Abụ's player does.
+  // Keys: doh moves to the nearest place at each change, as SolfaScores' player does.
   const keys = [...(score.keys.length ? score.keys : [{ at: 0, fifths: 0, mode: 'major' }])].sort((a, b) => a.at - b.at);
   const keyBars: { bar: number; name: string; semitone: number; doh: number }[] = [];
   for (const k of keys) {
@@ -117,7 +117,7 @@ export function toSolfa(score: XScore, lines: VoiceLine[], opts: { barsPerLine?:
     if (bar < 0) bar = measures.length - 1;
     const prev = keyBars[keyBars.length - 1];
     if (prev && prev.semitone === semitone) continue;
-    if (prev && Math.abs(measures[bar].start - k.at) > EPS) problems.push(`The key changes inside bar ${measures[bar].number}; Abụ changes key at the barline.`);
+    if (prev && Math.abs(measures[bar].start - k.at) > EPS) problems.push(`The key changes inside bar ${measures[bar].number}; SolfaScores changes key at the barline.`);
     const doh = prev ? prev.doh + (mod12(semitone - prev.semitone) <= 5 ? mod12(semitone - prev.semitone) : mod12(semitone - prev.semitone) - 12) : dohMidi(semitone);
     if (prev && prev.bar === bar) keyBars.pop();
     keyBars.push({ bar: keyBars.length ? bar : 0, name, semitone, doh });
@@ -167,7 +167,7 @@ export function toSolfa(score: XScore, lines: VoiceLine[], opts: { barsPerLine?:
           const starting = here.find((n) => Math.abs(snap(n.start) - t) < EPS);
           if (starting) {
             slots.push({ kind: 'start', token: starting.token });
-            // As Abụ will play it: a note runs on through holds, and stops at a rest or the next note.
+            // As SolfaScores will play it: a note runs on through holds, and stops at a rest or the next note.
             last = { start: t, dur: step, midi: starting.midi };
             out.push(last);
             if (line.part === lines[0].part) lyricsByBar[bar].push(lyricToken(starting.lyric));

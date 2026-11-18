@@ -1,6 +1,6 @@
-# Abụ sol-fa text format (draft 1)
+# SolfaScores sol-fa text format (draft 1)
 
-This is the plain-text format members type or paste into Abụ. The app reads it,
+This is the plain-text format members type or paste into SolfaScores. The app reads it,
 checks it, shows it in columns, and plays it.
 
 It is based on three real choir sheets (one typed, two handwritten) shared by
@@ -10,7 +10,7 @@ document.
 
 ## What the real sheets showed
 
-| Feature | How it appears on paper | Abụ format |
+| Feature | How it appears on paper | SolfaScores format |
 |---|---|---|
 | Key | `Doh is D`, `Key: Eb`, `Key F` | `key: D` (also accepts `Doh is D`, `Eb`, `E♭`) |
 | Time | `Time: 4`, or not written at all | `time: 4/4`. If it's missing, the app guesses from the bars and asks |

@@ -5,7 +5,20 @@
     <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
     <meta name="theme-color" content="#D93A1E" />
-    <!-- Light and dark: the page follows the phone unless Abụ's own setting (Me → Appearance) says otherwise. -->
+    <script>
+      // SolfaScores lives at solfascores.com. A browser on the old address (abu.adalingo.workers.dev)
+      // or on www goes there, to the same page. Not the app installed from the old address, which
+      // keeps working there (offline too) until it's installed again from solfascores.com.
+      try {
+        var h = location.hostname;
+        var old = /\.workers\.dev$/.test(h) || h === 'www.solfascores.com';
+        var installed = window.matchMedia && matchMedia('(display-mode: standalone)').matches;
+        if (old && (h === 'www.solfascores.com' || (!installed && navigator.onLine !== false))) {
+          location.replace('https://solfascores.com' + location.pathname + location.search + location.hash);
+        }
+      } catch (e) {}
+    </script>
+    <!-- Light and dark: the page follows the phone unless SolfaScores' own setting (Me → Appearance) says otherwise. -->
     <meta name="color-scheme" content="light dark" />
     <script>
       try {
@@ -18,7 +31,7 @@
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-title" content="Abụ" />
+    <meta name="apple-mobile-web-app-title" content="SolfaScores" />
     <title>%WEB_TITLE%</title>
     <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
     <style id="expo-reset">
@@ -69,10 +82,10 @@
   </head>
 
   <body>
-    <noscript>Abụ needs JavaScript to run.</noscript>
+    <noscript>SolfaScores needs JavaScript to run.</noscript>
     <div id="root">
       <div id="first-paint">
-        <svg width="110" height="88" viewBox="166 314 692 556" aria-label="Abụ">
+        <svg width="110" height="88" viewBox="166 314 692 556" aria-label="SolfaScores">
           <path d="M488 736H536V862L512 840L488 862Z" fill="#E6A325" />
           <path d="M512 394C430 344 300 334 176 358V732C300 708 430 718 512 768C594 718 724 708 848 732V358C724 334 594 344 512 394Z" fill="#A3261A" />
           <path d="M512 372C430 322 300 312 196 336V708C300 684 430 694 512 744C594 694 724 684 828 708V336C724 312 594 322 512 372Z" fill="#FFFFFF" />

@@ -1,5 +1,5 @@
 /**
- * Keeps what a choir needs in a church hall without data: while online, Abụ
+ * Keeps what a choir needs in a church hall without data: while online, SolfaScores
  * saves each group's services and rehearsals for the next three weeks with
  * their song orders and songs, the notices, the repertoire and My songs. The
  * keys match the screens' own, so Home, Schedule, a service, Rehearse and

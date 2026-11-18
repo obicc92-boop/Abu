@@ -10,7 +10,7 @@ import { API_URL } from '@/api/config';
 
 export const authClient = createAuthClient({
   baseURL: `${API_URL}/api/auth`,
-  plugins: [expoClient({ scheme: 'abu', storagePrefix: 'abu', storage: SecureStore })],
+  plugins: [expoClient({ scheme: 'solfascores', storagePrefix: 'abu', storage: SecureStore })],
 });
 
 /** The session cookie to send to the API. */

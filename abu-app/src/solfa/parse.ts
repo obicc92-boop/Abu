@@ -147,7 +147,7 @@ export function parseSolfa(text: string, options: ParseOptions = {}): ParsedSong
     const name = MARK_NAMES[inner.trim().toLowerCase().replace(/\s+/g, '')];
     if (!name) {
       warnings.push({
-        message: `Line ${line}: “{${inner}}” isn’t a mark Abụ knows. Use {segno}, {ds}, {dc}, {fine}, {1.} or {2.}.`,
+        message: `Line ${line}: “{${inner}}” isn’t a mark SolfaScores knows. Use {segno}, {ds}, {dc}, {fine}, {1.} or {2.}.`,
         line,
       });
     }
@@ -169,10 +169,10 @@ export function parseSolfa(text: string, options: ParseOptions = {}): ParsedSong
       case 'time': {
         const t = parseTime(value);
         if (!t) {
-          errors.push({ message: `Line ${line}: “${value}” isn’t a time Abụ knows. Write it like “time: 4/4”.`, line });
+          errors.push({ message: `Line ${line}: “${value}” isn’t a time SolfaScores knows. Write it like “time: 4/4”.`, line });
         } else if (head.time && head.time.label !== t.label) {
           warnings.push({
-            message: `Line ${line}: Abụ can’t change time in the middle of a song yet, so it uses ${head.time.label} throughout.`,
+            message: `Line ${line}: SolfaScores can’t change time in the middle of a song yet, so it uses ${head.time.label} throughout.`,
             line,
           });
         } else {
@@ -183,7 +183,7 @@ export function parseSolfa(text: string, options: ParseOptions = {}): ParsedSong
       case 'key': {
         const k = parseKeyLine(value);
         if (!k.ok) {
-          errors.push({ message: `Line ${line}: “${value}” isn’t a key Abụ knows. Write it like “key: E♭” or “Doh is D”.`, line });
+          errors.push({ message: `Line ${line}: “${value}” isn’t a key SolfaScores knows. Write it like “key: E♭” or “Doh is D”.`, line });
           return;
         }
         if (!anyBars) {
@@ -316,7 +316,7 @@ export function parseSolfa(text: string, options: ParseOptions = {}): ParsedSong
   const time: TimeSig = head.time ?? optionTime ?? guessTime(kept);
   meta.timeSource = head.time ? 'text' : optionTime ? 'option' : 'guess';
   if (meta.timeSource === 'guess') {
-    warnings.push({ message: `No time given, so Abụ guessed ${time.label} from the bars. Add “time: ${time.label}” if that’s right.` });
+    warnings.push({ message: `No time given, so SolfaScores guessed ${time.label} from the bars. Add “time: ${time.label}” if that’s right.` });
   }
   meta.time = time.label;
   const bpb = time.pulses;
@@ -490,7 +490,7 @@ export function parseSolfa(text: string, options: ParseOptions = {}): ParsedSong
 
   if (halfBarHint) {
     warnings.push({
-      message: `In Abụ, “|” is only a barline. For the half-bar accent, use “/”, e.g. “d :r /m :f |”.`,
+      message: `In SolfaScores, “|” is only a barline. For the half-bar accent, use “/”, e.g. “d :r /m :f |”.`,
     });
   }
 

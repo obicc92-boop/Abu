@@ -52,7 +52,7 @@ export default function RootLayout() {
     if (loaded || error) SplashScreen.hideAsync();
   }, [loaded, error]);
 
-  // On the web: the service worker that keeps Abụ on the phone, updates and "Install".
+  // On the web: the service worker that keeps SolfaScores on the phone, updates and "Install".
   useEffect(() => startPwa(), []);
 
   // While fonts load, show the same frame as the splash (and the web's first paint).
