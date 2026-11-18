@@ -260,3 +260,21 @@ On the 50 labelled pages (one page of the 51 labelled, a sheet of the owner's, i
 npx tsx --tsconfig tsconfig.json ../abu-reader/scripts/handwriting/find-lines.ts ../abu-reader/data/choirpdfs/hw50.json ../abu-reader/data/choirpdfs/cut 4
 python3 ../abu-reader/scripts/handwriting/score-lines.py ../abu-reader/data/choirpdfs/labels.json --boxes ../abu-reader/data/choirpdfs/cut-rows3/pages.json ../abu-reader/data/choirpdfs/cut/pages.json
 ```
+
+**Training longer, and a wider model** (18 November 2026, free, no new labels): two runs from `rows3` on the same rows. `runs/rows4a`, the same model two more passes (lr 4e-4), and `runs/rows4b`, a wider one (`--hidden 256`, 1.72M weights, the picture layers kept from `rows3` and the rest started afresh, lr 1e-3), about 2.5 hours each side by side on the CPU.
+
+| Measured on | `rows3` (in the app) | `rows4a` (longer) | `rows4b` (wider) |
+|---|---|---|---|
+| Handwritten rows from unseen pages (166, the step chosen by these) | 10.1% wrong | 9.7% | 10.5% |
+| Handwritten rows read by eye (24) | 4.2% | 4.4% | 4.7% |
+| Typed rows from unseen sheets (733) | 2.8% | 2.5% | 3.9% |
+| The 50 typed test lines (`pipeline.py`) | 95.4% of bars, 33 exact, 15 silent mistakes | 95.7%, 36 exact, 20 silent mistakes | |
+| Systems cut exactly on the 50 labelled pages (four parts) | 284 of 318 | 277 (more rows of words taken for notes) | |
+
+  Neither went into the app: `rows4a` reads a little better but makes more silent mistakes on typed lines and, with `notesRows` weighed for `rows3`'s readings, cuts fewer systems right; `rows4b` would need far longer to catch up. The same rows give little more: more handwritten rows, or a different kind of model, would be needed.
+
+```sh
+cd train && ../.venv/bin/python -I train.py --data ../data/rows/synth-sub ../data/rows/real-sub '../data/rows/hand*4' '../data/rows/hand2*4' \
+  --held ../data/rows/hand-held --init ../runs/rows3/best.pt --epochs 2 --every 500 --lr 4e-4 --out ../runs/rows4a   # --hidden 256 --lr 1e-3 for rows4b
+```
+
