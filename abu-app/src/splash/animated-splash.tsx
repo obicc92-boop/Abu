@@ -1,10 +1,11 @@
 /**
  * The opening animation. Its first frame matches the still splash screen
  * (red, with the s:s mark in the middle), so the hand-over is seamless.
- * Then the mark bounces, a glow and sound rings spread from it, notes and
- * sol-fa syllables burst out across the screen, gold glitter twinkles, "SolfaScores"
- * rises in, and everything fades into the app. About two seconds; a tap skips
- * it, and phones set to reduce motion get a plain fade.
+ * Then the mark bounces, a glow and sound rings spread from it, the sol-fa
+ * scale (d r m f s l t d', each syllable in its own soft colour) bursts out
+ * of it and pops up all over the screen, "SolfaScores" rises in, and
+ * everything fades into the app. About two seconds; a tap skips it, and
+ * phones set to reduce motion get a plain fade.
  */
 import { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, useWindowDimensions } from 'react-native';
@@ -17,12 +18,12 @@ import Animated, {
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
-import Svg, { Circle, Defs, Ellipse, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
 
 import { BrandMark, MARK_ASPECT } from '@/components/brand';
 import { brand as colors, fonts } from '@/theme/tokens';
 
-import { splashParticles, type Burst, type Sparkle } from './particles';
+import { splashParticles, type Burst, type Pop } from './particles';
 
 /** Mark width on screen: the same as `imageWidth` for expo-splash-screen in app.json. */
 export const MARK_WIDTH = 140;
@@ -50,7 +51,7 @@ export function AnimatedSplash({ onDone }: { onDone: () => void }) {
   const reduceMotion = useReducedMotion();
   const { width, height } = useWindowDimensions();
   const span = Math.max(width, height) || 800;
-  const [{ bursts, sparkles }] = useState(() => splashParticles());
+  const [{ bursts, pops }] = useState(() => splashParticles());
   const exit = useSharedValue(0);
   const finished = useRef(false);
 
@@ -93,8 +94,8 @@ export function AnimatedSplash({ onDone }: { onDone: () => void }) {
             <Glow />
             <Ring delay={140} />
             <Ring delay={460} />
-            {sparkles.map((s, i) => (
-              <Twinkle key={`s${i}`} sparkle={s} />
+            {pops.map((p, i) => (
+              <PopUp key={`p${i}`} pop={p} />
             ))}
             {bursts.map((b, i) => (
               <BurstGlyph key={`b${i}`} burst={b} span={span} />
@@ -192,68 +193,36 @@ function BurstGlyph({ burst, span }: { burst: Burst; span: number }) {
     };
   });
   return (
-    <Animated.View style={[styles.centred, styles.glyph, { width: size, height: size, marginLeft: -size / 2, marginTop: -size / 2 }, style]}>
-      <Glyph burst={burst} />
+    <Animated.View style={[styles.centred, styles.glyph, { width: size * 2, height: size * 1.4, marginLeft: -size, marginTop: -size * 0.7 }, style]}>
+      <Text style={[styles.syllable, { fontSize: size, lineHeight: size * 1.3, color: burst.color }]}>{burst.text}</Text>
     </Animated.View>
   );
 }
 
-/** Notes are drawn as shapes, so they look the same on every phone. */
-function Glyph({ burst: { kind, text, size, color } }: { burst: Burst }) {
-  if (kind === 'syllable') {
-    return <Text style={[styles.syllable, { fontSize: size, lineHeight: size * 1.1, color }]}>{text}</Text>;
-  }
-  if (kind === 'glint') return <Star size={size} color={color} />;
-  if (kind === 'beamed') {
-    return (
-      <Svg width={size} height={size} viewBox="556 396 236 258">
-        <Ellipse cx={604} cy={616} rx={42} ry={31} fill={color} transform="rotate(-22 604 616)" />
-        <Ellipse cx={740} cy={590} rx={42} ry={31} fill={color} transform="rotate(-22 740 590)" />
-        <Rect x={631} y={440} width={18} height={172} fill={color} />
-        <Rect x={767} y={414} width={18} height={172} fill={color} />
-        <Path d="M631 428L785 402V446L631 472Z" fill={color} />
-      </Svg>
-    );
-  }
-  return (
-    <Svg width={size} height={size} viewBox="0 0 40 60">
-      <Ellipse cx={14} cy={48} rx={11} ry={8} fill={color} transform="rotate(-22 14 48)" />
-      <Rect x={22} y={6} width={4} height={42} fill={color} />
-      {kind === 'eighth' ? <Path d="M26 6C31 13 38 17 36 30C34 23 30 20 26 19Z" fill={color} /> : null}
-    </Svg>
-  );
-}
-
-/** A glint that twinkles twice where it is. */
-function Twinkle({ sparkle }: { sparkle: Sparkle }) {
+/** A syllable that pops up where it is, with a little bounce, drifts up and fades. */
+function PopUp({ pop }: { pop: Pop }) {
   const t = useSharedValue(0);
   useEffect(() => {
-    t.set(withDelay(sparkle.delay, withTiming(2, { duration: sparkle.duration * 2, easing: Easing.linear })));
-  }, [sparkle, t]);
+    t.set(withDelay(pop.delay, withTiming(1, { duration: pop.duration, easing: Easing.linear })));
+  }, [pop, t]);
+  const { x, y, size, tilt, drift, text, color } = pop;
   const style = useAnimatedStyle(() => {
-    const k = Math.abs(Math.sin(t.value * Math.PI));
-    return { opacity: k, transform: [{ scale: 0.3 + 0.9 * k }, { rotate: `${t.value * 60}deg` }] };
+    const k = t.value;
+    const opacity = k < 0.18 ? k / 0.18 : k > 0.62 ? Math.max(0, (1 - k) / 0.38) : 1;
+    // Grows past full size, then settles: a pop.
+    const scale = k < 0.3 ? 0.3 + (0.85 * k) / 0.3 : 1.15 - 0.15 * Math.min(1, (k - 0.3) / 0.25);
+    return { opacity, transform: [{ translateY: -drift * k }, { rotate: `${tilt}deg` }, { scale }] };
   });
-  const { x, y, size, color } = sparkle;
   return (
     <Animated.View
       style={[
-        styles.sparkle,
-        { left: `${x * 100}%`, top: `${y * 100}%`, width: size, height: size, marginLeft: -size / 2, marginTop: -size / 2 },
+        styles.pop,
+        { left: `${x * 100}%`, top: `${y * 100}%`, width: size * 2, height: size * 1.4, marginLeft: -size, marginTop: -size * 0.7 },
         style,
       ]}
     >
-      <Star size={size} color={color} />
+      <Text style={[styles.syllable, { fontSize: size, lineHeight: size * 1.3, color }]}>{text}</Text>
     </Animated.View>
-  );
-}
-
-/** A four-pointed glint. */
-function Star({ size, color }: { size: number; color: string }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 20 20">
-      <Path d="M10 0C11 6 14 9 20 10C14 11 11 14 10 20C9 14 6 11 0 10C6 9 9 6 10 0Z" fill={color} />
-    </Svg>
   );
 }
 
@@ -294,7 +263,7 @@ const styles = StyleSheet.create({
   },
   glyph: { alignItems: 'center', justifyContent: 'center' },
   syllable: { fontFamily: fonts.display, textAlign: 'center' },
-  sparkle: { position: 'absolute' },
+  pop: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
   wordmarkBox: { position: 'absolute', left: 0, right: 0, top: '50%', marginTop: MARK_HEIGHT / 2 + 18, alignItems: 'center' },
   wordmark: { fontFamily: fonts.display, fontSize: 46, lineHeight: 58, color: colors.white },
 });

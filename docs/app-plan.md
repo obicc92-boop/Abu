@@ -159,7 +159,8 @@ Drafts: `design/brand-draft.html` (sources in `design/brand/`).
   - words beside icons, never icons alone
 - **Small moments:** the beat highlight, a soft vibration on taps, a gold tick for "I know my part".
 - **Opening animation** (built): the still splash hands over to an animation of the same frame.
-  - The book bounces, a glow and sound rings spread from it, notes and sol-fa syllables burst out across the screen with gold glitter, and "SolfaScores" rises in crowned with sparkles.
+  - The s:s mark bounces, a glow and sound rings spread from it, the sol-fa scale (d r m f s l t d', each syllable in its own soft colour, both dohs white) bursts out of it and pops up all over the screen, kept clear of the name, and "SolfaScores" rises in.
+  - Only sol-fa: no staff notes and no stars (owner's request, 19 November 2026).
   - About two seconds, and a tap skips it.
   - A plain fade when the phone is set to reduce motion; once per visit on the web.
   - Code: `abu-app/src/splash/`.
