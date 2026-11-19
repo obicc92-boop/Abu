@@ -250,4 +250,4 @@ Everything runs on the owner's Cloudflare account, which Wrangler on the develop
 5. Song history (last sung, how often).
 6. A dues and levies tracker with Paystack.
 7. Song suggestions from the church calendar.
-8. Then, from `CLAUDE.md`: pen input, scan to draft, pitch feedback, choirmaster sync, staff notation, the song marketplace.
+8. Then, from `CLAUDE.md`: pen input, scan to draft, pitch feedback, choirmaster sync, staff notation, the song marketplace. The marketplace's scope (the OREMUS design scope, 19 November 2026), sorted into MVP and later, with the owner's open decisions, is in `docs/oremus-scope.md`.

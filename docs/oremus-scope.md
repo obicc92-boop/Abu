@@ -1,0 +1,91 @@
+# OREMUS design scope: what goes into the MVP
+
+19 November 2026. The owner shared a designer's scope for the **OREMUS Project**, a SaaS system for a choir music marketplace, social network and choir management platform. The designer will provide the high-fidelity UI design and the design system. This note sorts that scope against what SolfaScores already has live.
+
+If OREMUS becomes a separate product, the "already built" items are still the ones it can reuse.
+
+## The scope as given
+
+- **Public website:** landing page, About, Pricing, Contact, creator discovery, song marketplace, authentication.
+- **Creator dashboard:** overview, song upload flow, pricing setup, wallet, withdrawals, revenue analytics, transaction history, social feed, profile management.
+- **Choir dashboard:** overview, song marketplace, search and filtering, purchase flow, wallet top-up, download management, playlist/folder management, refund requests, choir management, member invitation flow, member restriction management, social feed.
+- **Chorister dashboard:** assigned songs, song viewer/player, social feed, notifications, profile.
+- **Admin dashboard:** user management, song approval, withdrawal approval, refund approval, wallet top-up approval, analytics, moderation.
+
+## What the scope really is
+
+It's three products in one, plus a back office:
+
+1. **Choir management and learning:** groups, members, songs to learn, the player. SolfaScores already does this.
+2. **A paid marketplace:** creators sell songs, choirs buy them, and the money moves between them.
+3. **A social network:** feeds for creators, choirs and choristers.
+4. **Admin:** approvals, users and moderation.
+
+The MVP only needs the smallest version of the marketplace on top of what exists: **a creator uploads and prices a song → admin approves it → a choir buys it → its choristers learn it → the creator gets paid.** Everything else can wait.
+
+## 1. Already built (live on solfascores.com)
+
+| Scope item | What SolfaScores has |
+|---|---|
+| Authentication | Sign-up and sign-in |
+| Song marketplace (browsing) | Public song library, for free songs only |
+| Search & filtering | Search by title, composer or words; filters for repertoire, my songs, has sol-fa and tags |
+| Choir dashboard overview | Home: next service, leader's to-do list, readiness per part |
+| Choir management | Groups, parts, roles, schedule, song orders, attendance, notices |
+| Member invitation flow | Code, invite link, QR code, WhatsApp |
+| Assigned songs (chorister) | "Learn for upcoming", "my part" |
+| Song viewer/player | Sol-fa score with four-part playback, tempo and key change |
+| Profile (chorister) | The Me tab |
+| Song upload flow | **Mostly:** type, paste or scan sol-fa, and attach the sheet. No price or approval step yet |
+| Playlist/folder management | **Partly:** repertoire, and song orders arranged by section |
+| Download management | **Partly:** songs and sheets saved on the phone for offline use |
+| Notifications | **Partly:** notices inside the app. No push notifications yet |
+
+That's 13 of the 40 items, fully or partly done.
+
+## 2. MVP: can be built now (no decisions needed)
+
+- **Public site:** landing page, About, Contact.
+- **Creator profile:** a public creator page with name, photo and bio.
+- **Song upload, finished:** add a price, an "I own the rights to this song" confirmation, and a "waiting for approval" status.
+- **Pricing setup:** the price is stored on each song now; charging comes once payments are in.
+- **Admin:** song approval queue, basic user management (find, suspend), and taking down a song that's reported.
+- **Email notifications:** now possible because of solfascores.com. Examples: sign-in codes, password resets, "your song was approved".
+
+## 3. MVP: once the payment decisions are made (section 5)
+
+- **Purchase flow (choir)**, which unlocks the song for the whole choir.
+- **Pricing page (public)**, which depends on the fee model.
+- **Creator dashboard overview and transaction history:** sales and earnings. Simple totals, no charts yet.
+- **Creator earnings and payouts.** Either:
+  - **automatic:** the payment provider splits each sale and pays the creator directly, so there's no wallet, no withdrawals and no withdrawal approval; or
+  - **manual:** an earnings balance, plus withdrawal requests the admin approves.
+- **Refund requests and refund approval:** a simple request form that the admin decides on.
+- **Purchased songs for offline use:** works like today's offline saving. Whether PDFs can be downloaded is a decision (piracy).
+
+## 4. After the MVP
+
+- **Social:** social feeds for creators, choirs and choristers, plus moderation for them. This is the largest piece of design and build in the scope, and the sale doesn't depend on it.
+- **Wallet:** wallet top-up and top-up approval.
+- **Marketplace extras:** creator discovery (featured creators, following, rankings).
+- **Analytics:** revenue analytics for creators, analytics for the admin.
+- **Choir extras:** member restrictions, and custom folders beyond the repertoire and song orders.
+- **Notifications:** push notifications. They need a provider outside Cloudflare.
+
+## 5. Decisions only the owner can make, before the paid part
+
+1. **Payment provider:** Paystack or Flutterwave. The app plan already says one of these, priced in naira.
+2. **Pay per purchase, or a wallet?** Recommended: pay per purchase for the MVP (card, bank transfer, USSD). A wallet means holding customers' money, which may need a licence in Nigeria. Check that with the provider before designing around it.
+3. **SolfaScores' fee, and how creators get paid:** automatic split or manual withdrawals (see section 3).
+4. **What a purchase gives:** one choir's use of the song, for all its members? Forever? PDF downloads?
+5. **Creators' rights:** what creators must confirm, and what the admin checks before approving a song.
+6. **Refund policy.**
+7. **Do free songs stay?** Right now every song is open to everyone.
+
+## For the design
+
+- **Design the MVP screens first** (sections 2 and 3), in that order. The social feeds can come later without holding anything up.
+- **Build on SolfaScores' existing design system** rather than starting a new one. It already has the colours, part colours, fonts, light and dark modes, the s:s icon and the red-screen background (see "Decisions already made" in `CLAUDE.md`). A second system would mean redoing screens that already work.
+- **Leave the Pricing page and the wallet screens** until decisions 2 and 3 are made, since they change those screens.
+
+The free part (choir management and learning) is ready for the pilot choir now, so the pilot can run while the marketplace MVP is designed and built.

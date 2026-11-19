@@ -159,4 +159,4 @@ The real app is live at https://solfascores.com: one Cloudflare Worker serving t
 ## Open questions for the owner
 
 - The company name, to show once confirmed.
-- How songs are licensed and paid for, before the paid features.
+- How songs are licensed and paid for, before the paid features. The marketplace scope and the seven decisions it needs are in `docs/oremus-scope.md`.
