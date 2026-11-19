@@ -4,6 +4,8 @@
 
 If OREMUS becomes a separate product, the "already built" items are still the ones it can reuse.
 
+**Status (owner, 19 November 2026): songs stay free, and the financial system isn't built yet.** That means no prices, purchases, payments, wallets, payouts or refunds. Payment providers are chosen (decision 1), and the other payment decisions will be made later. Section 2 can be built without money; section 3 waits.
+
 ## The scope as given
 
 - **Public website:** landing page, About, Pricing, Contact, creator discovery, song marketplace, authentication.
@@ -47,13 +49,15 @@ That's 13 of the 40 items, fully or partly done.
 
 - **Public site:** landing page, About, Contact.
 - **Creator profile:** a public creator page with name, photo and bio.
-- **Song upload, finished:** add a price, an "I own the rights to this song" confirmation, and a "waiting for approval" status.
-- **Pricing setup:** the price is stored on each song now; charging comes once payments are in.
+- **Song upload, finished:** an "I own the rights to this song" confirmation, and a "waiting for approval" status. No price while songs are free.
 - **Admin:** song approval queue, basic user management (find, suspend), and taking down a song that's reported.
 - **Email notifications:** now possible because of solfascores.com. Examples: sign-in codes, password resets, "your song was approved".
 
-## 3. MVP: once the payment decisions are made (section 5)
+## 3. On hold: the paid part, once the payment decisions are made (section 5)
 
+Not to be built yet (owner, 19 November 2026).
+
+- **Pricing setup:** a price on each song.
 - **Purchase flow (choir)**, which unlocks the song for the whole choir.
 - **Pricing page (public)**, which depends on the fee model.
 - **Creator dashboard overview and transaction history:** sales and earnings. Simple totals, no charts yet.
@@ -74,6 +78,8 @@ That's 13 of the 40 items, fully or partly done.
 
 ## 5. The owner's decisions, before the paid part
 
+Decisions 2 to 6 will be made later (owner, 19 November 2026).
+
 1. **Payment provider: decided. Flutterwave and Stripe** (owner's choice, 19 November 2026, in place of Paystack).
    - **Suggested split, to confirm:** Flutterwave for payers in Nigeria and the rest of Africa (naira, cards, bank transfer, USSD), Stripe for payers abroad.
    - **Stripe needs a company in a country Stripe supports.** A business registered in Nigeria can't open a Stripe account (Stripe covers Nigeria only through Paystack); founders usually register a US or UK company. Flutterwave also takes foreign cards, so it can cover everyone at launch, and Stripe can be added once that company exists.
@@ -84,7 +90,7 @@ That's 13 of the 40 items, fully or partly done.
 4. **What a purchase gives:** one choir's use of the song, for all its members? Forever? PDF downloads?
 5. **Creators' rights:** what creators must confirm, and what the admin checks before approving a song.
 6. **Refund policy.**
-7. **Do free songs stay?** Right now every song is open to everyone.
+7. **Do free songs stay? Decided: yes.** Every song stays free and open to everyone (owner, 19 November 2026).
 
 ## For the design
 
