@@ -18,7 +18,7 @@ import Animated, {
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
-import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, Path, RadialGradient, Stop } from 'react-native-svg';
 
 import { BrandMark, MARK_ASPECT } from '@/components/brand';
 import { brand as colors, fonts } from '@/theme/tokens';
@@ -194,7 +194,7 @@ function BurstGlyph({ burst, span }: { burst: Burst; span: number }) {
   });
   return (
     <Animated.View style={[styles.centred, styles.glyph, { width: size * 2, height: size * 1.4, marginLeft: -size, marginTop: -size * 0.7 }, style]}>
-      <Text style={[styles.syllable, { fontSize: size, lineHeight: size * 1.3, color: burst.color }]}>{burst.text}</Text>
+      <Syllable text={burst.text} size={size} color={burst.color} />
     </Animated.View>
   );
 }
@@ -221,9 +221,29 @@ function PopUp({ pop }: { pop: Pop }) {
         style,
       ]}
     >
-      <Text style={[styles.syllable, { fontSize: size, lineHeight: size * 1.3, color }]}>{text}</Text>
+      <Syllable text={text} size={size} color={color} />
     </Animated.View>
   );
+}
+
+/**
+ * Lah, drawn: Marcellus's "l" is a plain stroke that reads like a bar line as it
+ * flies past, so this one keeps the font's flared top and weight but ends in a
+ * small curl at the foot. In the font's own units (2048 to the em), with the
+ * top of the l at 0 and its baseline at 1495.
+ */
+const LAH = 'M160 1165L160 391Q160 306 158 242Q155 179 152 133Q148 87 143 56Q137 25 131 4L131 0L362 0L362 4Q356 25 351 56Q346 87 342 133Q338 179 336 242Q334 306 334 391L334 1165C334 1335 380 1405 445 1405C500 1405 548 1377 590 1327L632 1361C580 1455 505 1513 415 1513C255 1513 160 1395 160 1165Z';
+
+/** One syllable of the scale in Marcellus, with lah drawn so it reads clearly. */
+function Syllable({ text, size, color }: { text: string; size: number; color: string }) {
+  if (text === 'l') {
+    return (
+      <Svg width={(size * 560) / 2048} height={(size * 1525) / 2048} viewBox="100 -5 560 1525">
+        <Path d={LAH} fill={color} />
+      </Svg>
+    );
+  }
+  return <Text style={[styles.syllable, { fontSize: size, lineHeight: size * 1.3, color }]}>{text}</Text>;
 }
 
 function Wordmark() {

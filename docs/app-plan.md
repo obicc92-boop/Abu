@@ -160,7 +160,7 @@ Drafts: `design/brand-draft.html` (sources in `design/brand/`).
 - **Small moments:** the beat highlight, a soft vibration on taps, a gold tick for "I know my part".
 - **Opening animation** (built): the still splash hands over to an animation of the same frame.
   - The s:s mark bounces, a glow and sound rings spread from it, the sol-fa scale (d r m f s l t d', each syllable in its own soft colour, both dohs white) bursts out of it and pops up all over the screen, kept clear of the name, and "SolfaScores" rises in.
-  - Only sol-fa: no staff notes and no stars (owner's request, 19 November 2026).
+  - Only sol-fa: no staff notes and no stars (owner's request, 19 November 2026). Lah is drawn with a small curl at the foot, since the font's plain "l" looks like a bar line (`Syllable` in `animated-splash.tsx`).
   - About two seconds, and a tap skips it.
   - A plain fade when the phone is set to reduce motion; once per visit on the web.
   - Code: `abu-app/src/splash/`.
