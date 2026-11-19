@@ -174,7 +174,7 @@ Drafts: `design/brand-draft.html` (sources in `design/brand/`).
   - Make the website installable to the home screen for phones with no room for another app.
 - **Language:** English first, then Igbo, Yoruba, Hausa and Pidgin. Lyrics must show ẹ, ọ, ṣ, ụ and tone marks correctly.
 - **Church life:** section names per denomination; liturgical seasons as song tags.
-- **Payments, later:** Paystack or Flutterwave, priced in naira.
+- **Payments, later:** Flutterwave and Stripe (owner's choice, 19 November 2026), priced in naira. Stripe needs a company registered outside Nigeria; see `docs/oremus-scope.md`.
 
 ## Building the MVP
 
@@ -248,6 +248,6 @@ Everything runs on the owner's Cloudflare account, which Wrangler on the develop
 3. "I know my part", and readiness per part for leaders.
 4. Voice guides recorded by part leaders, replacing WhatsApp voice notes of each part.
 5. Song history (last sung, how often).
-6. A dues and levies tracker with Paystack.
+6. A dues and levies tracker with Flutterwave.
 7. Song suggestions from the church calendar.
 8. Then, from `CLAUDE.md`: pen input, scan to draft, pitch feedback, choirmaster sync, staff notation, the song marketplace. The marketplace's scope (the OREMUS design scope, 19 November 2026), sorted into MVP and later, with the owner's open decisions, is in `docs/oremus-scope.md`.

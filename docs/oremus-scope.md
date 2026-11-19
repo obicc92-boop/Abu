@@ -72,9 +72,13 @@ That's 13 of the 40 items, fully or partly done.
 - **Choir extras:** member restrictions, and custom folders beyond the repertoire and song orders.
 - **Notifications:** push notifications. They need a provider outside Cloudflare.
 
-## 5. Decisions only the owner can make, before the paid part
+## 5. The owner's decisions, before the paid part
 
-1. **Payment provider:** Paystack or Flutterwave. The app plan already says one of these, priced in naira.
+1. **Payment provider: decided. Flutterwave and Stripe** (owner's choice, 19 November 2026, in place of Paystack).
+   - **Suggested split, to confirm:** Flutterwave for payers in Nigeria and the rest of Africa (naira, cards, bank transfer, USSD), Stripe for payers abroad.
+   - **Stripe needs a company in a country Stripe supports.** A business registered in Nigeria can't open a Stripe account (Stripe covers Nigeria only through Paystack); founders usually register a US or UK company. Flutterwave also takes foreign cards, so it can cover everyone at launch, and Stripe can be added once that company exists.
+   - **Paying creators automatically:** Flutterwave's split payments (subaccounts) divide each sale at checkout between the creator's bank account and SolfaScores' fee, so the MVP needs no wallet and no withdrawals. Paying creators through Stripe would need Stripe Connect, which depends on where the creators live.
+   - **The phone apps:** Apple, and Google in most countries, expect digital content unlocked inside the app to be sold through their own in-app payments. Purchases on the website aren't affected. Before the store builds sell songs, check the current rules (for example, selling on the website only, with the app showing what was bought).
 2. **Pay per purchase, or a wallet?** Recommended: pay per purchase for the MVP (card, bank transfer, USSD). A wallet means holding customers' money, which may need a licence in Nigeria. Check that with the provider before designing around it.
 3. **SolfaScores' fee, and how creators get paid:** automatic split or manual withdrawals (see section 3).
 4. **What a purchase gives:** one choir's use of the song, for all its members? Forever? PDF downloads?
