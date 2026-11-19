@@ -22,7 +22,7 @@ export default function Welcome() {
 
   return (
     <SafeAreaView style={styles.page}>
-      <Motif color={colors.onRed} opacity={0.1} />
+      <Motif color={colors.onRed} opacity={0.16} focus={{ x: 0.5, y: 0.32 }} />
       <View style={styles.body}>
         <View style={styles.hero}>
           <BrandMark size={128} />

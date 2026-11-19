@@ -37,7 +37,7 @@ export default function CheckInCodeScreen() {
   return (
     <SafeAreaView style={styles.page}>
       <StatusBar style="light" />
-      <Motif color={colors.onRed} opacity={0.12} />
+      <Motif color={colors.onRed} opacity={0.16} focus={{ x: 0.5, y: 0.5 }} />
       <View style={styles.head}>
         <Text style={styles.kicker} numberOfLines={1}>
           {e ? `${e.title} · ${fmtDate(e.starts_at)} · ${fmtTime(e.starts_at)}` : ''}

@@ -149,7 +149,7 @@ Drafts: `design/brand-draft.html` (sources in `design/brand/`).
 - **Type:** Marcellus for the name and big titles, Figtree for the interface, JetBrains Mono for the score.
 - **App icon (draft, in the app now):** an open music book on red, with notation on the left page, a pair of notes on the right, and a gold ribbon marker like a hymnal's.
   - An earlier draft of four rising bars was dropped because it looked like a phone's signal icon.
-- **Motif (draft):** fine line rings and dots from adire, with lines and small stars from uli. Where tiles meet, the rings join into sound waves.
+- **Background for red screens and cards:** a soft light, brightest behind the words and deepening towards the edges, with faint sol-fa colons (beat marks, like the gold colon in s:s) that clear away from the words. It replaced the adire rings pattern, which clashed with the letters (owner's choice, 19 November 2026).
   - Only on the welcome screen, the next-service card and empty screens, in one colour at low strength.
   - Never behind the score, words or lists.
   - A Nigerian illustrator could redraw it later.

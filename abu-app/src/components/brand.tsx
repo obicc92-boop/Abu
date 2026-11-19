@@ -1,10 +1,10 @@
 /**
- * Brand pieces drawn in SVG: the mark from the app icon and the motif.
+ * Brand pieces drawn in SVG: the mark from the app icon and the background for red screens.
  * Sources and usage rules: design/brand/ and design/brand-draft.html.
  */
-import { useId } from 'react';
-import { StyleSheet, View } from 'react-native';
-import Svg, { Circle, Defs, G, LinearGradient, Mask, Path, Pattern, Rect, Stop } from 'react-native-svg';
+import { useId, useState } from 'react';
+import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
+import Svg, { Circle, Defs, LinearGradient, Mask, Path, Pattern, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { brand as colors } from '@/theme/tokens';
 
@@ -26,59 +26,82 @@ export function BrandMark({ size = 56 }: { size?: number }) {
   );
 }
 
-/** One 64×64 repeat: corner arcs that join into sound rings, and a small star in the middle. */
-const TILE = [
-  'M10 0A10 10 0 0 1 0 10M18 0A18 18 0 0 1 0 18M26 0A26 26 0 0 1 0 26',
-  'M54 0A10 10 0 0 0 64 10M46 0A18 18 0 0 0 64 18M38 0A26 26 0 0 0 64 26',
-  'M0 54A10 10 0 0 1 10 64M0 46A18 18 0 0 1 18 64M0 38A26 26 0 0 1 26 64',
-  'M64 54A10 10 0 0 0 54 64M64 46A18 18 0 0 0 46 64M64 38A26 26 0 0 0 38 64',
-  'M32 24.5v-4M32 39.5v4M24.5 32h-4M39.5 32h4',
-].join('');
+/** Where the faint colons sit in one 56×56 repeat: two sol-fa beat marks, staggered. */
+const BEATS = [
+  [14, 11],
+  [14, 19],
+  [42, 39],
+  [42, 47],
+];
 
 interface MotifProps {
-  /** One colour: white on red, gold on sand, red on the dark Perform page. */
+  /** The colons' colour: white on red. */
   color: string;
-  /** Keep it low: about 0.10 on red, 0.28 on sand; 0.16 on red cards that fade. */
+  /** Keep it low: about 0.16. */
   opacity: number;
-  /** 1.5 draws each repeat at 96 points, the calm default. */
-  scale?: number;
-  /** Fade out towards the left so text on the card sits on a clean background. */
+  /**
+   * Where the words sit, as fractions of the width and height. The light is
+   * brightest there and the colons clear away around it.
+   */
+  focus?: { x: number; y: number };
+  /** On a card: the colons fade out towards the left, so the card's words sit on clean red. */
   fade?: boolean;
 }
 
 /**
- * The SolfaScores motif (adire rings and dots, uli lines), filling its parent.
- * Put it first inside a card that has `overflow: 'hidden'`. Use it on the
- * welcome screen, the next-service card and empty screens only; never
- * behind the score, words or lists.
+ * The SolfaScores background for red screens and cards, filling its parent:
+ * a soft light, brightest behind the words and deepening towards the edges,
+ * with faint sol-fa colons (beat marks, like the gold colon in s:s) that clear
+ * away from the words. The owner's choice (19 November 2026), after the rings
+ * pattern clashed with the letters. Put it first inside a red card or screen
+ * that has `overflow: 'hidden'`; never behind the score, words or lists.
  */
-export function Motif({ color, opacity, scale = 1.5, fade = false }: MotifProps) {
+export function Motif({ color, opacity, focus = { x: 0.5, y: 0.33 }, fade = false }: MotifProps) {
   const id = useId().replace(/[^a-zA-Z0-9]/g, '');
-  const size = 64 * scale;
+  const [box, setBox] = useState<{ w: number; h: number } | null>(null);
+  const onLayout = (e: LayoutChangeEvent) => {
+    const { width: w, height: h } = e.nativeEvent.layout;
+    setBox((b) => (b && b.w === w && b.h === h ? b : { w, h }));
+  };
+  const w = box?.w ?? 0;
+  const h = box?.h ?? 0;
+  const cx = w * focus.x;
+  const cy = h * focus.y;
+  const reach = Math.max(w, h);
   return (
-    <View style={styles.fill}>
-      <Svg width="100%" height="100%">
-        <Defs>
-          <Pattern id={`p${id}`} width={size} height={size} patternUnits="userSpaceOnUse">
-            <G scale={scale}>
-              <Path d={TILE} fill="none" stroke={color} strokeWidth={1.6} strokeLinecap="round" />
-              <Circle cx={32} cy={32} r={2.4} fill={color} />
-            </G>
-          </Pattern>
-          {fade ? (
-            <LinearGradient id={`g${id}`} x1="1" y1="0" x2="0" y2="0">
-              <Stop offset="0.15" stopColor="#FFFFFF" stopOpacity={1} />
-              <Stop offset="0.7" stopColor="#FFFFFF" stopOpacity={0} />
-            </LinearGradient>
-          ) : null}
-          {fade ? (
+    <View style={styles.fill} onLayout={onLayout}>
+      {w > 0 && h > 0 ? (
+        <Svg width={w} height={h}>
+          <Defs>
+            <RadialGradient id={`l${id}`} cx={cx} cy={cy} fx={cx} fy={cy} r={reach * 0.8} gradientUnits="userSpaceOnUse">
+              <Stop offset="0" stopColor="#FFFFFF" stopOpacity={0.14} />
+              <Stop offset="0.45" stopColor="#FFFFFF" stopOpacity={0} />
+              <Stop offset="1" stopColor="#000000" stopOpacity={0.1} />
+            </RadialGradient>
+            <Pattern id={`p${id}`} width={56} height={56} patternUnits="userSpaceOnUse">
+              {BEATS.map(([x, y]) => (
+                <Circle key={`${x}-${y}`} cx={x} cy={y} r={1.7} fill={color} />
+              ))}
+            </Pattern>
+            {fade ? (
+              <LinearGradient id={`g${id}`} x1="1" y1="0" x2="0" y2="0">
+                <Stop offset="0.15" stopColor="#FFFFFF" stopOpacity={1} />
+                <Stop offset="0.7" stopColor="#FFFFFF" stopOpacity={0} />
+              </LinearGradient>
+            ) : (
+              <RadialGradient id={`g${id}`} cx={cx} cy={cy} fx={cx} fy={cy} r={reach * 0.55} gradientUnits="userSpaceOnUse">
+                <Stop offset="0.18" stopColor="#000000" stopOpacity={1} />
+                <Stop offset="0.6" stopColor="#FFFFFF" stopOpacity={1} />
+              </RadialGradient>
+            )}
             <Mask id={`m${id}`}>
-              <Rect width="100%" height="100%" fill={`url(#g${id})`} />
+              <Rect width={w} height={h} fill={`url(#g${id})`} />
             </Mask>
-          ) : null}
-        </Defs>
-        <Rect width="100%" height="100%" fill={`url(#p${id})`} opacity={opacity} mask={fade ? `url(#m${id})` : undefined} />
-      </Svg>
+          </Defs>
+          <Rect width={w} height={h} fill={`url(#l${id})`} />
+          <Rect width={w} height={h} fill={`url(#p${id})`} opacity={opacity} mask={`url(#m${id})`} />
+        </Svg>
+      ) : null}
     </View>
   );
 }
