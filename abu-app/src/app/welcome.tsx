@@ -1,5 +1,5 @@
 /**
- * The first screen: the music book on red, and four ways in.
+ * The first screen: the s:s mark on red, and four ways in.
  * Signing up or in comes next, then joining, starting a group, or your own space.
  */
 import { Redirect, router } from 'expo-router';
@@ -25,7 +25,7 @@ export default function Welcome() {
       <Motif color={colors.onRed} opacity={0.1} />
       <View style={styles.body}>
         <View style={styles.hero}>
-          <BrandMark size={96} />
+          <BrandMark size={128} />
           <Text style={styles.name}>SolfaScores</Text>
           <Text style={styles.tagline}>Learn your part. Keep your choir together.</Text>
         </View>

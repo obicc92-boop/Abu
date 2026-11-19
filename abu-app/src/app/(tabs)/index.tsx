@@ -356,7 +356,7 @@ function LookingAround() {
     <Page>
       <Card tone="red" style={{ alignItems: 'flex-start' }}>
         <Motif color={colors.onRed} opacity={0.16} fade />
-        <BrandMark size={64} />
+        <BrandMark size={86} />
         <Text style={[styles.cardTitle, { color: colors.onRed, marginTop: 6 }]}>Welcome to SolfaScores</Text>
         <Text style={styles.onRed}>Listen to any song’s parts now. Create an account to join your choir, save songs and see your song orders.</Text>
         <Button

@@ -1,7 +1,7 @@
 /**
  * The opening animation. Its first frame matches the still splash screen
- * (red, with the music book in the middle), so the hand-over is seamless.
- * Then the book bounces, a glow and sound rings spread from it, notes and
+ * (red, with the s:s mark in the middle), so the hand-over is seamless.
+ * Then the mark bounces, a glow and sound rings spread from it, notes and
  * sol-fa syllables burst out across the screen, gold glitter twinkles, "SolfaScores"
  * rises in, and everything fades into the app. About two seconds; a tap skips
  * it, and phones set to reduce motion get a plain fade.
@@ -19,14 +19,14 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Circle, Defs, Ellipse, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 
-import { BrandMark } from '@/components/brand';
+import { BrandMark, MARK_ASPECT } from '@/components/brand';
 import { brand as colors, fonts } from '@/theme/tokens';
 
 import { splashParticles, type Burst, type Sparkle } from './particles';
 
-/** Book width on screen: the same as `imageWidth` for expo-splash-screen in app.json. */
-export const BOOK_WIDTH = 110;
-const BOOK_HEIGHT = (BOOK_WIDTH * 556) / 692;
+/** Mark width on screen: the same as `imageWidth` for expo-splash-screen in app.json. */
+export const MARK_WIDTH = 140;
+const MARK_HEIGHT = MARK_WIDTH * MARK_ASPECT;
 const TOTAL_MS = 2200;
 const EXIT_MS = 380;
 const REDUCED_TOTAL_MS = 700;
@@ -101,7 +101,7 @@ export function AnimatedSplash({ onDone }: { onDone: () => void }) {
             ))}
           </>
         )}
-        <Book animate={!reduceMotion} />
+        <Mark animate={!reduceMotion} />
         {reduceMotion ? null : <Wordmark />}
       </Pressable>
     </Animated.View>
@@ -110,7 +110,7 @@ export function AnimatedSplash({ onDone }: { onDone: () => void }) {
 
 /* ---------- Pieces ---------- */
 
-function Book({ animate }: { animate: boolean }) {
+function Mark({ animate }: { animate: boolean }) {
   const s = useSharedValue(1);
   useEffect(() => {
     if (!animate) return;
@@ -126,15 +126,15 @@ function Book({ animate }: { animate: boolean }) {
   }, [animate, s]);
   const style = useAnimatedStyle(() => ({ transform: [{ scale: s.value }] }));
   return (
-    <Animated.View style={[styles.centred, { width: BOOK_WIDTH, height: BOOK_HEIGHT, marginLeft: -BOOK_WIDTH / 2, marginTop: -BOOK_HEIGHT / 2 }, style]}>
-      <BrandMark size={BOOK_WIDTH} />
+    <Animated.View style={[styles.centred, { width: MARK_WIDTH, height: MARK_HEIGHT, marginLeft: -MARK_WIDTH / 2, marginTop: -MARK_HEIGHT / 2 }, style]}>
+      <BrandMark size={MARK_WIDTH} />
     </Animated.View>
   );
 }
 
 const GLOW = 340;
 
-/** A soft light behind the book that swells, then settles. */
+/** A soft light behind the mark that swells, then settles. */
 function Glow() {
   const g = useSharedValue(0);
   useEffect(() => {
@@ -159,7 +159,7 @@ function Glow() {
 
 const RING = 150;
 
-/** A sound ring rippling out from the book, like the motif's rings. */
+/** A sound ring rippling out from the mark, like the motif's rings. */
 function Ring({ delay }: { delay: number }) {
   const p = useSharedValue(0);
   useEffect(() => {
@@ -295,6 +295,6 @@ const styles = StyleSheet.create({
   glyph: { alignItems: 'center', justifyContent: 'center' },
   syllable: { fontFamily: fonts.display, textAlign: 'center' },
   sparkle: { position: 'absolute' },
-  wordmarkBox: { position: 'absolute', left: 0, right: 0, top: '50%', marginTop: BOOK_HEIGHT / 2 + 18, alignItems: 'center' },
+  wordmarkBox: { position: 'absolute', left: 0, right: 0, top: '50%', marginTop: MARK_HEIGHT / 2 + 18, alignItems: 'center' },
   wordmark: { fontFamily: fonts.display, fontSize: 46, lineHeight: 58, color: colors.white },
 });

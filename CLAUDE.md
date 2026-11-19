@@ -29,7 +29,7 @@ The product owner has a pilot choir ready to test. The real app is started: `abu
 | Roles | **Leader, part leader and member** only, for now. |
 | Leader's own part | When starting a group, **"Your own part" starts on Soprano**, with "I don't sing" one tap away. Many choirmasters don't sing, but they usually teach a part (owner's call, 12 November 2026). |
 | Song orders | **Leaders edit song orders. Part leaders can too when the leader allows it**: the group setting "Part leaders can edit song orders", off by default (owner's call, 11 November 2026). Planning, changing and deleting services stays with leaders. |
-| Icon and motif | **Drafts** in `design/brand-draft.html`, to refine later. The icon in the app is an open music book (notation on the left page, notes on the right, a gold ribbon); the owner rejected bar shapes because they look like phone signal bars. Motif: adire and uli line pattern, used only on the welcome screen, the next-service card and empty screens. |
+| Icon and motif | **The icon is "s:s"** (owner's choice, 19 November 2026): soh, the sol-fa colon in gold, soh, as a beat is written on a sol-fa sheet, in white Marcellus on red with the motif's faint sound rings. It must show sol-fa, never staff notation (the owner turned down the earlier music book for its staff notes, and bar shapes because they look like phone signal bars). Motif: adire and uli line pattern, used only on the welcome screen, the next-service card and empty screens. |
 
 ## What's in the repository
 
@@ -46,7 +46,11 @@ The product owner has a pilot choir ready to test. The real app is started: `abu
   - **Write-with-pen screen** (`SCREENS.write`, `wDown`, `wMove`, `wUp`, `writeSolfa`): ink with pen pressure, palm rejection once a stylus is seen, eraser, undo and the Fix keypad. Recognition there is **simulated** against a demo hymn, so the real version needs an actual recogniser.
 - **`docs/solfa-format.md`:** the sol-fa text format spec, based on real choir sheets. Treat it as the source of truth for the parser.
 - **`docs/app-plan.md`:** the agreed plan for the whole app: the five tabs, onboarding, what each tab contains, roles, look and feel, Nigeria-first details, and the order of work after the MVP.
-- **`design/brand-draft.html`:** the draft app icon and motif, with the master SVGs in `design/brand/`. The app's icon PNGs in `abu-app/assets/images/` are exported from `design/brand/icon.svg`.
+- **`design/brand/`:** the master SVGs, with every letter drawn as a shape so they need no fonts: `icon.svg` (the app icon, 1024 square) and `mark.svg` (the mark alone, for red backgrounds). The app's icon files are exported from them:
+  - `abu-app/assets/images/`: `icon.png` (1024, no transparency), `android-icon-foreground.png` and `android-icon-monochrome.png` (1024, the mark 480 wide on nothing, inside Android's round safe zone; `android-icon-background.png` is the red with rings), `splash-icon.png` (the mark, 1240 wide; `imageWidth` 140 in `app.json`) and `favicon.png` (96, rounded).
+  - `abu-app/public/icons/`: `icon-512.png`, `icon-192.png`, `maskable-512.png` and `apple-touch-icon.png` (180), all without transparency.
+  - In code, `BrandMark` (`abu-app/src/components/brand.tsx`) and the web's first paint (`abu-app/public/index.html`) draw the same mark; the splash animation's `MARK_WIDTH` must match `imageWidth`.
+  - `design/brand-draft.html` is the earlier draft board (the music book) and the motif.
 - **`design/mvp-screens.html`:** the earlier static design board with the brand, palette and screen rationale.
 
 The live prototype the owner shares with colleagues is published from `prototype/index.html`.

@@ -4,32 +4,24 @@
  */
 import { useId } from 'react';
 import { StyleSheet, View } from 'react-native';
-import Svg, { Circle, Defs, Ellipse, G, LinearGradient, Mask, Path, Pattern, Rect, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, G, LinearGradient, Mask, Path, Pattern, Rect, Stop } from 'react-native-svg';
 
 import { brand as colors } from '@/theme/tokens';
 
 /**
- * The open music book from the app icon (design/brand/icon.svg): notation on
- * the left page, a pair of notes on the right, and a gold ribbon. Drawn for a
- * red background. `size` is the width.
+ * The mark from the app icon (design/brand/icon.svg and mark.svg): "s:s", soh,
+ * the sol-fa colon in gold, soh, as a beat is written on a sol-fa sheet, in
+ * Marcellus like the name. Drawn for a red background. `size` is the width.
  */
+export const MARK_ASPECT = 373 / 620;
+
 export function BrandMark({ size = 56 }: { size?: number }) {
   return (
-    <Svg width={size} height={(size * 556) / 692} viewBox="166 314 692 556" accessibilityElementsHidden importantForAccessibility="no">
-      <Path d="M488 736H536V862L512 840L488 862Z" fill={colors.gold} />
-      <Path d="M512 394C430 344 300 334 176 358V732C300 708 430 718 512 768C594 718 724 708 848 732V358C724 334 594 344 512 394Z" fill={colors.redDeep} />
-      <Path d="M512 372C430 322 300 312 196 336V708C300 684 430 694 512 744C594 694 724 684 828 708V336C724 312 594 322 512 372Z" fill={colors.white} />
-      <Path d="M512 380V738" stroke="#EBD9D3" strokeWidth={6} />
-      <Path d="M244 430L468 452M244 500L468 522M244 570L468 592" fill="none" stroke="#F0C9BF" strokeWidth={14} strokeLinecap="round" />
-      <G fill={colors.red}>
-        <Ellipse cx={306} cy={506} rx={27} ry={20} transform="rotate(-22 306 506)" />
-        <Ellipse cx={412} cy={446} rx={27} ry={20} transform="rotate(-22 412 446)" />
-        <Ellipse cx={604} cy={616} rx={42} ry={31} transform="rotate(-22 604 616)" />
-        <Ellipse cx={740} cy={590} rx={42} ry={31} transform="rotate(-22 740 590)" />
-        <Rect x={631} y={440} width={18} height={172} />
-        <Rect x={767} y={414} width={18} height={172} />
-        <Path d="M631 428L785 402V446L631 472Z" />
-      </G>
+    <Svg width={size} height={size * MARK_ASPECT} viewBox="0 0 620 373" accessibilityElementsHidden importantForAccessibility="no">
+      <Path d="M185.3 26.9L188.6 82.1L184.0 82.7Q181.7 75.1 176.5 66.4Q171.4 57.8 163.2 50.5Q155.1 43.2 143.6 38.4Q132.2 33.6 117.2 33.6L117.2 33.6Q107.0 33.6 97.8 36.6Q88.7 39.6 81.9 45.4Q75.1 51.2 71.1 59.8Q67.1 68.4 67.1 80.1L67.1 80.1Q67.1 96.3 77.2 111.1Q87.4 125.9 102.6 140.3Q117.9 154.8 135.7 169.4Q153.4 184.0 168.7 199.9Q184.0 215.9 194.1 234.0Q204.2 252.1 204.2 273.0L204.2 273.0Q204.2 289.9 198.3 306.0Q192.3 322.1 179.8 334.7Q167.4 347.3 148.0 355.1Q128.5 362.9 101.6 362.9L101.6 362.9Q85.7 362.9 71.9 360.0Q58.1 357.0 46.7 352.5Q35.2 348.0 26.1 342.5Q17.0 337.1 10 332.1L10 332.1L13.3 269.0L18.6 269.0Q22.0 284.6 28.6 297.5Q35.2 310.5 45.0 319.6Q54.8 328.8 67.4 333.9Q80.1 339.0 95 339.0L95 339.0Q119.6 339.0 134.0 325.4Q148.5 311.8 148.5 289.9L148.5 289.9Q148.5 272.3 138.7 257.5Q128.9 242.8 113.9 229.1Q99.0 215.5 81.9 201.9Q64.8 188.3 49.8 172.9Q34.9 157.4 25.1 139.0Q15.3 120.6 15.3 97.0L15.3 97.0Q15.3 77.7 22.5 61.6Q29.6 45.5 42.4 34.1Q55.2 22.6 72.8 16.3Q90.4 10 111.3 10L111.3 10Q138.8 10 157.3 15.8Q175.7 21.6 185.3 26.9L185.3 26.9Z" fill={colors.white} />
+      <Path d="M591.6 26.9L594.9 82.1L590.2 82.7Q587.9 75.1 582.8 66.4Q577.6 57.8 569.5 50.5Q561.3 43.2 549.9 38.4Q538.4 33.6 523.5 33.6L523.5 33.6Q513.2 33.6 504.1 36.6Q494.9 39.6 488.1 45.4Q481.3 51.2 477.3 59.8Q473.3 68.4 473.3 80.1L473.3 80.1Q473.3 96.3 483.5 111.1Q493.6 125.9 508.9 140.3Q524.1 154.8 541.9 169.4Q559.7 184.0 574.9 199.9Q590.2 215.9 600.3 234.0Q610.5 252.1 610.5 273.0L610.5 273.0Q610.5 289.9 604.5 306.0Q598.5 322.1 586.1 334.7Q573.6 347.3 554.2 355.1Q534.8 362.9 507.9 362.9L507.9 362.9Q491.9 362.9 478.2 360.0Q464.4 357.0 452.9 352.5Q441.5 348.0 432.3 342.5Q423.2 337.1 416.2 332.1L416.2 332.1L419.6 269.0L424.9 269.0Q428.2 284.6 434.8 297.5Q441.5 310.5 451.3 319.6Q461.1 328.8 473.7 333.9Q486.3 339.0 501.2 339.0L501.2 339.0Q525.8 339.0 540.3 325.4Q554.7 311.8 554.7 289.9L554.7 289.9Q554.7 272.3 544.9 257.5Q535.1 242.8 520.2 229.1Q505.2 215.5 488.1 201.9Q471.0 188.3 456.1 172.9Q441.1 157.4 431.3 139.0Q421.6 120.6 421.6 97.0L421.6 97.0Q421.6 77.7 428.7 61.6Q435.8 45.5 448.6 34.1Q461.4 22.6 479.0 16.3Q496.6 10 517.5 10L517.5 10Q545.1 10 563.5 15.8Q581.9 21.6 591.6 26.9L591.6 26.9Z" fill={colors.white} />
+      <Circle cx={310.2} cy={94.7} r={44} fill={colors.gold} />
+      <Circle cx={310.2} cy={278.2} r={44} fill={colors.gold} />
     </Svg>
   );
 }

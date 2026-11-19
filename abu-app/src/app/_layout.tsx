@@ -18,7 +18,7 @@ import { ConnectionBars } from '@/components/connection-bars';
 import { useKeepOffline } from '@/lib/keep-offline';
 import { persistOptions, queryClient } from '@/lib/offline';
 import { startPwa } from '@/lib/pwa';
-import { AnimatedSplash, BOOK_WIDTH } from '@/splash/animated-splash';
+import { AnimatedSplash, MARK_WIDTH } from '@/splash/animated-splash';
 import { SessionProvider } from '@/state/session';
 import { ThemeProvider, useTheme } from '@/theme/theme';
 import { brand } from '@/theme/tokens';
@@ -60,7 +60,7 @@ export default function RootLayout() {
   if (!loaded && !error) {
     return (
       <View style={{ flex: 1, backgroundColor: brand.red, alignItems: 'center', justifyContent: 'center' }}>
-        <BrandMark size={BOOK_WIDTH} />
+        <BrandMark size={MARK_WIDTH} />
       </View>
     );
   }
