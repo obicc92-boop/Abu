@@ -215,7 +215,10 @@ function Scanner() {
     for (const [via, ask] of tries) {
       try {
         const r = await ask();
-        const text = withWords(r.text, line.wordTexts);
+        let text = withWords(r.text, line.wordTexts);
+        // An answer that only lacks what the free repairs mend (a part's rest through an upbeat left out) is mended
+        // as the app's own readings are: Opus read a boxed sheet's first line right but for the tenor's empty upbeat.
+        if (!passes(text)) text = bestFree([text], passes, beats);
         // Kept only if it adds up and still has every part (an answer that drops or empties a part adds up too).
         // A correction (Cloudflare's or Haiku's) is kept only if it changed a fifth of the reading or less: on
         // handwriting the ones that rewrote more were mostly wrong though they added up; Opus reads it afresh.
