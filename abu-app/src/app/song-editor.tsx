@@ -16,7 +16,8 @@ import { PlayButton } from '@/components/player-controls';
 import { Score } from '@/components/score';
 import { SolfaCheck } from '@/components/solfa-check';
 import { SolfaKeypad } from '@/components/solfa-keypad';
-import { applyKey, type Key, type Selection } from '@/lib/solfa-keys';
+import { keepCursor, placeCursor } from '@/lib/field-cursor';
+import { applyKey, songLowMarksShown, songLowMarksTyped, type Key, type Selection } from '@/lib/solfa-keys';
 import { Body, Button, Card, Chip, ErrorText, Field, Kicker, Loading, Page, TopBar } from '@/components/ui';
 import { TAG_GROUPS } from '@/lib/tags';
 import { clearScanDraft, scanDraft, type ScanDraft } from '@/scan/draft';
@@ -79,11 +80,7 @@ function Editor({ song, draft }: { song?: Song; draft: ScanDraft | null }) {
     setSel(next.sel);
     const f = field.current;
     if (f && !f.isFocused()) f.focus();
-    requestAnimationFrame(() => {
-      const el = f as unknown as { setSelectionRange?: (a: number, b: number) => void; setSelection?: (a: number, b: number) => void } | null;
-      if (el?.setSelectionRange) el.setSelectionRange(next.sel.start, next.sel.end);
-      else el?.setSelection?.(next.sel.start, next.sel.end);
-    });
+    requestAnimationFrame(() => placeCursor(f, next.sel));
   };
   const useKeyboard = () => {
     setKeyboard(true);
@@ -214,8 +211,13 @@ function Editor({ song, draft }: { song?: Song; draft: ScanDraft | null }) {
         {showHelp ? <Help onExample={() => setSolfa(EXAMPLE)} /> : null}
         <TextInput
           ref={field}
-          value={solfa}
-          onChangeText={setSolfa}
+          // The parts' low octave marks shown as on a sheet, t₁ for t1; the text keeps t1.
+          value={songLowMarksShown(solfa)}
+          onChangeText={(t) => {
+            const typed = songLowMarksTyped(t);
+            setSolfa(typed);
+            keepCursor(field.current, t, songLowMarksShown(typed));
+          }}
           onSelectionChange={(e) => setSel(e.nativeEvent.selection)}
           onFocus={() => {
             if (!writing) setKeyboard(false);

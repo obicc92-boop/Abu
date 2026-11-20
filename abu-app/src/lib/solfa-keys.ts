@@ -3,6 +3,7 @@
  * notation a tap away, since a phone's keyboard keeps the octave mark out of easy reach (owner's request, 20
  * November 2026). Pure: the text and the cursor in, the text and the cursor out.
  */
+import { SYLLABLE_PATTERN } from '@/solfa';
 
 /** The cursor, or the text chosen: from `start` to `end`. */
 export interface Selection {
@@ -52,3 +53,42 @@ export function applyKey(text: string, sel: Selection, key: Key): { text: string
   const at = start + insert.length;
   return { text: text.slice(0, start) + insert + text.slice(end), sel: { start: at, end: at } };
 }
+
+/**
+ * A low octave mark as a sheet writes it, small and below the line: `t1` shows as `t₁`, `s2` as `s₂` (owner's
+ * request, 20 November 2026). Only on screen: the text keeps `t1`, the format's own way. One character for one,
+ * so the cursor, the bar lines drawn over the rows and the words set under the notes stay where they are.
+ */
+const LOW_MARK = new RegExp(`(^|[^A-Za-z0-9'’])(${SYLLABLE_PATTERN})([12])(?![0-9])`, 'g');
+const SMALL_LOW: Record<string, string> = { '1': '₁', '2': '₂' };
+
+/** A row of notes as shown: low octave marks small and below (`t1` → `t₁`). */
+export function lowMarksShown(row: string): string {
+  return row.replace(LOW_MARK, (_m, before: string, syllable: string, mark: string) => before + syllable + SMALL_LOW[mark]);
+}
+
+/** A row of notes as typed in a field that shows `t₁`, back to the text's `t1`. */
+export function lowMarksTyped(row: string): string {
+  return row.replace(/₁/g, '1').replace(/₂/g, '2');
+}
+
+/** A part's line in a song's text ("S  d :t1 |"): the part's name, and its notes after it. */
+const PART_LINE = /^(\s*[A-Za-z][A-Za-z0-9]{0,7}(?::\s*|\s+))(.*)$/;
+/** Lines that start like a part's but aren't notes: words, and the heading's lines. */
+const NOT_NOTES = /^\s*(w|words|title|composer|arranger|lyricist|key|time|tempo|doh)\b/i;
+
+function inNoteLines(text: string, change: (row: string) => string): string {
+  return text
+    .split('\n')
+    .map((line) => {
+      if (NOT_NOTES.test(line)) return line;
+      const m = line.match(PART_LINE);
+      return m ? m[1] + change(m[2]) : line;
+    })
+    .join('\n');
+}
+
+/** A song's text as shown in the editor: the low octave marks in the parts' lines small and below. */
+export const songLowMarksShown = (text: string) => inNoteLines(text, lowMarksShown);
+/** A song's text as typed in the editor, back to `t1`. */
+export const songLowMarksTyped = (text: string) => inNoteLines(text, lowMarksTyped);

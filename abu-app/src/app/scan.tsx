@@ -45,7 +45,8 @@ import { setScanDraft } from '@/scan/draft';
 import { forgetScan, listScans, openScan, saveScan, type SavedScan } from '@/scan/saved';
 import { joinLines, timeFor } from '@/scan/join';
 import { alignedRows, barColumns, bestFree, changedShare, joinLine, keepsParts, namesNotWords, problemsByPart, splitLine, tidyNotes, tidyTitle, withBarsInStep, withWords, wordsOf, wordsPreferring, wordsUnderNotes, type LineRow, type LineWords } from '@/scan/line-text';
-import { applyKey, type Key, type Selection } from '@/lib/solfa-keys';
+import { keepCursor, placeCursor } from '@/lib/field-cursor';
+import { applyKey, lowMarksShown, lowMarksTyped, type Key, type Selection } from '@/lib/solfa-keys';
 import { findLinesOwn, readLineOwn } from '@/scan/own-reader';
 import { cutLine, cutPieces, loadPages, MAX_PAGES, pageForFinding, scanningHere, takePhoto } from '@/scan/pages';
 import { readTypedSheet, type PageText } from '@/scan/pdf-text';
@@ -1141,7 +1142,9 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
                         ref={(field) => {
                           inputs.current[i] = field;
                         }}
-                        value={valueOf(i)}
+                        // A row of notes shows its low octave marks as on the sheet, t₁ for t1 (owner's request,
+                        // 20 November 2026); the text keeps t1.
+                        value={r.part ? lowMarksShown(valueOf(i)) : valueOf(i)}
                         onFocus={() => {
                           if (editingRow !== i) {
                             setEditing({ id: line.id, row: i, value: shown[i] });
@@ -1151,8 +1154,10 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
                           if (r.part) setTimeout(() => (inputs.current[i] as unknown as { scrollIntoView?: (o: object) => void } | null)?.scrollIntoView?.({ block: 'center', behavior: 'smooth' }), 150);
                         }}
                         onChangeText={(t) => {
-                          setEditing({ id: line.id, row: i, value: t });
-                          setRow(i, t);
+                          const typed = r.part ? lowMarksTyped(t) : t;
+                          setEditing({ id: line.id, row: i, value: typed });
+                          setRow(i, typed);
+                          if (r.part) keepCursor(inputs.current[i], t, lowMarksShown(typed));
                         }}
                         onSelectionChange={(e) => setSel(e.nativeEvent.selection)}
                         onBlur={() => {
@@ -1260,13 +1265,6 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
       </View>
     </SafeAreaView>
   );
-}
-
-/** Puts a field's cursor at `sel`: in a browser on the field itself, on a phone through React Native. */
-function placeCursor(field: TextInputInstance | null | undefined, sel: Selection) {
-  const f = field as unknown as { setSelectionRange?: (a: number, b: number) => void; setSelection?: (a: number, b: number) => void } | null;
-  if (f?.setSelectionRange) f.setSelectionRange(sel.start, sel.end);
-  else f?.setSelection?.(sel.start, sel.end);
 }
 
 /* ---------- 4. Finish ---------- */
