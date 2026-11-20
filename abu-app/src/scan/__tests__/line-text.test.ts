@@ -18,6 +18,7 @@ import {
   withHalfBarsAsBars,
   withoutNameColumn,
   withRestingEdges,
+  withShortBarsJoined,
   withSpacedBeats,
   withWords,
   wordsOf,
@@ -54,6 +55,16 @@ describe('free repairs', () => {
     expect(withHalfBarsAsBars('S  / : / : m.m / f.,s :-.l / - :- |', 2)).toBe('S  : | : m.m | f.,s :-.l | - :- |');
     // Half-bars of a 4/4 bar that's too long for another reason stay.
     expect(withHalfBarsAsBars('S  d :r / m :f s :l / t :d\' |', 4)).toBeNull();
+  });
+
+  it('joins two short bars into one where every part makes a whole bar of them', () => {
+    // A tall "|" drawn through a small box of a boxed sheet, taken for the box's border.
+    const read = ['S  l :d /- :l | s :d | d :d | t :- /- :- |', 'A  f :l /- :f | m :m | m :d | r :- /- :- |'].join('\n');
+    expect(withShortBarsJoined(read, 4)).toBe(['S  l :d /- :l | s :d / d :d | t :- /- :- |', 'A  f :l /- :f | m :m / m :d | r :- /- :- |'].join('\n'));
+    expect(freeRepair(read, passes, 4)).toBe(withShortBarsJoined(read, 4));
+    // Not where one part's bars don't make a whole bar, nor in 2/4 where they're whole already.
+    expect(withShortBarsJoined(['S  s :d | d :d |', 'A  m :m | m :d :r |'].join('\n'), 4)).toBeNull();
+    expect(withShortBarsJoined('S  s :d | d :d |', 2)).toBeNull();
   });
 
   it('puts in bar lines left out between notes, only where every piece is a whole bar', () => {

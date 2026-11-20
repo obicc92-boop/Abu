@@ -24,6 +24,11 @@ export interface FoundLine {
   box: Box;
   parts: string[];
   words: number;
-  /** Each row of words, and which part's row it comes after (0 for the first part). */
-  wordRows: { box: Box; after: number }[];
+  /**
+   * Each row of words, and which part's row it comes after (0 for the first part). On a boxed sheet
+   * (boxes.ts) a row of words is in pieces, one in each box, read side by side.
+   */
+  wordRows: { box: Box; after: number; pieces?: Box[] }[];
+  /** The line already read, box by box, on a boxed sheet (boxes.ts). */
+  draft?: string;
 }

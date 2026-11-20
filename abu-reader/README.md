@@ -278,3 +278,19 @@ cd train && ../.venv/bin/python -I train.py --data ../data/rows/synth-sub ../dat
   --held ../data/rows/hand-held --init ../runs/rows3/best.pt --epochs 2 --every 500 --lr 4e-4 --out ../runs/rows4a   # --hidden 256 --lr 1e-3 for rows4b
 ```
 
+
+**Boxed sheets, read box by box** (20 November 2026). The owner's *Ekeresimesi Erutego* (Jude Nnam; a two-page CamScanner PDF, kept in `data/owner-hand/`) is a table where each box holds one bar of every part, stacked with their words, a resting part left out, and the tenor and bass coming in late and lower in the box. Rows found straight across the page ran into each other from box to box (in its first system the heading, three boxes' soprano and two boxes' words came out as one row), so the parts were mixed: none of page 1's lines could be used. 41 of the 50 handwritten test pages are boxed tables too.
+
+- **How** (`abu-app/src/scan/boxes.ts`): the page's rules are found as straight lines across (`pageRules`: sloping up to 3%, thin, unbroken but for short gaps across 60% of the page, so a slur isn't one); each system's boxes are cut at its borders (rows.ts `tableBorders`, and a border most systems have at a place is looked for again where it was missed); each box's rows are found on their own (`boxBands`: the rules' and borders' ends cleared, a short row like an upbeat's ":d" kept, a row much taller than usual split where its ink thins most), read by the app's model, and given to parts by height against the nearest boxes that have every part (`partsOfRows`). A box without a part's row gives it rests; a "|" inside a box where the other parts read none is a half-bar mark; an upbeat's short row is taken at its part's height. The words under each part are read by Cloudflare's reader as one row, their pieces put side by side (`cutPieces`).
+- **A new free repair** (`withShortBarsJoined` in `line-text.ts`): two short bars that make one whole bar in every part become one. A tall "|" drawn through both parts of a small box can be taken for its border.
+- **A safety net** (`findLinesOwn`): the page is read row by row as before, then box by box, and the boxes are kept only if they read at least 60% as many notes (`BOXED_ENOUGH`). Where a faint rule or a photo's shadow hides a rule, systems run together and a system's notes are lost: on the test pages, every page that read worse box by box read under half the notes; 14 of the 17 that read better, 0.63 or more (`scripts/handwriting/boxed-vs-rows.ts`).
+- **Results**, in the local web app in headless Chrome with every AI request blocked (the free repairs on):
+
+| | Before | After |
+|---|---|---|
+| 50 handwritten test pages | 38 of 325 lines add up | **63 of 303**; 16 pages better, none worse |
+| The owner's *Ekeresimesi Erutego* | 8 of 21, none on page 1 | 8 of 20; page 1's lines close (most bars right but for octave marks and dots) |
+
+  By eye, test page 09's first line is right but for three octave marks and one note. A line that adds up can still be wrong; the person checks every line.
+- **Still to do:** a line's first box with only an upbeat is sometimes left out; falling back system by system rather than for the whole page; octave marks and dots (the model); trying Claude on boxed lines (it sees the whole system's picture).
+- **Tools:** `scripts/handwriting/cells.ts` reads a page box by box as the app does (`ROWS=1` lists each box's rows, `DRAW=<system>` saves a picture of them); `boxed-pages.ts` lists which pages are boxed; `boxed-vs-rows.ts` counts the notes read each way.

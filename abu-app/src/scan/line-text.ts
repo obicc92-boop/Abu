@@ -260,6 +260,44 @@ export function withHalfBarsAsBars(text: string, beatsPerBar: number): string | 
 }
 
 /**
+ * The line with bar lines that are half-bar marks: two short bars in a row
+ * that make one whole bar in every part alike ("s :d | d :d" in 4/4) become
+ * one, the bar line a "/". On a boxed sheet written by hand, a "|" drawn
+ * down through every part of a small box can be taken for the box's border
+ * (boxes.ts). Null if no bars join.
+ */
+export function withShortBarsJoined(text: string, beatsPerBar: number): string | null {
+  const rows = splitLine(text);
+  const parts = rows.filter((r) => r.part).map((r) => barsOfRow(r.text));
+  if (!parts.length) return null;
+  const count = Math.min(...parts.map((p) => p.bars.length));
+  const join = new Set<number>();
+  for (let j = 0; j + 1 < count; j++) {
+    const whole = parts.every((p) => {
+      const a = beatCount(p.bars[j]);
+      const b = beatCount(p.bars[j + 1]);
+      return a < beatsPerBar && b < beatsPerBar && a + b === beatsPerBar;
+    });
+    if (whole) {
+      join.add(j);
+      j++;
+    }
+  }
+  if (!join.size) return null;
+  const fixed = rows.map((r) => {
+    if (!r.part) return r;
+    const { bars, closed } = barsOfRow(r.text);
+    const out: string[] = [];
+    bars.forEach((bar, j) => {
+      if (join.has(j - 1)) out[out.length - 1] = `${out[out.length - 1].trim()} / ${bar.trim()}`;
+      else out.push(bar.trim());
+    });
+    return { part: r.part, text: `${out.join(' | ')}${closed ? ' |' : ''}` };
+  });
+  return joinLine(fixed);
+}
+
+/**
  * The line with bar lines a typist left out between two notes ("s : - : m : r
  * d : - : - : m.s"): in a bar too long, the spaces between notes become bar
  * lines when that cuts it into whole bars (a short one only at the row's end:
@@ -475,7 +513,8 @@ export function withBarLinesInStep(text: string, beatsPerBar: number): string | 
 /**
  * The free repairs for a line that fails the checker, tried in turn and
  * together: a column of part names read as notes, bar lines every part lost
- * alike, half-bar marks that are bar lines, bar lines left out, missing beat
+ * alike, half-bar marks that are bar lines and bar lines that are half-bar
+ * marks, bar lines left out, missing beat
  * marks, parts resting through an upbeat, silent bars typed short, and one
  * part's bar lines moved to where the others have theirs. The first that
  * makes the line pass, or null. Bars every part agrees on are cut before any
@@ -488,6 +527,7 @@ export function freeRepair(text: string, passes: (t: string) => boolean, beatsPe
     withoutNameColumn,
     (t) => withBarsInStep(t, beatsPerBar),
     (t) => withHalfBarsAsBars(t, beatsPerBar),
+    (t) => withShortBarsJoined(t, beatsPerBar),
     (t) => withGapsAsBars(t, beatsPerBar),
     (t) => withSpacedBeats(t, beatsPerBar),
     withRestingEdges,

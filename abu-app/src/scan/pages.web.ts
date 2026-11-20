@@ -121,6 +121,27 @@ export async function cutLine(page: ScanPage, box: Box): Promise<{ blob: Blob; u
   return { blob, url: URL.createObjectURL(blob), width: c.width, height: c.height, canvas: c };
 }
 
+/**
+ * A row cut out in pieces and put side by side, a little apart (a boxed sheet's row of words, one piece in
+ * each box), to read as one row.
+ */
+export async function cutPieces(page: ScanPage, pieces: Box[]): Promise<{ blob: Blob; url: string; width: number; height: number }> {
+  const height = Math.max(...pieces.map((p) => p.bottom - p.top)) + 8;
+  const gap = Math.round(height / 2);
+  const width = pieces.reduce((s, p) => s + (p.right - p.left), 0) + gap * (pieces.length + 1);
+  const s = Math.min(1, LINE_WIDTH / width);
+  const [c, ctx] = canvas(width * s, height * s);
+  let x = gap;
+  for (const p of pieces) {
+    const w = p.right - p.left;
+    const h = p.bottom - p.top;
+    ctx.drawImage(page.canvas as HTMLCanvasElement, p.left, p.top, w, h, x * s, ((height - h) / 2) * s, w * s, h * s);
+    x += w + gap;
+  }
+  const blob = await jpeg(c, 0.9);
+  return { blob, url: URL.createObjectURL(blob), width: c.width, height: c.height };
+}
+
 /** Opens the phone's camera (on a computer, the file picker) for a photo of a page. */
 export function takePhoto(): Promise<File | null> {
   return new Promise((resolve) => {

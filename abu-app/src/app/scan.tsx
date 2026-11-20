@@ -8,7 +8,9 @@
  *    - a typed PDF is read from its own text (free, instant, exact);
  *    - on photos and scans, the lines are found by where the ink is and read
  *      by SolfaScores' own model in the browser, and rows of words are read by
- *      Cloudflare's reader (SolfaScores' model reads only notes);
+ *      Cloudflare's reader (SolfaScores' model reads only notes); a boxed
+ *      sheet (each bar in a box of its own, the parts stacked in it) is read
+ *      box by box (scan/boxes.ts), its words in pieces put side by side;
  *    - a line that passes SolfaScores' checker is kept as read. Only a line that
  *      fails goes to an AI: Cloudflare's reader, then Claude if the Worker
  *      has a key (Haiku checks, Opus reads from scratch), and an AI's answer
@@ -37,7 +39,7 @@ import { setScanDraft } from '@/scan/draft';
 import { joinLines, timeFor } from '@/scan/join';
 import { alignedRows, barColumns, bestFree, changedShare, joinLine, keepsParts, problemsByPart, splitLine, tidyNotes, tidyTitle, withBarsInStep, withWords, wordsOf, type LineRow, type LineWords } from '@/scan/line-text';
 import { findLinesOwn, readLineOwn } from '@/scan/own-reader';
-import { cutLine, loadPages, MAX_PAGES, pageForFinding, scanningHere, takePhoto } from '@/scan/pages';
+import { cutLine, cutPieces, loadPages, MAX_PAGES, pageForFinding, scanningHere, takePhoto } from '@/scan/pages';
 import { readTypedSheet, type PageText } from '@/scan/pdf-text';
 import type { Box, FoundLine } from '@/scan/types';
 import { parseKey, parseSolfa, parseTime, partName } from '@/solfa';
@@ -255,7 +257,7 @@ function Scanner() {
       if (more) setNote(`Only the first ${MAX_PAGES} pages are read at a time.`);
       const found: Line[] = [];
       let head: Heading = { title: '', composer: '', key: '', time: '' };
-      const add = async (p: number, box: Box, l: { parts: string[]; words: number; wordRows?: FoundLine['wordRows']; text?: string; lined?: string }) => {
+      const add = async (p: number, box: Box, l: { parts: string[]; words: number; wordRows?: FoundLine['wordRows']; text?: string; lined?: string; draft?: string }) => {
         const cut = await cutLine(pages[p], box);
         const text = l.text ?? '';
         const wordRows = l.wordRows ?? [];
@@ -268,7 +270,8 @@ function Scanner() {
           wordRows,
           wordTexts: text ? wordsOf(text) : wordRows.map((w) => ({ after: w.after, text: '' })),
           ...cut,
-          draft: text,
+          // A boxed sheet's lines come read already (boxes.ts); they still go through the checker and the AIs.
+          draft: text || l.draft || '',
           ...(l.lined ? { lined: l.lined } : {}),
           via: text ? 'text' : 'own',
           status: text ? 'read' : 'waiting',
@@ -339,6 +342,7 @@ function Scanner() {
       const waiting = found.filter((l) => l.status === 'waiting');
       for (let i = 0; i < waiting.length; i++) {
         setDone({ n: i, of: waiting.length });
+        if (waiting[i].draft) continue;
         try {
           waiting[i].draft = (await readLineOwn(waiting[i].canvas, waiting[i].parts, waiting[i].words)).text;
         } catch {
@@ -353,7 +357,7 @@ function Scanner() {
           while (next < rows.length) {
             const { l, w, k } = rows[next++];
             try {
-              const cut = await cutLine(pages[l.pageIndex], w.box);
+              const cut = w.pieces ? await cutPieces(pages[l.pageIndex], w.pieces) : await cutLine(pages[l.pageIndex], w.box);
               URL.revokeObjectURL(cut.url);
               l.wordTexts[k] = { after: w.after, text: (await api.scanWords(cut.blob)).words };
             } catch {
