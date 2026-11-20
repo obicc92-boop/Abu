@@ -172,6 +172,7 @@ export function SolfaKeypad({
           <View style={styles.row}>
             <KeyButton label="◀" onPress={() => onKey('left')} accessibilityLabel="Cursor left" />
             <KeyButton label="▶" onPress={() => onKey('right')} accessibilityLabel="Cursor right" />
+            {keyChange && !parts ? <KeyButton label="Key" caption="change" onPress={() => setPlace(keyChange.where())} accessibilityLabel="Change key" /> : null}
             {onKeyboard ? <KeyButton label="ABC" caption="keyboard" onPress={onKeyboard} /> : null}
             <KeyButton label="Done" onPress={leaving(onDone)} done />
           </View>

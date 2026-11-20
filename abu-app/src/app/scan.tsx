@@ -31,22 +31,22 @@ import { useQuery } from '@tanstack/react-query';
 import * as DocumentPicker from 'expo-document-picker';
 import { Redirect, router } from 'expo-router';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, Text, TextInput, View, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollViewInstance, type TextInputInstance } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, Text, View, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollViewInstance, type TextInputInstance } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { api, ApiError, type PickedFile, type ScanLineReading } from '@/api/client';
 import { useSongPlayer } from '@/audio/use-song-player';
 import { AgainIcon, CameraIcon, CheckIcon, CloseIcon, FileIcon, PlusIcon, ScanIcon, ZoomIcon } from '@/components/icons';
+import { LineRows } from '@/components/line-rows';
 import { PlayButton } from '@/components/player-controls';
-import { keysJustTouched, PhoneKeyboardBar, SolfaKeypad } from '@/components/solfa-keypad';
+import { PhoneKeyboardBar, SolfaKeypad } from '@/components/solfa-keypad';
 import { Body, Button, Card, Chip, ErrorText, Kicker, MAX_WIDTH, Page, TopBar } from '@/components/ui';
-import { barNumbers, checkRows } from '@/scan/bar-check';
 import { setScanDraft } from '@/scan/draft';
 import { forgetScan, listScans, openScan, saveScan, type SavedScan } from '@/scan/saved';
 import { joinLines, linesKeys, timeFor } from '@/scan/join';
-import { alignedRows, barColumns, bestFree, changedShare, joinLine, keepsParts, namesNotWords, problemsByPart, splitLine, tidyNotes, tidyTitle, withBarsInStep, withWords, wordsOf, wordsPreferring, wordsUnderNotes, type LineRow, type LineWords } from '@/scan/line-text';
-import { keepCursor, placeCursor } from '@/lib/field-cursor';
-import { applyKey, lowMarksShown, lowMarksTyped, type Key, type Selection } from '@/lib/solfa-keys';
+import { bestFree, changedShare, joinLine, keepsParts, namesNotWords, problemsByPart, splitLine, tidyNotes, tidyTitle, withBarsInStep, withWords, wordsOf, wordsPreferring, type LineRow, type LineWords } from '@/scan/line-text';
+import { placeCursor } from '@/lib/field-cursor';
+import { applyKey, type Key, type Selection } from '@/lib/solfa-keys';
 import { findLinesOwn, readLineOwn } from '@/scan/own-reader';
 import { cutLine, cutPieces, loadPages, MAX_PAGES, pageForFinding, scanningHere, takePhoto } from '@/scan/pages';
 import { readTypedSheet, type PageText } from '@/scan/pdf-text';
@@ -83,19 +83,13 @@ interface Readers {
   cloudflare: boolean;
   anthropic: boolean;
 }
-/** Width of a character in the rows' monospace type (0.6 of its size), until it's measured on the screen. */
-const CHAR = 8.7;
 const ROW_HEIGHT = 42;
-/** One character of the words, in note columns (the words' type is narrower than the notes'). */
-const WORDS_CHAR = 0.8;
 /** Room under the rows for the sol-fa keypad, so the row being fixed can be scrolled above it. */
 const KEYPAD_ROOM = 330;
 /** Space before a row's first character. */
 const ROW_PAD = 12;
 /** How thick the bar lines drawn through the rows are: enough to cover the typed "|" beneath. */
 const BAR_LINE = 2;
-/** What's measured for that width: long, so rounding hardly matters. */
-const MEASURED = '0'.repeat(100);
 /** The strip of bar numbers above the rows. */
 const NUMBERS_HEIGHT = 18;
 
@@ -884,13 +878,8 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
   const [zoom, setZoom] = useState(true);
   const [width, setWidth] = useState(0);
   const [showTimes, setShowTimes] = useState(false);
-  // A character's width in the rows' type, as drawn on this screen, so the bar lines land on the typed "|".
-  const [charWidth, setCharWidth] = useState(CHAR);
   const rows = useMemo(() => splitLine(line.text), [line.text]);
-  // The parts' bars lined up in columns, as on the sheet; the row being typed in shows just what's typed.
-  const shown = useMemo(() => alignedRows(rows), [rows]);
   const [editing, setEditing] = useState<{ id: string; row: number; value: string } | null>(null);
-  const valueOf = (i: number) => (editing && editing.id === line.id && editing.row === i ? editing.value : shown[i]);
   // A row of notes is fixed with the sol-fa keypad, which keeps the field's cursor; "ABC" swaps in the phone's
   // keyboard until the row is left. Rows of words use the phone's keyboard.
   const inputs = useRef<(TextInputInstance | null)[]>([]);
@@ -923,13 +912,6 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
     field?.blur();
     setTimeout(() => field?.focus(), 50);
   };
-  // Each row of words set under its part's notes, as on the sheet (the row being typed in shows what's typed).
-  const wordsLaid = rows.map((r, i) => {
-    if (r.part || editingRow === i) return null;
-    let j = i - 1;
-    while (j >= 0 && !rows[j].part) j--;
-    return j >= 0 ? wordsUnderNotes(valueOf(i), valueOf(j), WORDS_CHAR) : null;
-  });
   // The key where this line starts: the song's, moved by the lines before it (their bridge notes and new keys), or
   // this line's own new key.
   const keys = useMemo(() => linesKeys(lines.map((l) => ({ text: l.text, key: l.key, left: l.skipped })), doh, time), [lines, doh, time]);
@@ -955,28 +937,16 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
     parsed.errors.map((e) => e.message),
     rows.flatMap((r) => (r.part ? [r.part] : [])),
   );
-  // Each row's bars as shown (the row being typed in by what's typed), with the ones that don't add up.
-  const marks = checkRows(
-    rows.map((r, i) => ({ part: r.part, text: valueOf(i) })),
-    parsed.errors,
-    parsed.beatsPerBar,
-  );
-  // The bars' numbers, over where every part's bar starts.
-  const numbers = useMemo(() => barNumbers(rows.map((r, i) => ({ part: r.part, text: shown[i] }))), [rows, shown]);
   const checked = lines.filter((l) => l.checked || l.skipped).length;
 
   // The picture: tall enough to read (scroll sideways), or the whole line at once.
   const imgHeight = zoom ? 170 : Math.max(48, ((width || 1) * line.height) / line.width);
   const imgWidth = zoom ? (imgHeight * line.width) / line.height : width;
-  const textWidth = Math.max(
-    width - 44,
-    ...rows.map((_, i) => valueOf(i).length * charWidth + 2 * ROW_PAD + 4),
-    ...wordsLaid.flatMap((w) => (w ?? []).map((s) => (s.at + s.text.length * WORDS_CHAR) * charWidth + 2 * ROW_PAD + 4)),
-  );
 
   // The picture and the rows scroll sideways together, so bars stay roughly lined up.
   const picture = useRef<ScrollViewInstance>(null);
   const reading = useRef<ScrollViewInstance>(null);
+  const readingWidths = useRef({ content: 0, view: 0 });
   const quietUntil = useRef({ picture: 0, reading: 0 });
   /** Called from a scroll event: moves the other one to the same share of its width. */
   function follow(from: 'picture' | 'reading', e: NativeSyntheticEvent<NativeScrollEvent>) {
@@ -987,7 +957,7 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
     const x = (other: number, view: number) => Math.max(0, share * (other - view));
     if (from === 'picture') {
       quietUntil.current.reading = now + 120;
-      reading.current?.scrollTo({ x: x(textWidth, width - 44), animated: false });
+      reading.current?.scrollTo({ x: x(readingWidths.current.content, readingWidths.current.view), animated: false });
     } else {
       quietUntil.current.picture = now + 120;
       picture.current?.scrollTo({ x: x(imgWidth, width), animated: false });
@@ -1095,136 +1065,30 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
               <ErrorText message={line.error ?? 'This line couldn’t be read.'} />
             </View>
           ) : null}
-          <View style={styles.rowsBox}>
-            {/* Out of sight: a run of characters in the rows' type, measured once it's drawn (and again if the font arrives late). */}
-            <View style={styles.measureBox} aria-hidden importantForAccessibility="no-hide-descendants">
-              <View style={styles.measureWide}>
-                <Text
-                  numberOfLines={1}
-                  style={styles.measureText}
-                  onLayout={(e) => {
-                    const w = e.nativeEvent.layout.width / MEASURED.length;
-                    if (w > 0 && Math.abs(w - charWidth) > 0.001) setCharWidth(w);
-                  }}
-                >
-                  {MEASURED}
-                </Text>
-              </View>
-            </View>
-            <View style={styles.tags}>
-              {numbers.length ? <View style={styles.numbersTop} /> : null}
-              {rows.map((r, i) => (
-                <View key={i} style={styles.tagCell}>
-                  {r.part ? <View style={[styles.tag, { backgroundColor: partColor(r.part) }]} /> : null}
-                </View>
-              ))}
-            </View>
-            <ScrollView ref={reading} horizontal onScroll={(e) => follow('reading', e)} scrollEventThrottle={16} keyboardShouldPersistTaps="handled">
-              <View style={{ width: textWidth }}>
-                {numbers.length ? (
-                  <View style={styles.numbers} aria-hidden importantForAccessibility="no-hide-descendants">
-                    {numbers.map((n) => (
-                      <Text key={n.bar} style={[styles.number, { left: ROW_PAD + n.at * charWidth }]}>
-                        {n.bar}
-                      </Text>
-                    ))}
-                  </View>
-                ) : null}
-                <View>
-                  {/* Behind the rows' text: each bar that doesn't add up, from its bar line to the next and underlined,
-                      with its beats by its opening bar line (in sight as soon as the bar is) to count against the time;
-                      a part whose bars or beats don't match most parts', by a lighter line under its whole row. The
-                      rows' own background is clear, so the text stays on top. */}
-                  <View style={styles.overlay} aria-hidden importantForAccessibility="no-hide-descendants">
-                    {marks.flatMap((m, i) => [
-                      ...(m.whole ? [<View key={`row-${i}`} style={[styles.wholeMark, { top: i * ROW_HEIGHT }]} />] : []),
-                      ...m.bars
-                        .filter((b) => b.bad)
-                        .map((b) => {
-                          const left = b.from < 0 ? 0 : ROW_PAD + (b.from + 0.5) * charWidth;
-                          const right = b.closed ? ROW_PAD + (b.to + 0.5) * charWidth : ROW_PAD + b.to * charWidth + ROW_PAD / 2;
-                          return (
-                            <View key={`${i}-${b.bar}`} style={[styles.barTint, { top: i * ROW_HEIGHT, left, width: Math.max(0, right - left) }]}>
-                              {b.wrongBeats ? (
-                                <View style={styles.beats}>
-                                  <Text style={styles.beatsText}>{b.beats}</Text>
-                                </View>
-                              ) : null}
-                            </View>
-                          );
-                        }),
-                    ])}
-                  </View>
-                  {rows.map((r, i) => {
-                    const withKeys = !!r.part && !keyboard;
-                    return (
-                      <TextInput
-                        key={i}
-                        ref={(field) => {
-                          inputs.current[i] = field;
-                        }}
-                        // A row of notes shows its low octave marks as on the sheet, t₁ for t1 (owner's request,
-                        // 20 November 2026); the text keeps t1.
-                        value={r.part ? lowMarksShown(valueOf(i)) : valueOf(i)}
-                        onFocus={() => {
-                          if (editingRow === i) return;
-                          setEditing({ id: line.id, row: i, value: shown[i] });
-                          setKeyboard(false);
-                          // In sight above the keypad, once it's up.
-                          if (r.part) setTimeout(() => (inputs.current[i] as unknown as { scrollIntoView?: (o: object) => void } | null)?.scrollIntoView?.({ block: 'center', behavior: 'smooth' }), 150);
-                        }}
-                        onChangeText={(t) => {
-                          const typed = r.part ? lowMarksTyped(t) : t;
-                          setEditing({ id: line.id, row: i, value: typed });
-                          setRow(i, typed);
-                          if (r.part) keepCursor(inputs.current[i], t, lowMarksShown(typed));
-                        }}
-                        onSelectionChange={(e) => setSel(e.nativeEvent.selection)}
-                        onBlur={() => {
-                          // The row is left unless it has the focus again straight away (switching keyboards), or
-                          // the keys were just touched (the focus goes back to it).
-                          setTimeout(() => {
-                            if (inputs.current[i]?.isFocused()) return;
-                            if (keysJustTouched()) inputs.current[i]?.focus();
-                            else setEditing((e) => (e && e.row === i ? null : e));
-                          }, 120);
-                        }}
-                        inputMode={withKeys ? 'none' : 'text'}
-                        showSoftInputOnFocus={!withKeys}
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                        spellCheck={false}
-                        style={[styles.rowInput, !r.part && styles.wordsInput, wordsLaid[i] && styles.laidOut]}
-                        accessibilityLabel={`${r.part ? partName(r.part) : 'Words'}, line ${current + 1}`}
-                      />
-                    );
-                  })}
-                  {/* Each row of words, set under its part's notes; tap it to type (it then shows as typed). */}
-                  <View style={styles.overlay} aria-hidden importantForAccessibility="no-hide-descendants">
-                    {wordsLaid.flatMap((w, i) =>
-                      (w ?? []).map((s, k) => (
-                        <Text key={`${i}-${k}`} numberOfLines={1} style={[styles.syllable, { top: i * ROW_HEIGHT, left: ROW_PAD + s.at * charWidth }]}>
-                          {s.text}
-                        </Text>
-                      )),
-                    )}
-                  </View>
-                  {/* Each bar line drawn through the parts' rows, as on the sheet, over the typed "|". It's left out
-                      where it crosses a row of words, and a row being typed in shows its own. Placed by a transform,
-                      which browsers don't round to whole pixels as they do a position: the line then covers the "|". */}
-                  <View style={styles.overlay}>
-                    {rows.flatMap((r, i) =>
-                      r.part
-                        ? barColumns(valueOf(i)).map((c) => (
-                            <View key={`${i}-${c}`} style={[styles.barLine, { top: i * ROW_HEIGHT, transform: [{ translateX: ROW_PAD + (c + 0.5) * charWidth - BAR_LINE / 2 }] }]} />
-                          ))
-                        : [],
-                    )}
-                  </View>
-                </View>
-              </View>
-            </ScrollView>
-          </View>
+          <LineRows
+            rows={rows}
+            editing={editing && editing.id === line.id ? { row: editing.row, value: editing.value } : null}
+            keyboard={keyboard}
+            errors={parsed.errors}
+            beatsPerBar={parsed.beatsPerBar}
+            label={`line ${current + 1}`}
+            onStart={(i, shown) => {
+              setEditing({ id: line.id, row: i, value: shown });
+              setKeyboard(false);
+            }}
+            onType={(i, typed) => {
+              setEditing({ id: line.id, row: i, value: typed });
+              setRow(i, typed);
+            }}
+            onSelection={setSel}
+            onLeave={(i) => setEditing((e) => (e && e.row === i ? null : e))}
+            onField={(i, f) => {
+              inputs.current[i] = f;
+            }}
+            scroller={reading}
+            onScroll={(e) => follow('reading', e)}
+            onWidths={(w) => (readingWidths.current = w)}
+          />
           <View style={[styles.pad, { gap: 6 }]}>
             {Object.entries(byPart).map(([part, messages]) => (
               <Text key={part} style={styles.problem}>

@@ -16,11 +16,14 @@ import { PlayButton } from '@/components/player-controls';
 import { Score } from '@/components/score';
 import { SolfaCheck } from '@/components/solfa-check';
 import { keysJustTouched, PhoneKeyboardBar, SolfaKeypad, type KeyPlace } from '@/components/solfa-keypad';
+import { SongRows, type ActiveRow } from '@/components/song-rows';
 import { keepCursor, placeCursor } from '@/lib/field-cursor';
 import { applyKey, keyChangePlace, songLowMarksShown, songLowMarksTyped, withKeyChange, type Key, type Selection } from '@/lib/solfa-keys';
 import { Body, Button, Card, Chip, ErrorText, Field, Kicker, Loading, Page, TopBar } from '@/components/ui';
+import { musicPiece, songPieces, withKeyBefore, withRow } from '@/lib/song-pieces';
 import { TAG_GROUPS } from '@/lib/tags';
 import { clearScanDraft, scanDraft, type ScanDraft } from '@/scan/draft';
+import { tidyNotes } from '@/scan/line-text';
 import { forgetScan } from '@/scan/saved';
 import { KEY_NAMES, parseSolfa } from '@/solfa';
 import { useSession } from '@/state/session';
@@ -68,12 +71,26 @@ function Editor({ song, draft }: { song?: Song; draft: ScanDraft | null }) {
   const [time, setTime] = useState(song?.time_signature ?? draft?.time ?? '4/4');
   const [tags, setTags] = useState<string[]>(song?.tags ?? []);
   const [solfa, setSolfa] = useState(song?.solfa ?? draft?.solfa ?? '');
-  // The sol-fa is written with the sol-fa keypad (every symbol a tap away, parts' names and new lines too);
-  // "ABC" swaps in the phone's keyboard, for the words, with a bar over it to come back.
+  // The sol-fa is written in rows, one for each part by its colour, as on Check the reading (owner's request,
+  // 20 November 2026), or as text ("Edit as text", for pasting). Either way with the sol-fa keypad; "ABC" swaps
+  // in the phone's keyboard, with a bar over it to come back.
+  const [asText, setAsText] = useState(false);
   const field = useRef<TextInputInstance | null>(null);
   const [writing, setWriting] = useState(false);
   const [keyboard, setKeyboard] = useState(false);
   const [sel, setSel] = useState<Selection>({ start: 0, end: 0 });
+  // In rows: the row being typed in, and each row's field (by line of music and row).
+  const [active, setActive] = useState<ActiveRow | null>(null);
+  const rowFields = useRef(new Map<string, TextInputInstance | null>());
+  const activeField = () => (active ? (rowFields.current.get(`${active.line}:${active.row}`) ?? null) : null);
+  const activePart = (() => {
+    if (!active) return null;
+    const pieces = songPieces(solfa);
+    const p = pieces[musicPiece(pieces, active.line)];
+    return p?.kind === 'music' ? (p.rows[active.row]?.part ?? null) : null;
+  })();
+  /** The field being written in: the text box, or the row. */
+  const current = () => (asText ? field.current : activeField());
   /** The text as a key left it, with the cursor where the key put it. */
   const write = (next: { text: string; sel: Selection }) => {
     setSolfa(next.text);
@@ -82,35 +99,66 @@ function Editor({ song, draft }: { song?: Song; draft: ScanDraft | null }) {
     if (f && !f.isFocused()) f.focus();
     requestAnimationFrame(() => placeCursor(f, next.sel));
   };
-  const pressKey = (key: Key) => write(applyKey(solfa, sel, key));
+  const pressKey = (key: Key) => {
+    if (asText) return write(applyKey(solfa, sel, key));
+    if (!active) return;
+    // A row: what it shows as typed, and the song's text with the row changed.
+    const next = applyKey(active.value, sel, key);
+    const pieces = songPieces(solfa);
+    setActive({ ...active, value: next.text });
+    setSolfa(withRow(solfa, musicPiece(pieces, active.line), active.row, activePart ? tidyNotes(next.text) : next.text));
+    setSel(next.sel);
+    const f = activeField();
+    if (f && !f.isFocused()) f.focus();
+    requestAnimationFrame(() => placeCursor(f, next.sel));
+  };
   /** The phone's keyboard in place of the keypad, or back: the field is focused again to bring it up or put it away. */
   const switchKeys = (phone: boolean) => {
+    const f = current();
     setKeyboard(phone);
-    field.current?.blur();
-    setTimeout(() => field.current?.focus(), 50);
+    f?.blur();
+    setTimeout(() => f?.focus(), 50);
   };
   const stopWriting = () => {
-    field.current?.blur();
+    current()?.blur();
     setWriting(false);
+    setActive(null);
     setKeyboard(false);
   };
   // A key change (owner's request, 20 November 2026, made simpler the same evening): "Key" says plainly where it
-  // starts, the first bar of the lines of music the cursor is in, and the key there now; at the song's start
-  // it's the song's own key.
+  // starts (the first bar of the line of music being written, or in text, of the lines the cursor is in), and
+  // the key there now; at the song's start it's the song's own key.
   const keyChange = {
     where: (): KeyPlace => {
-      const before = parseSolfa(solfa.slice(0, keyChangePlace(solfa, sel.start).at), { time, key: doh });
+      let upTo: number;
+      if (asText) upTo = keyChangePlace(solfa, sel.start).at;
+      else {
+        const pieces = songPieces(solfa);
+        const p = pieces[musicPiece(pieces, active?.line ?? 0)];
+        upTo = p?.kind === 'music' ? solfa.split('\n').slice(0, p.from).join('\n').length : 0;
+      }
+      const before = parseSolfa(solfa.slice(0, upTo), { time, key: doh });
       const bars = Math.max(0, ...Object.values(before.events).flatMap((events) => events.map((e) => e.bar)));
       const now = before.keyChanges.at(-1)?.key ?? before.meta.key;
       return { bar: bars ? bars + 1 : null, doh: now?.name ?? KEY_NAMES[doh] };
     },
     pick: (name: string) => {
       const { bar } = keyChange.where();
-      const place = keyChangePlace(solfa, sel.start);
-      if (bar) return write(withKeyChange(solfa, sel, name));
-      // The song's key: a key line already at the top is changed too, so the two agree.
-      setDoh(Math.max(0, KEY_NAMES.indexOf(name as (typeof KEY_NAMES)[number])));
-      if (place.existing) write(withKeyChange(solfa, sel, name));
+      const songKey = () => setDoh(Math.max(0, KEY_NAMES.indexOf(name as (typeof KEY_NAMES)[number])));
+      if (asText) {
+        if (!bar) songKey();
+        // The song's key: a key line already at the top is changed too, so the two agree.
+        if (bar || keyChangePlace(solfa, sel.start).existing) write(withKeyChange(solfa, sel, name));
+        return;
+      }
+      const pieces = songPieces(solfa);
+      const at = musicPiece(pieces, active?.line ?? 0);
+      if (!bar) {
+        songKey();
+        if (pieces[at - 1]?.kind === 'key') setSolfa(withKeyBefore(solfa, at, name));
+        return;
+      }
+      setSolfa(withKeyBefore(solfa, at, name));
     },
   };
   const withKeys = writing && !keyboard;
@@ -181,10 +229,18 @@ function Editor({ song, draft }: { song?: Song; draft: ScanDraft | null }) {
   return (
     <Page
       footer={
-        withKeys ? (
-          <SolfaKeypad parts keyChange={keyChange} onKey={pressKey} onKeyboard={() => switchKeys(true)} onDone={stopWriting} />
-        ) : writing && keyboard ? (
-          <PhoneKeyboardBar onSolfaKeys={() => switchKeys(false)} onDone={stopWriting} />
+        asText ? (
+          withKeys ? (
+            <SolfaKeypad parts keyChange={keyChange} onKey={pressKey} onKeyboard={() => switchKeys(true)} onDone={stopWriting} />
+          ) : writing && keyboard ? (
+            <PhoneKeyboardBar onSolfaKeys={() => switchKeys(false)} onDone={stopWriting} />
+          ) : undefined
+        ) : active && activePart ? (
+          keyboard ? (
+            <PhoneKeyboardBar onSolfaKeys={() => switchKeys(false)} onDone={stopWriting} />
+          ) : (
+            <SolfaKeypad keyChange={keyChange} onKey={pressKey} onKeyboard={() => switchKeys(true)} onDone={stopWriting} />
+          )
         ) : undefined
       }
     >
@@ -224,12 +280,42 @@ function Editor({ song, draft }: { song?: Song; draft: ScanDraft | null }) {
       <Card>
         <View style={styles.headRow}>
           <Kicker>Sol-fa</Kicker>
-          <Pressable onPress={() => setShowHelp(!showHelp)} accessibilityRole="button">
-            <Text style={styles.link}>{showHelp ? 'Hide help' : 'How to write it'}</Text>
-          </Pressable>
+          <View style={styles.links}>
+            <Pressable onPress={() => setShowHelp(!showHelp)} accessibilityRole="button">
+              <Text style={styles.link}>{showHelp ? 'Hide help' : 'Help'}</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                stopWriting();
+                setAsText(!asText);
+              }}
+              accessibilityRole="button"
+            >
+              <Text style={styles.link}>{asText ? 'Edit in rows' : 'Edit as text'}</Text>
+            </Pressable>
+          </View>
         </View>
-        {showHelp ? <Help onExample={() => setSolfa(EXAMPLE)} /> : null}
-        <TextInput
+        {showHelp ? <Help asText={asText} onExample={() => setSolfa(EXAMPLE)} /> : null}
+        {!asText ? (
+          <SongRows
+            text={solfa}
+            time={time}
+            doh={doh}
+            active={active}
+            keyboard={keyboard}
+            onActive={(row) => {
+              if (row && (!active || active.line !== row.line || active.row !== row.row)) setKeyboard(false);
+              setActive(row);
+            }}
+            onLeave={(line, row) => setActive((a) => (a && a.line === line && a.row === row ? null : a))}
+            onChange={setSolfa}
+            onSelection={setSel}
+            onField={(line, row, f) => {
+              rowFields.current.set(`${line}:${row}`, f);
+            }}
+          />
+        ) : null}
+        {asText ? <TextInput
           ref={field}
           // The parts' low octave marks shown as on a sheet, t₁ for t1; the text keeps t1.
           value={songLowMarksShown(solfa)}
@@ -265,7 +351,7 @@ function Editor({ song, draft }: { song?: Song; draft: ScanDraft | null }) {
           placeholderTextColor={colors.placeholder}
           style={styles.solfa}
           accessibilityLabel="Sol-fa"
-        />
+        /> : null}
         <SolfaCheck parsed={parsed} empty={empty} />
       </Card>
 
@@ -360,16 +446,20 @@ function Editor({ song, draft }: { song?: Song; draft: ScanDraft | null }) {
   );
 }
 
-function Help({ onExample }: { onExample: () => void }) {
+function Help({ asText, onExample }: { asText: boolean; onExample: () => void }) {
   const styles = useStyles();
   const rules = [
-    'Start each line with the part: S, A, T, B or Solo. A W line under a part holds its words.',
+    asText
+      ? 'Start each line with the part: S, A, T, B or Solo. A W line under a part holds its words.'
+      : 'Each line of music has a row for each part, by its colour, and rows of words under them. Tap a row to write in it with the sol-fa keys.',
     ': between beats, / for the half-bar accent, | between bars.',
     '. splits a beat in two (s.l); , splits a half beat (d.,r).',
     '- holds a note on; an empty beat or x is a rest.',
     'd\' is the high doh and t1 the low ti (d¹ and t₁ work too).',
-    '[Verse] or [Chorus] on its own line starts a section.',
-    'Key change: tap Key on the keypad and pick the new doh. It starts at the first bar of the lines you’re in, and shows as “Doh is F”. (Bridge notes as printed, s=d, work too.)',
+    ...(asText ? ['[Verse] or [Chorus] on its own line starts a section.'] : []),
+    asText
+      ? 'Key change: tap Key on the keypad and pick the new doh. It starts at the first bar of the lines you’re in, and shows as “Doh is F”. (Bridge notes as printed, s=d, work too.)'
+      : 'Key change: while writing in a line, tap Key on the keypad and pick the new doh. It starts at that line’s first bar.',
     'Write tenor as on the sheet; SolfaScores plays it an octave lower.',
   ];
   return (
@@ -390,6 +480,7 @@ const useStyles = makeStyles((colors) => ({
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   headRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   link: { fontFamily: fonts.bold, fontSize: 13.5, color: colors.link },
+  links: { flexDirection: 'row', gap: 16 },
   solfa: {
     minHeight: 180,
     borderRadius: 12,
