@@ -12,9 +12,9 @@ function contrast(a: string, b: string): number {
   return (x + 0.05) / (y + 0.05);
 }
 
-const every = LOOKS.flatMap((l) => (['light', 'dark'] as const).map((scheme) => [`${l.name} ${scheme}`, palettes[l.id][scheme], scheme === 'dark'] as [string, Palette, boolean]));
+const every = LOOKS.map((l) => [l.name, palettes[l.id], l.scheme === 'dark'] as [string, Palette, boolean]);
 
-describe.each(every)('the %s palette', (_, c, dark) => {
+describe.each(every)('the %s look', (_, c, dark) => {
   it('keeps text readable on cards and the page (4.5:1)', () => {
     for (const text of [c.ink, c.muted, c.accent, c.link, c.ok, c.warn, c.danger]) {
       for (const bg of [c.card, c.sand]) expect(contrast(text, bg)).toBeGreaterThanOrEqual(4.5);
@@ -41,7 +41,11 @@ describe.each(every)('the %s palette', (_, c, dark) => {
     for (const part of ['S', 'A', 'T', 'B', 'Solo']) expect(contrast(partInk(part, dark), dark ? c.card : c.sand)).toBeGreaterThanOrEqual(4.5);
   });
 
-  it('has the same colours, by name, as the first palette', () => {
-    expect(Object.keys(c).sort()).toEqual(Object.keys(palettes.gold.light).sort());
+  it('has the same colours, by name, as the first look', () => {
+    expect(Object.keys(c).sort()).toEqual(Object.keys(palettes.white).sort());
   });
+});
+
+it('has five looks: White (light), then Ebony, Gold, Silver and Violet (dark)', () => {
+  expect(LOOKS.map((l) => `${l.name} ${l.scheme}`)).toEqual(['White light', 'Ebony dark', 'Gold dark', 'Silver dark', 'Violet dark']);
 });

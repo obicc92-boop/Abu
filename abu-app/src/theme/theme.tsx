@@ -1,7 +1,7 @@
 /**
- * The look (Gold, Silver or Violet) and light or dark. The app follows the
- * phone's dark mode ("Match phone") unless the person picks Light or Dark in
- * Me; both choices are kept on this phone.
+ * The look: White, Ebony, Gold, Silver or Violet, or "Match phone" (White by
+ * day, Ebony when the phone is dark), picked in Me and kept on this phone.
+ * White is the light look; the other four are dark.
  *
  * Screens read colours with `useColors()`, and make their styles with
  * `makeStyles((colors) => ({ ... }))`, which gives a hook returning the styles
@@ -15,61 +15,54 @@ import { readSetting, writeSetting } from '@/lib/storage';
 
 import { LOOKS, palettes, partInk, type LookId, type Palette, type Scheme } from './tokens';
 
-export type ThemeChoice = 'system' | Scheme;
+export type ThemeChoice = 'system' | LookId;
 
-const CHOICE_KEY = 'abu.theme';
 const LOOK_KEY = 'abu.look';
+/** Before the five looks: "light" or "dark", read once as White or Ebony. */
+const OLD_KEY = 'abu.theme';
 
 interface Theme {
-  /** What the person picked: follow the phone, or always light or dark. */
+  /** What the person picked: follow the phone, or one look. */
   choice: ThemeChoice;
   setChoice: (choice: ThemeChoice) => void;
-  /** Gold, Silver or Violet. */
+  /** The look in use now, and whether it's light or dark. */
   look: LookId;
-  setLook: (look: LookId) => void;
-  /** The palette in use now. */
   scheme: Scheme;
   colors: Palette;
 }
 
-const ThemeContext = createContext<Theme>({ choice: 'system', setChoice: () => {}, look: 'gold', setLook: () => {}, scheme: 'light', colors: palettes.gold.light });
+const ThemeContext = createContext<Theme>({ choice: 'system', setChoice: () => {}, look: 'white', scheme: 'light', colors: palettes.white });
 
 function savedChoice(): ThemeChoice {
-  const v = readSetting(CHOICE_KEY);
-  return v === 'light' || v === 'dark' ? v : 'system';
-}
-
-function savedLook(): LookId {
   const v = readSetting(LOOK_KEY);
-  return LOOKS.find((l) => l.id === v)?.id ?? 'gold';
+  const look = LOOKS.find((l) => l.id === v);
+  if (look) return look.id;
+  const old = readSetting(OLD_KEY);
+  return old === 'light' ? 'white' : old === 'dark' ? 'ebony' : 'system';
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [choice, setChoiceState] = useState<ThemeChoice>(savedChoice);
-  const [look, setLookState] = useState<LookId>(savedLook);
   const phone = useColorScheme();
-  const scheme: Scheme = choice === 'system' ? (phone === 'dark' ? 'dark' : 'light') : choice;
-  const colors = palettes[look][scheme];
+  const look: LookId = choice === 'system' ? (phone === 'dark' ? 'ebony' : 'white') : choice;
+  const scheme = LOOKS.find((l) => l.id === look)?.scheme ?? 'light';
+  const colors = palettes[look];
 
   const setChoice = useCallback((next: ThemeChoice) => {
     setChoiceState(next);
-    writeSetting(CHOICE_KEY, next === 'system' ? null : next);
-  }, []);
-
-  const setLook = useCallback((next: LookId) => {
-    setLookState(next);
-    writeSetting(LOOK_KEY, next === 'gold' ? null : next);
+    writeSetting(LOOK_KEY, next === 'system' ? null : next);
+    writeSetting(OLD_KEY, null);
   }, []);
 
   // On phones, the app's own choice also sets the keyboard and system dialogs.
   useEffect(() => {
     if (Platform.OS === 'web') return;
     try {
-      Appearance.setColorScheme(choice === 'system' ? 'auto' : choice);
+      Appearance.setColorScheme(choice === 'system' ? 'auto' : scheme);
     } catch {
       // Older systems: the app's colours still follow the choice.
     }
-  }, [choice]);
+  }, [choice, scheme]);
 
   // Behind the app (and the web page's own controls and scroll bars).
   useEffect(() => {
@@ -82,7 +75,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }
   }, [scheme, look, colors]);
 
-  const value = useMemo(() => ({ choice, setChoice, look, setLook, scheme, colors }), [choice, setChoice, look, setLook, scheme, colors]);
+  const value = useMemo(() => ({ choice, setChoice, look, scheme, colors }), [choice, setChoice, look, scheme, colors]);
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 
@@ -108,9 +101,9 @@ type Styles = Parameters<typeof StyleSheet.create>[0];
  * at the top of a file, then `const styles = useStyles()` in each component.
  */
 export function makeStyles<S extends Styles>(build: (colors: Palette) => S & Styles): () => Readonly<S> {
-  const made: Partial<Record<`${LookId}-${Scheme}`, Readonly<S>>> = {};
+  const made: Partial<Record<LookId, Readonly<S>>> = {};
   return function useStyles(): Readonly<S> {
-    const { look, scheme, colors } = useContext(ThemeContext);
-    return (made[`${look}-${scheme}`] ??= StyleSheet.create(build(colors)));
+    const { look, colors } = useContext(ThemeContext);
+    return (made[look] ??= StyleSheet.create(build(colors)));
   };
 }

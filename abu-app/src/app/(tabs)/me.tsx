@@ -359,45 +359,22 @@ function Password() {
   );
 }
 
-const SCHEME_CHOICES: { value: ThemeChoice; label: string }[] = [
-  { value: 'system', label: 'Match phone' },
-  { value: 'light', label: 'Light' },
-  { value: 'dark', label: 'Dark' },
+/** "Match phone", then the five looks. */
+const LOOK_CHOICES: { value: ThemeChoice; label: string; about: string }[] = [
+  { value: 'system', label: 'Match phone', about: 'White by day, Ebony when your phone is dark' },
+  ...LOOKS.map((l) => ({ value: l.id, label: l.name, about: l.about })),
 ];
 
-/**
- * The look (Gold, Silver or Violet) and light or dark, for the whole app on this phone. Light or dark follows
- * the phone's own setting unless chosen.
- */
+/** The app's look on this phone: one of the five, or following the phone's own light or dark. */
 function Appearance() {
   const styles = useStyles();
-  const { choice, setChoice, scheme, look, setLook } = useTheme();
+  const { choice, setChoice, look } = useTheme();
   return (
     <Card>
       <Kicker>Appearance</Kicker>
-      <Text style={styles.label}>Colours</Text>
+      <Text style={styles.small}>Dark looks are easier on the eyes at night and in a dim church. “Match phone” is White by day and Ebony when your phone is dark.</Text>
       <View style={styles.looks} accessibilityRole="radiogroup">
-        {LOOKS.map((l) => {
-          const on = look === l.id;
-          return (
-            <Pressable
-              key={l.id}
-              onPress={() => setLook(l.id)}
-              accessibilityRole="radio"
-              accessibilityState={{ checked: on }}
-              accessibilityLabel={`${l.name}: ${l.about}`}
-              style={[styles.look, on && styles.lookOn]}
-            >
-              <LookPreview sides={[palettes[l.id][scheme]]} />
-              <Text style={[styles.lookLabel, on && styles.lookLabelOn]}>{l.name}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
-      <Text style={styles.label}>Light or dark</Text>
-      <Text style={styles.small}>Dark is easier on the eyes at night and in a dim church. “Match phone” follows your phone’s own setting.</Text>
-      <View style={styles.looks} accessibilityRole="radiogroup">
-        {SCHEME_CHOICES.map((c) => {
+        {LOOK_CHOICES.map((c) => {
           const on = choice === c.value;
           return (
             <Pressable
@@ -405,12 +382,12 @@ function Appearance() {
               onPress={() => setChoice(c.value)}
               accessibilityRole="radio"
               accessibilityState={{ checked: on }}
-              accessibilityLabel={c.value === 'system' ? `Match phone, now ${scheme}` : c.label}
+              accessibilityLabel={c.value === 'system' ? `Match phone, now ${look === 'ebony' ? 'Ebony' : 'White'}` : `${c.label}: ${c.about}`}
               style={[styles.look, on && styles.lookOn]}
             >
-              <LookPreview sides={c.value === 'system' ? [palettes[look].light, palettes[look].dark] : [palettes[look][c.value]]} />
+              <LookPreview sides={c.value === 'system' ? [palettes.white, palettes.ebony] : [palettes[c.value]]} />
               <Text style={[styles.lookLabel, on && styles.lookLabelOn]}>{c.label}</Text>
-              {c.value === 'system' ? <Text style={styles.lookNote}>Now {scheme}</Text> : null}
+              {c.value === 'system' && on ? <Text style={styles.lookNote}>Now {look === 'ebony' ? 'Ebony' : 'White'}</Text> : null}
             </Pressable>
           );
         })}
@@ -478,8 +455,8 @@ const useStyles = makeStyles((colors) => ({
   link: { fontFamily: fonts.heavy, fontSize: 13.5, color: colors.link },
   label: { fontFamily: fonts.heavy, fontSize: 13, color: colors.ink, marginTop: 4 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  looks: { flexDirection: 'row', gap: 8 },
-  look: { flex: 1, minWidth: 0, borderRadius: 12, borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.card, padding: 8, gap: 6, alignItems: 'center' },
+  looks: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  look: { flexGrow: 1, flexBasis: '30%', minWidth: 0, borderRadius: 12, borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.card, padding: 8, gap: 6, alignItems: 'center' },
   lookOn: { borderColor: colors.ink, borderWidth: 2, padding: 7.5 },
   lookLabel: { fontFamily: fonts.bold, fontSize: 13, color: colors.muted, textAlign: 'center' },
   lookLabelOn: { fontFamily: fonts.heavy, color: colors.ink },

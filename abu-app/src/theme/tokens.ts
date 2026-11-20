@@ -1,9 +1,10 @@
 /**
- * Colour tokens, by what they're for. There are three looks (owner's choice, 21 November 2026, after the red
- * main colour didn't fit the darker, Suno-like design): Gold (cream and gold), Silver (cool silver-white) and
- * Violet (soft violet), each in a light and a dark palette. Me → Appearance picks the look and light or dark;
- * screens get the palette in use from `useColors()` or `makeStyles()` (src/theme/theme.tsx). The parts keep
- * their own fixed colours in every look.
+ * Colour tokens, by what they're for. There are five looks (owner's choice, 21 November 2026, after the red
+ * main colour didn't fit the darker, Suno-like design): White (creamy white, like the first design, without
+ * the red), Ebony (plain black, like Suno), and Gold, Silver and Violet (dark, each with its own colour). Me →
+ * Appearance picks one, or "Match phone" (White by day, Ebony when the phone is dark); screens get the palette
+ * in use from `useColors()` or `makeStyles()` (src/theme/theme.tsx). The parts keep their own fixed colours in
+ * every look.
  */
 export interface Palette {
   /** The main colour: main buttons, the tab in use, switches that are on, selected marks, progress. */
@@ -69,13 +70,15 @@ export interface Palette {
 
 export type Scheme = 'light' | 'dark';
 
-/** The three looks, in the order Me shows them. */
-export type LookId = 'gold' | 'silver' | 'violet';
+/** The five looks, in the order Me shows them. */
+export type LookId = 'white' | 'ebony' | 'gold' | 'silver' | 'violet';
 
-export const LOOKS: readonly { id: LookId; name: string; about: string }[] = [
-  { id: 'gold', name: 'Gold', about: 'Warm, with cream and gold' },
-  { id: 'silver', name: 'Silver', about: 'Cool silver-white' },
-  { id: 'violet', name: 'Violet', about: 'Soft violet' },
+export const LOOKS: readonly { id: LookId; name: string; about: string; scheme: Scheme }[] = [
+  { id: 'white', name: 'White', about: 'Creamy white, like the first design', scheme: 'light' },
+  { id: 'ebony', name: 'Ebony', about: 'Plain black with a warm glow', scheme: 'dark' },
+  { id: 'gold', name: 'Gold', about: 'Cream and gold on warm black', scheme: 'dark' },
+  { id: 'silver', name: 'Silver', about: 'Silver-white on cool graphite', scheme: 'dark' },
+  { id: 'violet', name: 'Violet', about: 'Soft violet', scheme: 'dark' },
 ];
 
 /** What the light palettes share: the "ok", "not yet" and "problem" colours. */
@@ -101,8 +104,8 @@ const darkStatus = {
   gold: '#E6A325',
 } as const;
 
-/** Gold: the warm sand and near-black browns the app has had, with cream (dark) or ink (light) buttons and gold. */
-const goldLight: Palette = {
+/** White: creamy white with white cards, as in the first design, with ink buttons and gold in place of red. */
+const white: Palette = {
   ...lightStatus,
   primary: '#22160F',
   onPrimary: '#FFFFFF',
@@ -122,17 +125,18 @@ const goldLight: Palette = {
   muted: '#76655C',
   placeholder: '#B3A39A',
   line: '#E9DED8',
-  sand: '#F7F1ED',
+  sand: '#FBF7F1',
   card: '#FFFFFF',
-  board: '#EDE4DE',
-  glass: 'rgba(247,241,237,0.96)',
+  board: '#F0E8DF',
+  glass: 'rgba(251,247,241,0.96)',
   onInk: '#FFFFFF',
   faint: '#B9A79D',
   barline: '#CDBEB5',
   switchOff: '#D8CCC5',
 };
 
-const goldDark: Palette = {
+/** Gold: cream buttons and gold on warm near-black browns. */
+const gold: Palette = {
   ...darkStatus,
   primary: '#F6EDE7',
   onPrimary: '#0D0907',
@@ -168,38 +172,8 @@ const goldDark: Palette = {
   switchOff: '#4D3F38',
 };
 
-/** Silver: cool greys with no warmth, silver-white (dark) or graphite (light) buttons. */
-const silverLight: Palette = {
-  ...lightStatus,
-  primary: '#1C2028',
-  onPrimary: '#FFFFFF',
-  onPrimarySoft: '#DDE1E7',
-  primaryDeep: '#3A414D',
-  link: '#3D4A5C',
-  accent: '#465266',
-  accentTint: '#E9EDF3',
-  accentLine: '#CBD3DF',
-  hero: '#161A21',
-  onHero: '#EEF1F6',
-  onHeroSoft: '#C3C9D3',
-  heroKicker: '#D7DEE8',
-  heroGlow: '#C7D0DC',
-  heroGlow2: '#7FA6E0',
-  ink: '#12151B',
-  muted: '#5B6472',
-  placeholder: '#9AA3B0',
-  line: '#DDE1E7',
-  sand: '#F3F5F8',
-  card: '#FFFFFF',
-  board: '#E6E9EE',
-  glass: 'rgba(243,245,248,0.96)',
-  onInk: '#FFFFFF',
-  faint: '#9AA3B0',
-  barline: '#C3CAD4',
-  switchOff: '#C9CFD8',
-};
-
-const silverDark: Palette = {
+/** Silver: cool greys with no warmth, silver-white buttons. */
+const silver: Palette = {
   ...darkStatus,
   primary: '#E8ECF2',
   onPrimary: '#0B0C0F',
@@ -236,37 +210,7 @@ const silverDark: Palette = {
 };
 
 /** Violet: a faint violet in the greys, soft violet buttons and accents. */
-const violetLight: Palette = {
-  ...lightStatus,
-  primary: '#6E54F0',
-  onPrimary: '#FFFFFF',
-  onPrimarySoft: '#E6E0FF',
-  primaryDeep: '#5640D0',
-  link: '#5B43D6',
-  accent: '#5038C4',
-  accentTint: '#EEEAFF',
-  accentLine: '#D3CAFB',
-  hero: '#1A1530',
-  onHero: '#F1EEF8',
-  onHeroSoft: '#C8C1DA',
-  heroKicker: '#C9BCFF',
-  heroGlow: '#B9A8FF',
-  heroGlow2: '#4CC3AF',
-  ink: '#17132A',
-  muted: '#625A7A',
-  placeholder: '#A29BB8',
-  line: '#E2DDF0',
-  sand: '#F6F4FB',
-  card: '#FFFFFF',
-  board: '#ECE8F6',
-  glass: 'rgba(246,244,251,0.96)',
-  onInk: '#FFFFFF',
-  faint: '#A29BB8',
-  barline: '#CCC5E0',
-  switchOff: '#D3CDE3',
-};
-
-const violetDark: Palette = {
+const violet: Palette = {
   ...darkStatus,
   primary: '#B9A8FF',
   onPrimary: '#150F2E',
@@ -302,15 +246,51 @@ const violetDark: Palette = {
   switchOff: '#3D3650',
 };
 
-export const palettes: Readonly<Record<LookId, Readonly<Record<Scheme, Palette>>>> = {
-  gold: { light: goldLight, dark: goldDark },
-  silver: { light: silverLight, dark: silverDark },
-  violet: { light: violetLight, dark: violetDark },
+/**
+ * Ebony: a plain, slightly cool black with grey cards and off-white pill buttons, warmed only by an orange and
+ * pink glow on the feature cards (the owner's Suno screenshots, 21 November 2026).
+ */
+const ebony: Palette = {
+  ...darkStatus,
+  primary: '#F2EFEA',
+  onPrimary: '#111113',
+  onPrimarySoft: '#5A5A62',
+  primaryDeep: '#D6D2CC',
+  link: '#F2EFEA',
+  accent: '#E4E1DC',
+  accentTint: '#232327',
+  accentLine: '#3A3A41',
+  dangerTint: '#35191A',
+  dangerLine: '#5E2C2A',
+  okTint: '#132A26',
+  okLine: '#22463F',
+  warnTint: '#2E2615',
+  warnLine: '#52431D',
+  hero: '#18181B',
+  onHero: '#F4F4F5',
+  onHeroSoft: '#C4C4CA',
+  heroKicker: '#F2EFEA',
+  heroGlow: '#E8642C',
+  heroGlow2: '#E2457A',
+  ink: '#F4F4F5',
+  muted: '#A1A1AA',
+  placeholder: '#71717A',
+  line: '#2A2A2F',
+  sand: '#111113',
+  card: '#1B1B1E',
+  board: '#232327',
+  glass: 'rgba(17,17,19,0.96)',
+  onInk: '#111113',
+  faint: '#6B6B73',
+  barline: '#3A3A40',
+  switchOff: '#3A3A40',
 };
 
-/** The first look's palettes, for the few places that don't follow the look (Perform's own colours). */
-export const lightColors = goldLight;
-export const darkColors = goldDark;
+export const palettes: Readonly<Record<LookId, Palette>> = { white, ebony, gold, silver, violet };
+
+/** White and Ebony, for the few places that don't follow the look (Perform's own colours, fallbacks). */
+export const lightColors = white;
+export const darkColors = ebony;
 
 /** Colours that don't change with the look: the red icon, splash and first paint, and WhatsApp's green. */
 export const brand = {
