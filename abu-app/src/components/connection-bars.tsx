@@ -24,7 +24,7 @@ export function ConnectionBars() {
     <View style={{ paddingTop: insets.top }}>
       {!online ? (
         <View style={[styles.bar, styles.offline]} accessibilityRole="alert">
-          <Text style={styles.text}>Offline · showing what’s saved on this phone</Text>
+          <Text style={[styles.text, styles.offlineText]}>Offline · showing what’s saved on this phone</Text>
         </View>
       ) : null}
       {online && updateReady ? (
@@ -42,8 +42,9 @@ export function ConnectionBars() {
 const useStyles = makeStyles((colors) => ({
   bar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 7 },
   offline: { backgroundColor: brand.ink },
-  update: { backgroundColor: brand.redDeep },
-  text: { fontFamily: fonts.bold, fontSize: 13, color: colors.onRed, textAlign: 'center' },
-  button: { backgroundColor: brand.white, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 5 },
-  buttonText: { fontFamily: fonts.heavy, fontSize: 13, color: brand.redDeep },
+  offlineText: { color: brand.white },
+  update: { backgroundColor: colors.primary },
+  text: { fontFamily: fonts.bold, fontSize: 13, color: colors.onPrimary, textAlign: 'center' },
+  button: { backgroundColor: colors.onPrimary, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 5 },
+  buttonText: { fontFamily: fonts.heavy, fontSize: 13, color: colors.primary },
 }));

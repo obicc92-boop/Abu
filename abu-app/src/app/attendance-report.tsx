@@ -77,7 +77,7 @@ export default function AttendanceReportScreen() {
 
           {unmarked.length ? (
             <Card>
-              <Kicker color={colors.redDeep}>Not marked yet · {unmarked.length}</Kicker>
+              <Kicker color={colors.accent}>Not marked yet · {unmarked.length}</Kicker>
               {unmarked
                 .slice(-5)
                 .reverse()

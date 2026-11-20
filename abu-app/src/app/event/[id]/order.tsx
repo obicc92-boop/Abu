@@ -437,7 +437,7 @@ function SongPicker({ group, items, section, onAdd }: { group: MyGroup; items: O
 const useStyles = makeStyles((colors) => ({
   block: { backgroundColor: colors.card, borderRadius: 14, borderWidth: 1, borderColor: colors.line, padding: 12, gap: 8 },
   blockHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  section: { fontFamily: fonts.heavy, fontSize: 12.5, letterSpacing: 0.6, textTransform: 'uppercase', color: colors.redDeep },
+  section: { fontFamily: fonts.heavy, fontSize: 12.5, letterSpacing: 0.6, textTransform: 'uppercase', color: colors.accent },
   pencil: { fontFamily: fonts.body, fontSize: 13, color: colors.muted, textTransform: 'none' },
   renameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   input: {
@@ -451,7 +451,7 @@ const useStyles = makeStyles((colors) => ({
     fontSize: 15,
     color: colors.ink,
     backgroundColor: colors.card,
-    outlineColor: colors.red,
+    outlineColor: colors.primary,
   },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4, borderTopWidth: 1, borderTopColor: colors.line },
   ord: { width: 26, height: 26, borderRadius: 8, backgroundColor: colors.sand, textAlign: 'center', lineHeight: 26, fontFamily: fonts.heavy, fontSize: 12.5, color: colors.muted, overflow: 'hidden' },

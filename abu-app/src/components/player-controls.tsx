@@ -83,10 +83,10 @@ export function ToggleRow({ label, hint, value, onChange }: { label: string; hin
         value={value}
         onValueChange={onChange}
         accessibilityLabel={label}
-        trackColor={{ false: colors.switchOff, true: colors.red }}
-        thumbColor={colors.onRed}
+        trackColor={{ false: colors.switchOff, true: colors.primary }}
+        thumbColor={colors.onPrimary}
         // On the web, react-native-web colours the "on" knob separately.
-        {...({ activeThumbColor: colors.onRed } as object)}
+        {...({ activeThumbColor: colors.onPrimary } as object)}
       />
     </View>
   );
@@ -128,7 +128,7 @@ export function PlayButton({ playing, onPress, size = 68 }: { playing: boolean; 
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={playing ? 'Stop' : 'Play'}
-      style={({ pressed }) => [styles.play, { width: size, height: size, borderRadius: size / 2 }, pressed && { backgroundColor: colors.redDeep }]}
+      style={({ pressed }) => [styles.play, { width: size, height: size, borderRadius: size / 2 }, pressed && { backgroundColor: colors.primaryDeep }]}
     >
       {playing ? <View style={styles.stopIcon} /> : <View style={styles.playIcon} />}
     </Pressable>
@@ -181,10 +181,10 @@ const useStyles = makeStyles((colors) => ({
   stepperValue: { fontFamily: fonts.monoBold, fontSize: 15, minWidth: 30, textAlign: 'center', color: colors.ink },
 
   play: {
-    backgroundColor: colors.red,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.redDeep,
+    shadowColor: colors.primaryDeep,
     shadowOpacity: 0.45,
     shadowRadius: 9,
     shadowOffset: { width: 0, height: 6 },
@@ -199,7 +199,7 @@ const useStyles = makeStyles((colors) => ({
     borderLeftWidth: 22,
     borderTopColor: 'transparent',
     borderBottomColor: 'transparent',
-    borderLeftColor: colors.onRed,
+    borderLeftColor: colors.onPrimary,
   },
   stopIcon: { width: 20, height: 20, borderRadius: 3, backgroundColor: colors.card },
 }));

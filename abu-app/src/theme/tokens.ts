@@ -1,19 +1,43 @@
 /**
- * Colour tokens, by what they're for, in a light and a dark palette. Screens
- * get the palette in use from `useColors()` or `makeStyles()` (src/theme/theme.tsx),
- * which follows the phone's dark mode unless the person picks one in Me.
- * The light palette matches the :root variables in prototype/index.html.
+ * Colour tokens, by what they're for. There are three looks (owner's choice, 21 November 2026, after the red
+ * main colour didn't fit the darker, Suno-like design): Gold (cream and gold), Silver (cool silver-white) and
+ * Violet (soft violet), each in a light and a dark palette. Me → Appearance picks the look and light or dark;
+ * screens get the palette in use from `useColors()` or `makeStyles()` (src/theme/theme.tsx). The parts keep
+ * their own fixed colours in every look.
  */
 export interface Palette {
-  /** Brand red: buttons, the red cards, active marks. White text sits on it in both palettes. */
-  red: string;
-  /** Red text and icons on the page: links, "How to write it". */
+  /** The main colour: main buttons, the tab in use, switches that are on, selected marks, progress. */
+  primary: string;
+  /** Text and icons on `primary`. */
+  onPrimary: string;
+  /** Softer text on `primary` (the day on a date tile). */
+  onPrimarySoft: string;
+  /** `primary` pressed, and its shadow. */
+  primaryDeep: string;
+  /** Links and small actions in text: "How to write it", "See all". */
   link: string;
-  /** Strong red text: kickers, headings, errors. */
-  redDeep: string;
-  /** A soft red wash behind text (highlights, problems), and its border. */
-  redTint: string;
-  redLine: string;
+  /** Strong accent text: kickers, section names, badges. */
+  accent: string;
+  /** A soft accent wash behind text (badges, step numbers), and its border. */
+  accentTint: string;
+  accentLine: string;
+  /** Errors and problems: a bar that doesn't add up, absent, "Remove". Text, wash, border, and text on it. */
+  danger: string;
+  dangerTint: string;
+  dangerLine: string;
+  onDanger: string;
+  /**
+   * The feature cards (the next service on Home) and the check-in code screen: a deep card with a soft glow in
+   * the look's colour. Dark in both light and dark, so its text stays light.
+   */
+  hero: string;
+  onHero: string;
+  onHeroSoft: string;
+  heroKicker: string;
+  /** The glows on the feature cards: the look's own colour, and a second, fainter one. */
+  heroGlow: string;
+  heroGlow2: string;
+  /** Celebration: a learned song, a streak. */
   gold: string;
   /** Main text; also the background of selected chips (with `onInk` text on it). */
   ink: string;
@@ -35,10 +59,6 @@ export interface Palette {
   warn: string;
   warnTint: string;
   warnLine: string;
-  /** Text and icons on `red` (and on the red cards). */
-  onRed: string;
-  /** Softer text on `red`: subtitles and kickers on the red cards. */
-  onRedSoft: string;
   /** Text and icons on `ink` (selected chips, the offline bar). */
   onInk: string;
   /** Holds, rests and beat separators in the score. */
@@ -49,13 +69,55 @@ export interface Palette {
 
 export type Scheme = 'light' | 'dark';
 
-export const lightColors: Palette = {
-  red: '#D93A1E',
-  link: '#C9341A',
-  redDeep: '#A3261A',
-  redTint: '#FCEAE5',
-  redLine: '#EFC3B8',
+/** The three looks, in the order Me shows them. */
+export type LookId = 'gold' | 'silver' | 'violet';
+
+export const LOOKS: readonly { id: LookId; name: string; about: string }[] = [
+  { id: 'gold', name: 'Gold', about: 'Warm, with cream and gold' },
+  { id: 'silver', name: 'Silver', about: 'Cool silver-white' },
+  { id: 'violet', name: 'Violet', about: 'Soft violet' },
+];
+
+/** What the light palettes share: the "ok", "not yet" and "problem" colours. */
+const lightStatus = {
+  ok: '#18776A',
+  okTint: '#E6F4F0',
+  okLine: '#BFE3DA',
+  warn: '#94600A',
+  warnTint: '#FBF0DA',
+  warnLine: '#F0D9A6',
+  danger: '#C2341C',
+  dangerTint: '#FBEAE6',
+  dangerLine: '#EFC3B8',
+  onDanger: '#FFFFFF',
   gold: '#E6A325',
+} as const;
+
+const darkStatus = {
+  ok: '#34A390',
+  warn: '#E2B25A',
+  danger: '#F27A5E',
+  onDanger: '#1A0D0A',
+  gold: '#E6A325',
+} as const;
+
+/** Gold: the warm sand and near-black browns the app has had, with cream (dark) or ink (light) buttons and gold. */
+const goldLight: Palette = {
+  ...lightStatus,
+  primary: '#22160F',
+  onPrimary: '#FFFFFF',
+  onPrimarySoft: '#E9DED8',
+  primaryDeep: '#4A3A31',
+  link: '#865800',
+  accent: '#7A4F00',
+  accentTint: '#F8EBD2',
+  accentLine: '#EBCF98',
+  hero: '#1E1612',
+  onHero: '#F6EDE7',
+  onHeroSoft: '#C9B9B0',
+  heroKicker: '#F2B54A',
+  heroGlow: '#E6A325',
+  heroGlow2: '#4CC3AF',
   ink: '#22160F',
   muted: '#76655C',
   placeholder: '#B3A39A',
@@ -64,57 +126,193 @@ export const lightColors: Palette = {
   card: '#FFFFFF',
   board: '#EDE4DE',
   glass: 'rgba(247,241,237,0.96)',
-  ok: '#18776A',
-  okTint: '#E6F4F0',
-  okLine: '#BFE3DA',
-  warn: '#94600A',
-  warnTint: '#FBF0DA',
-  warnLine: '#F0D9A6',
-  onRed: '#FFFFFF',
-  onRedSoft: '#FFE7E0',
   onInk: '#FFFFFF',
   faint: '#B9A79D',
   barline: '#CDBEB5',
   switchOff: '#D8CCC5',
 };
 
-/**
- * Warm, near-black browns (the same family as Perform's dark), so the brand
- * red still glows. Text keeps at least 4.5:1 on cards; the red cards and
- * buttons stay the brand red with white text.
- */
-export const darkColors: Palette = {
-  red: '#D93A1E',
-  link: '#F27A5E',
-  redDeep: '#F2957F',
-  redTint: '#3A1D16',
-  redLine: '#6B3226',
-  gold: '#E6A325',
-  ink: '#F4EAE4',
-  muted: '#B5A59C',
-  placeholder: '#8A786E',
-  line: '#3E312A',
-  sand: '#15100D',
-  card: '#211915',
-  board: '#2E231E',
-  glass: 'rgba(21,16,13,0.96)',
-  ok: '#34A390',
+const goldDark: Palette = {
+  ...darkStatus,
+  primary: '#F6EDE7',
+  onPrimary: '#0D0907',
+  onPrimarySoft: '#5C4C44',
+  primaryDeep: '#D9CCC3',
+  link: '#F2B54A',
+  accent: '#F2B54A',
+  accentTint: '#33270F',
+  accentLine: '#5C4718',
+  dangerTint: '#3A1D16',
+  dangerLine: '#6B3226',
   okTint: '#14302A',
   okLine: '#245049',
-  warn: '#E2B25A',
   warnTint: '#33270F',
   warnLine: '#5C4718',
-  onRed: '#FFFFFF',
-  onRedSoft: '#FFE7E0',
-  onInk: '#1A1310',
+  hero: '#1C1411',
+  onHero: '#F6EDE7',
+  onHeroSoft: '#C9B9B0',
+  heroKicker: '#F2B54A',
+  heroGlow: '#E6A325',
+  heroGlow2: '#4CC3AF',
+  ink: '#F6EDE7',
+  muted: '#B8A79E',
+  placeholder: '#8A786E',
+  line: '#2E231E',
+  sand: '#0D0907',
+  card: '#191210',
+  board: '#261C17',
+  glass: 'rgba(13,9,7,0.96)',
+  onInk: '#0D0907',
   faint: '#7A6A60',
   barline: '#4D3F38',
   switchOff: '#4D3F38',
 };
 
-export const palettes: Readonly<Record<Scheme, Palette>> = { light: lightColors, dark: darkColors };
+/** Silver: cool greys with no warmth, silver-white (dark) or graphite (light) buttons. */
+const silverLight: Palette = {
+  ...lightStatus,
+  primary: '#1C2028',
+  onPrimary: '#FFFFFF',
+  onPrimarySoft: '#DDE1E7',
+  primaryDeep: '#3A414D',
+  link: '#3D4A5C',
+  accent: '#465266',
+  accentTint: '#E9EDF3',
+  accentLine: '#CBD3DF',
+  hero: '#161A21',
+  onHero: '#EEF1F6',
+  onHeroSoft: '#C3C9D3',
+  heroKicker: '#D7DEE8',
+  heroGlow: '#C7D0DC',
+  heroGlow2: '#7FA6E0',
+  ink: '#12151B',
+  muted: '#5B6472',
+  placeholder: '#9AA3B0',
+  line: '#DDE1E7',
+  sand: '#F3F5F8',
+  card: '#FFFFFF',
+  board: '#E6E9EE',
+  glass: 'rgba(243,245,248,0.96)',
+  onInk: '#FFFFFF',
+  faint: '#9AA3B0',
+  barline: '#C3CAD4',
+  switchOff: '#C9CFD8',
+};
 
-/** Colours that don't change with the theme: the red opening screens and the logo. */
+const silverDark: Palette = {
+  ...darkStatus,
+  primary: '#E8ECF2',
+  onPrimary: '#0B0C0F',
+  onPrimarySoft: '#4B515D',
+  primaryDeep: '#C9D0DA',
+  link: '#D7DEE8',
+  accent: '#D7DEE8',
+  accentTint: '#1F242C',
+  accentLine: '#3A414D',
+  dangerTint: '#33191A',
+  dangerLine: '#5E2E2A',
+  okTint: '#122925',
+  okLine: '#22463F',
+  warnTint: '#2B2412',
+  warnLine: '#4F4119',
+  hero: '#171A20',
+  onHero: '#EEF1F6',
+  onHeroSoft: '#C3C9D3',
+  heroKicker: '#D7DEE8',
+  heroGlow: '#C7D0DC',
+  heroGlow2: '#7FA6E0',
+  ink: '#EEF1F6',
+  muted: '#A9B0BC',
+  placeholder: '#7A818D',
+  line: '#2A2E36',
+  sand: '#0B0C0F',
+  card: '#15171C',
+  board: '#1F2229',
+  glass: 'rgba(11,12,15,0.96)',
+  onInk: '#0B0C0F',
+  faint: '#6B727E',
+  barline: '#3A3F4A',
+  switchOff: '#3A3F4A',
+};
+
+/** Violet: a faint violet in the greys, soft violet buttons and accents. */
+const violetLight: Palette = {
+  ...lightStatus,
+  primary: '#6E54F0',
+  onPrimary: '#FFFFFF',
+  onPrimarySoft: '#E6E0FF',
+  primaryDeep: '#5640D0',
+  link: '#5B43D6',
+  accent: '#5038C4',
+  accentTint: '#EEEAFF',
+  accentLine: '#D3CAFB',
+  hero: '#1A1530',
+  onHero: '#F1EEF8',
+  onHeroSoft: '#C8C1DA',
+  heroKicker: '#C9BCFF',
+  heroGlow: '#B9A8FF',
+  heroGlow2: '#4CC3AF',
+  ink: '#17132A',
+  muted: '#625A7A',
+  placeholder: '#A29BB8',
+  line: '#E2DDF0',
+  sand: '#F6F4FB',
+  card: '#FFFFFF',
+  board: '#ECE8F6',
+  glass: 'rgba(246,244,251,0.96)',
+  onInk: '#FFFFFF',
+  faint: '#A29BB8',
+  barline: '#CCC5E0',
+  switchOff: '#D3CDE3',
+};
+
+const violetDark: Palette = {
+  ...darkStatus,
+  primary: '#B9A8FF',
+  onPrimary: '#150F2E',
+  onPrimarySoft: '#3E2F7A',
+  primaryDeep: '#9C88F0',
+  link: '#C9BCFF',
+  accent: '#C9BCFF',
+  accentTint: '#241D3D',
+  accentLine: '#41356B',
+  dangerTint: '#33181C',
+  dangerLine: '#5E2C30',
+  okTint: '#13282A',
+  okLine: '#234544',
+  warnTint: '#2C2414',
+  warnLine: '#50411C',
+  hero: '#1A1624',
+  onHero: '#F1EEF8',
+  onHeroSoft: '#C8C1DA',
+  heroKicker: '#C9BCFF',
+  heroGlow: '#B9A8FF',
+  heroGlow2: '#4CC3AF',
+  ink: '#F1EEF8',
+  muted: '#B0A9C2',
+  placeholder: '#7F7894',
+  line: '#2C2739',
+  sand: '#0D0B12',
+  card: '#17141F',
+  board: '#221E2D',
+  glass: 'rgba(13,11,18,0.96)',
+  onInk: '#150F2E',
+  faint: '#6F6884',
+  barline: '#3D3650',
+  switchOff: '#3D3650',
+};
+
+export const palettes: Readonly<Record<LookId, Readonly<Record<Scheme, Palette>>>> = {
+  gold: { light: goldLight, dark: goldDark },
+  silver: { light: silverLight, dark: silverDark },
+  violet: { light: violetLight, dark: violetDark },
+};
+
+/** The first look's palettes, for the few places that don't follow the look (Perform's own colours). */
+export const lightColors = goldLight;
+export const darkColors = goldDark;
+
+/** Colours that don't change with the look: the red icon, splash and first paint, and WhatsApp's green. */
 export const brand = {
   red: '#D93A1E',
   redDeep: '#A3261A',
@@ -124,6 +322,8 @@ export const brand = {
   onRedSoft: '#FFE7E0',
   /** Kickers on red. */
   onRedKicker: '#FFD9CF',
+  /** The WhatsApp share button's green (white text on it). */
+  whatsapp: '#1F8F4E',
 } as const;
 
 /**

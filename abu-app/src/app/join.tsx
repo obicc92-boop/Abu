@@ -60,7 +60,7 @@ export default function Join() {
         </Card>
       ) : waiting ? (
         <Card>
-          <Kicker color={colors.redDeep}>Waiting to be let in</Kicker>
+          <Kicker color={colors.accent}>Waiting to be let in</Kicker>
           <Text style={styles.groupName}>{g.name}</Text>
           <Body>
             {g.leader_name ?? 'The leader'} lets new members in for {g.name}. You’ll see the group here as soon as they do.

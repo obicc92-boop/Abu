@@ -76,7 +76,7 @@ const useStyles = makeStyles((colors) => ({
   bar: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 6, borderRadius: 12, backgroundColor: colors.board },
   middle: { flex: 1, alignItems: 'center', minWidth: 0 },
   kicker: { fontFamily: fonts.heavy, fontSize: 11, letterSpacing: 0.6, textTransform: 'uppercase', color: colors.muted },
-  section: { fontFamily: fonts.bold, fontSize: 13, color: colors.redDeep },
+  section: { fontFamily: fonts.bold, fontSize: 13, color: colors.accent },
   step: { paddingHorizontal: 12, minHeight: 36, borderRadius: 9, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
   stepText: { fontFamily: fonts.heavy, fontSize: 13, color: colors.ink },
 }));

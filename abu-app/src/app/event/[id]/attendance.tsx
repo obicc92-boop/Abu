@@ -216,10 +216,10 @@ function Row({ row, status, onTap }: { row: SheetRow; status: AttendanceStatus |
 
 const badgeBox = (colors: Palette): Record<AttendanceStatus, { backgroundColor: string; borderColor: string }> => ({
   present: { backgroundColor: colors.okTint, borderColor: colors.okLine },
-  absent: { backgroundColor: colors.redTint, borderColor: colors.redLine },
+  absent: { backgroundColor: colors.dangerTint, borderColor: colors.dangerLine },
   excused: { backgroundColor: colors.warnTint, borderColor: colors.warnLine },
 });
-const badgeText = (colors: Palette): Record<AttendanceStatus, string> => ({ present: colors.ok, absent: colors.redDeep, excused: colors.warn });
+const badgeText = (colors: Palette): Record<AttendanceStatus, string> => ({ present: colors.ok, absent: colors.danger, excused: colors.warn });
 
 const useStyles = makeStyles((colors) => ({
   big: { fontFamily: fonts.monoBold, fontSize: 28, color: colors.ink },

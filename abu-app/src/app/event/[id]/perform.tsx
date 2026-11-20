@@ -43,7 +43,7 @@ const LOOKS: Record<'dark' | 'light', Look> = {
   dark: {
     bg: '#140D0A',
     text: '#F7EDE7',
-    kicker: '#E8A592',
+    kicker: '#E2B25A',
     section: brand.gold,
     small: '#BFAEA5',
     ctl: '#2B1E18',
@@ -56,8 +56,8 @@ const LOOKS: Record<'dark' | 'light', Look> = {
   light: {
     bg: '#FFFFFF',
     text: '#140D0A',
-    kicker: brand.redDeep,
-    section: brand.red,
+    kicker: '#7A4F00',
+    section: '#865800',
     small: '#5E4E46',
     ctl: lightColors.sand,
     ctlText: lightColors.ink,

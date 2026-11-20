@@ -22,7 +22,7 @@ export default function Welcome() {
 
   return (
     <SafeAreaView style={styles.page}>
-      <Motif color={colors.onRed} opacity={0.16} focus={{ x: 0.5, y: 0.32 }} />
+      <Motif color={colors.onHero} opacity={0.12} focus={{ x: 0.5, y: 0.32 }} glow={colors.heroGlow} glow2={colors.heroGlow2} />
       <View style={styles.body}>
         <View style={styles.hero}>
           <BrandMark size={128} />
@@ -52,13 +52,13 @@ export default function Welcome() {
 }
 
 const useStyles = makeStyles((colors) => ({
-  page: { flex: 1, backgroundColor: colors.red },
+  page: { flex: 1, backgroundColor: colors.hero },
   body: { flex: 1, width: '100%', maxWidth: MAX_WIDTH, alignSelf: 'center', padding: 24, justifyContent: 'space-between', gap: 24 },
   hero: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 260 },
-  name: { fontFamily: fonts.display, fontSize: 56, lineHeight: 70, color: colors.onRed, marginTop: 10 },
-  tagline: { fontFamily: fonts.body, fontSize: 17, color: colors.onRedSoft, textAlign: 'center' },
+  name: { fontFamily: fonts.display, fontSize: 56, lineHeight: 70, color: colors.onHero, marginTop: 10 },
+  tagline: { fontFamily: fonts.body, fontSize: 17, color: colors.onHeroSoft, textAlign: 'center' },
   actions: { gap: 10 },
   quiet: { borderColor: 'transparent' },
-  signIn: { fontFamily: fonts.body, fontSize: 15, color: colors.onRedSoft, textAlign: 'center', padding: 10 },
-  signInStrong: { fontFamily: fonts.heavy, color: colors.onRed, textDecorationLine: 'underline' },
+  signIn: { fontFamily: fonts.body, fontSize: 15, color: colors.onHeroSoft, textAlign: 'center', padding: 10 },
+  signInStrong: { fontFamily: fonts.heavy, color: colors.onHero, textDecorationLine: 'underline' },
 }));

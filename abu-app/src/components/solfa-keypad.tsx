@@ -225,7 +225,7 @@ function KeyButton({
 }) {
   const styles = useStyles();
   const colors = useColors();
-  const color = done ? colors.onRed : on ? colors.onInk : undefined;
+  const color = done ? colors.onPrimary : on ? colors.onInk : undefined;
   const touched = useRef(false);
   return (
     <Pressable
@@ -269,7 +269,7 @@ const useStyles = makeStyles((colors) => ({
   noteKey: { minHeight: 44, backgroundColor: colors.board, borderColor: colors.board },
   narrowKey: { minHeight: 40, paddingVertical: 2 },
   smallKey: { minHeight: 34 },
-  doneKey: { flex: 1.4, backgroundColor: colors.red, borderColor: colors.red },
+  doneKey: { flex: 1.4, backgroundColor: colors.primary, borderColor: colors.primary },
   onKey: { backgroundColor: colors.ink, borderColor: colors.ink },
   pressed: { opacity: 0.6 },
   /** The gap between the sharps and the flats. */

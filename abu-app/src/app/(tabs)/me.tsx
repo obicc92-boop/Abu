@@ -23,7 +23,7 @@ import { readSetting, writeSetting } from '@/lib/storage';
 import { partName } from '@/solfa';
 import { useSession } from '@/state/session';
 import { makeStyles, type ThemeChoice, useColors, useTheme } from '@/theme/theme';
-import { fonts, palettes } from '@/theme/tokens';
+import { fonts, LOOKS, palettes, type Palette } from '@/theme/tokens';
 
 const PERFORM_THEME = 'abu.performTheme';
 
@@ -359,22 +359,45 @@ function Password() {
   );
 }
 
-const LOOK_CHOICES: { value: ThemeChoice; label: string }[] = [
+const SCHEME_CHOICES: { value: ThemeChoice; label: string }[] = [
   { value: 'system', label: 'Match phone' },
   { value: 'light', label: 'Light' },
   { value: 'dark', label: 'Dark' },
 ];
 
-/** Light or dark for the whole app on this phone: following the phone's own setting unless chosen. */
+/**
+ * The look (Gold, Silver or Violet) and light or dark, for the whole app on this phone. Light or dark follows
+ * the phone's own setting unless chosen.
+ */
 function Appearance() {
   const styles = useStyles();
-  const { choice, setChoice, scheme } = useTheme();
+  const { choice, setChoice, scheme, look, setLook } = useTheme();
   return (
     <Card>
       <Kicker>Appearance</Kicker>
+      <Text style={styles.label}>Colours</Text>
+      <View style={styles.looks} accessibilityRole="radiogroup">
+        {LOOKS.map((l) => {
+          const on = look === l.id;
+          return (
+            <Pressable
+              key={l.id}
+              onPress={() => setLook(l.id)}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: on }}
+              accessibilityLabel={`${l.name}: ${l.about}`}
+              style={[styles.look, on && styles.lookOn]}
+            >
+              <LookPreview sides={[palettes[l.id][scheme]]} />
+              <Text style={[styles.lookLabel, on && styles.lookLabelOn]}>{l.name}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      <Text style={styles.label}>Light or dark</Text>
       <Text style={styles.small}>Dark is easier on the eyes at night and in a dim church. “Match phone” follows your phone’s own setting.</Text>
       <View style={styles.looks} accessibilityRole="radiogroup">
-        {LOOK_CHOICES.map((c) => {
+        {SCHEME_CHOICES.map((c) => {
           const on = choice === c.value;
           return (
             <Pressable
@@ -385,7 +408,7 @@ function Appearance() {
               accessibilityLabel={c.value === 'system' ? `Match phone, now ${scheme}` : c.label}
               style={[styles.look, on && styles.lookOn]}
             >
-              <LookPreview look={c.value} />
+              <LookPreview sides={c.value === 'system' ? [palettes[look].light, palettes[look].dark] : [palettes[look][c.value]]} />
               <Text style={[styles.lookLabel, on && styles.lookLabelOn]}>{c.label}</Text>
               {c.value === 'system' ? <Text style={styles.lookNote}>Now {scheme}</Text> : null}
             </Pressable>
@@ -396,19 +419,18 @@ function Appearance() {
   );
 }
 
-/** A tiny page in each palette (both, side by side, for "Match phone"). */
-function LookPreview({ look }: { look: ThemeChoice }) {
+/** A tiny page in each palette given (two, side by side, for "Match phone"): a card, and a button in the main colour. */
+function LookPreview({ sides }: { sides: Palette[] }) {
   const styles = useStyles();
-  const sides = look === 'system' ? [palettes.light, palettes.dark] : [palettes[look]];
   return (
     <View style={styles.preview}>
       {sides.map((p, i) => (
         <View key={i} style={[styles.previewSide, { backgroundColor: p.sand }]}>
           <View style={[styles.previewCard, { backgroundColor: p.card, borderColor: p.line }]}>
             <View style={[styles.previewLine, { backgroundColor: p.ink, width: '70%' }]} />
-            <View style={[styles.previewLine, { backgroundColor: p.muted, width: '45%' }]} />
+            <View style={[styles.previewLine, { backgroundColor: p.accent, width: '45%' }]} />
           </View>
-          <View style={[styles.previewButton, { backgroundColor: p.red }]} />
+          <View style={[styles.previewButton, { backgroundColor: p.primary }]} />
         </View>
       ))}
     </View>

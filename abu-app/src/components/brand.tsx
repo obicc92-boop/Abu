@@ -1,5 +1,5 @@
 /**
- * Brand pieces drawn in SVG: the mark from the app icon and the background for red screens.
+ * Brand pieces drawn in SVG: the mark from the app icon and the background for red screens and feature cards.
  * Sources and usage rules: design/brand/ and design/brand-draft.html.
  */
 import { useId, useState } from 'react';
@@ -46,6 +46,12 @@ interface MotifProps {
   focus?: { x: number; y: number };
   /** On a card: the colons fade out towards the left, so the card's words sit on clean red. */
   fade?: boolean;
+  /**
+   * On a feature card (`hero`): a soft glow of the look's colour from the top right, and a fainter second one
+   * from below, in place of most of the light behind the words.
+   */
+  glow?: string;
+  glow2?: string;
 }
 
 /**
@@ -56,7 +62,7 @@ interface MotifProps {
  * pattern clashed with the letters. Put it first inside a red card or screen
  * that has `overflow: 'hidden'`; never behind the score, words or lists.
  */
-export function Motif({ color, opacity, focus = { x: 0.5, y: 0.33 }, fade = false }: MotifProps) {
+export function Motif({ color, opacity, focus = { x: 0.5, y: 0.33 }, fade = false, glow, glow2 }: MotifProps) {
   const id = useId().replace(/[^a-zA-Z0-9]/g, '');
   const [box, setBox] = useState<{ w: number; h: number } | null>(null);
   const onLayout = (e: LayoutChangeEvent) => {
@@ -74,10 +80,22 @@ export function Motif({ color, opacity, focus = { x: 0.5, y: 0.33 }, fade = fals
         <Svg width={w} height={h}>
           <Defs>
             <RadialGradient id={`l${id}`} cx={cx} cy={cy} fx={cx} fy={cy} r={reach * 0.8} gradientUnits="userSpaceOnUse">
-              <Stop offset="0" stopColor="#FFFFFF" stopOpacity={0.14} />
+              <Stop offset="0" stopColor="#FFFFFF" stopOpacity={glow ? 0.05 : 0.14} />
               <Stop offset="0.45" stopColor="#FFFFFF" stopOpacity={0} />
               <Stop offset="1" stopColor="#000000" stopOpacity={0.1} />
             </RadialGradient>
+            {glow ? (
+              <RadialGradient id={`a${id}`} cx={w * 0.95} cy={-h * 0.2} fx={w * 0.95} fy={-h * 0.2} r={reach * 0.85} gradientUnits="userSpaceOnUse">
+                <Stop offset="0" stopColor={glow} stopOpacity={0.5} />
+                <Stop offset="1" stopColor={glow} stopOpacity={0} />
+              </RadialGradient>
+            ) : null}
+            {glow2 ? (
+              <RadialGradient id={`b${id}`} cx={w * 0.7} cy={h * 1.25} fx={w * 0.7} fy={h * 1.25} r={reach * 0.6} gradientUnits="userSpaceOnUse">
+                <Stop offset="0" stopColor={glow2} stopOpacity={0.28} />
+                <Stop offset="1" stopColor={glow2} stopOpacity={0} />
+              </RadialGradient>
+            ) : null}
             <Pattern id={`p${id}`} width={56} height={56} patternUnits="userSpaceOnUse">
               {BEATS.map(([x, y]) => (
                 <Circle key={`${x}-${y}`} cx={x} cy={y} r={1.7} fill={color} />
@@ -98,6 +116,8 @@ export function Motif({ color, opacity, focus = { x: 0.5, y: 0.33 }, fade = fals
               <Rect width={w} height={h} fill={`url(#g${id})`} />
             </Mask>
           </Defs>
+          {glow ? <Rect width={w} height={h} fill={`url(#a${id})`} /> : null}
+          {glow2 ? <Rect width={w} height={h} fill={`url(#b${id})`} /> : null}
           <Rect width={w} height={h} fill={`url(#l${id})`} />
           <Rect width={w} height={h} fill={`url(#p${id})`} opacity={opacity} mask={`url(#m${id})`} />
         </Svg>

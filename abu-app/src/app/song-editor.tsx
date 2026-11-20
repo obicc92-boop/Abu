@@ -415,9 +415,9 @@ function Editor({ song, draft }: { song?: Song; draft: ScanDraft | null }) {
                 value={addToRep}
                 onValueChange={setAddToRep}
                 accessibilityLabel="Add to our repertoire"
-                trackColor={{ false: colors.switchOff, true: colors.red }}
-                thumbColor={colors.onRed}
-                {...({ activeThumbColor: colors.onRed } as object)}
+                trackColor={{ false: colors.switchOff, true: colors.primary }}
+                thumbColor={colors.onPrimary}
+                {...({ activeThumbColor: colors.onPrimary } as object)}
               />
             </View>
           ) : null}
@@ -493,7 +493,7 @@ const useStyles = makeStyles((colors) => ({
     lineHeight: 21,
     color: colors.ink,
     textAlignVertical: 'top',
-    outlineColor: colors.red,
+    outlineColor: colors.primary,
     // Rows don't wrap (bars stay lined up under each other); the box scrolls sideways instead.
     ...({ whiteSpace: 'pre', overflowX: 'auto' } as object),
   },

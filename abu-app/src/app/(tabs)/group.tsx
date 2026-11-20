@@ -32,7 +32,7 @@ export default function GroupTab() {
       <Page>
         <TopBar title={s.group.name} subtitle={GROUP_TYPES[s.group.type].name} />
         <Card>
-          <Kicker color={colors.redDeep}>Waiting to be let in</Kicker>
+          <Kicker color={colors.accent}>Waiting to be let in</Kicker>
           <Body>The leader lets new members in. You’ll see everyone here once they do.</Body>
         </Card>
       </Page>
@@ -140,7 +140,7 @@ function GroupDetails({ group, me }: { group: MyGroup; me: string }) {
 
       {leader && waiting.length ? (
         <Card>
-          <Kicker color={colors.redDeep}>Waiting to join · {waiting.length}</Kicker>
+          <Kicker color={colors.accent}>Waiting to join · {waiting.length}</Kicker>
           {waiting.map((m) => (
             <WaitingRow key={m.user_id} groupId={group.id} member={m} onDone={invalidate} />
           ))}
@@ -186,10 +186,10 @@ function Toggle({ label, hint, value, onChange }: { label: string; hint: string;
         value={value}
         onValueChange={onChange}
         accessibilityLabel={label}
-        trackColor={{ false: colors.switchOff, true: colors.red }}
-        thumbColor={colors.onRed}
+        trackColor={{ false: colors.switchOff, true: colors.primary }}
+        thumbColor={colors.onPrimary}
         // On the web, react-native-web colours the "on" knob separately.
-        {...({ activeThumbColor: colors.onRed } as object)}
+        {...({ activeThumbColor: colors.onPrimary } as object)}
       />
     </View>
   );
@@ -358,7 +358,7 @@ const useStyles = makeStyles((colors) => ({
   memberRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
   name: { fontFamily: fonts.bold, fontSize: 15, color: colors.ink },
   you: { fontFamily: fonts.body, color: colors.muted },
-  role: { fontFamily: fonts.bold, fontSize: 12.5, color: colors.redDeep },
+  role: { fontFamily: fonts.bold, fontSize: 12.5, color: colors.accent },
   more: { fontFamily: fonts.bold, fontSize: 13, color: colors.link },
   actions: { gap: 10, paddingBottom: 12 },
   roleRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

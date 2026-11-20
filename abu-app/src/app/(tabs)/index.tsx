@@ -26,7 +26,7 @@ import { kindLabel, kindNoun } from '@/lib/group-types';
 import { partName } from '@/solfa';
 import { useSession } from '@/state/session';
 import { makeStyles, useColors } from '@/theme/theme';
-import { brand, fonts } from '@/theme/tokens';
+import { fonts } from '@/theme/tokens';
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -126,16 +126,16 @@ export default function Home() {
 
       {g.status === 'pending' ? (
         <Card>
-          <Kicker color={colors.redDeep}>Waiting to be let in</Kicker>
+          <Kicker color={colors.accent}>Waiting to be let in</Kicker>
           <Text style={styles.cardTitle}>{g.name}</Text>
           <Body>The leader lets new members in. You’ll see the group’s songs and services here as soon as they do.</Body>
         </Card>
       ) : g.type === 'personal' ? (
-        <Card tone="red">
-          <Motif color={colors.onRed} opacity={0.16} fade />
-          <Kicker color={brand.onRedKicker}>{choirs.length ? 'Your own space' : 'Sing with a group?'}</Kicker>
-          <Text style={[styles.cardTitle, { color: colors.onRed }]}>{choirs.length ? 'Your songs and setlists' : 'Join your choir or band'}</Text>
-          <Text style={styles.onRed}>
+        <Card tone="hero">
+          <Motif color={colors.onHero} opacity={0.12} fade glow={colors.heroGlow} glow2={colors.heroGlow2} />
+          <Kicker color={colors.heroKicker}>{choirs.length ? 'Your own space' : 'Sing with a group?'}</Kicker>
+          <Text style={[styles.cardTitle, { color: colors.onHero }]}>{choirs.length ? 'Your songs and setlists' : 'Join your choir or band'}</Text>
+          <Text style={styles.onHero}>
             {choirs.length
               ? 'Save songs here and make personal setlists for weddings, concerts and services.'
               : 'Got a code from a choir or band? Join it here. You keep your own songs and setlists.'}
@@ -154,12 +154,12 @@ export default function Home() {
           canEditOrder={!!upcoming.serviceDetails?.can_edit_order}
         />
       ) : (
-        <Card tone="red">
-          <Motif color={colors.onRed} opacity={0.16} fade />
-          <Kicker color={brand.onRedKicker}>Next {kindNoun(g.type, 'service')}</Kicker>
-          <Text style={[styles.cardTitle, { color: colors.onRed }]}>{upcoming.loading ? 'Loading…' : 'Nothing planned yet'}</Text>
+        <Card tone="hero">
+          <Motif color={colors.onHero} opacity={0.12} fade glow={colors.heroGlow} glow2={colors.heroGlow2} />
+          <Kicker color={colors.heroKicker}>Next {kindNoun(g.type, 'service')}</Kicker>
+          <Text style={[styles.cardTitle, { color: colors.onHero }]}>{upcoming.loading ? 'Loading…' : 'Nothing planned yet'}</Text>
           {!upcoming.loading ? (
-            <Text style={styles.onRed}>
+            <Text style={styles.onHero}>
               {g.role === 'leader' ? 'Plan the next service and build its song order by section.' : 'Your services and rehearsals will show here, with their song orders.'}
             </Text>
           ) : null}
@@ -229,7 +229,7 @@ function HappeningNow({ group, event, details }: { group: MyGroup; event: GroupE
   }
   return (
     <Card>
-      <Kicker color={colors.redDeep}>
+      <Kicker color={colors.accent}>
         {kindLabel(group.type, event.kind)} {hasStarted(event.starts_at) ? 'now' : `at ${fmtTime(event.starts_at)}`}
       </Kicker>
       <Text style={styles.cardTitle}>{event.title}</Text>
@@ -270,15 +270,15 @@ function NextService({
   const countdown = countdownText(event.starts_at);
   const open = () => router.push({ pathname: '/event/[id]', params: { id: event.id } });
   return (
-    <Card tone="red">
-      <Motif color={colors.onRed} opacity={0.16} fade />
-      <Kicker color={brand.onRedKicker}>
+    <Card tone="hero">
+      <Motif color={colors.onHero} opacity={0.12} fade glow={colors.heroGlow} glow2={colors.heroGlow2} />
+      <Kicker color={colors.heroKicker}>
         Next {kindNoun(group.type, event.kind)}
         {when ? ` · ${when}` : ''}
       </Kicker>
       <Pressable onPress={open} accessibilityRole="link">
-        <Text style={[styles.cardTitle, { color: colors.onRed }]}>{event.title}</Text>
-        <Text style={styles.onRed}>{[fmtDate(event.starts_at), fmtTime(event.starts_at), event.venue].filter(Boolean).join(' · ')}</Text>
+        <Text style={[styles.cardTitle, { color: colors.onHero }]}>{event.title}</Text>
+        <Text style={styles.onHero}>{[fmtDate(event.starts_at), fmtTime(event.starts_at), event.venue].filter(Boolean).join(' · ')}</Text>
         {countdown ? <Text style={styles.countdown}>{countdown}</Text> : null}
       </Pressable>
       {!personal ? <ReplyButtons light value={mine} onChange={(v) => send.mutate(v)} /> : null}
@@ -354,11 +354,11 @@ function LookingAround() {
   const s = useSession();
   return (
     <Page>
-      <Card tone="red" style={{ alignItems: 'flex-start' }}>
-        <Motif color={colors.onRed} opacity={0.16} fade />
+      <Card tone="hero" style={{ alignItems: 'flex-start' }}>
+        <Motif color={colors.onHero} opacity={0.12} fade glow={colors.heroGlow} glow2={colors.heroGlow2} />
         <BrandMark size={86} />
-        <Text style={[styles.cardTitle, { color: colors.onRed, marginTop: 6 }]}>Welcome to SolfaScores</Text>
-        <Text style={styles.onRed}>Listen to any song’s parts now. Create an account to join your choir, save songs and see your song orders.</Text>
+        <Text style={[styles.cardTitle, { color: colors.onHero, marginTop: 6 }]}>Welcome to SolfaScores</Text>
+        <Text style={styles.onHero}>Listen to any song’s parts now. Create an account to join your choir, save songs and see your song orders.</Text>
         <Button
           kind="light"
           small
@@ -386,10 +386,10 @@ const useStyles = makeStyles((colors) => ({
   chipOn: { backgroundColor: colors.ink, borderColor: colors.ink },
   chipText: { fontFamily: fonts.bold, fontSize: 13.5, color: colors.ink },
   cardTitle: { fontFamily: fonts.heavy, fontSize: 20, color: colors.ink },
-  onRed: { fontFamily: fonts.body, fontSize: 14.5, lineHeight: 20, color: colors.onRedSoft },
+  onHero: { fontFamily: fonts.body, fontSize: 14.5, lineHeight: 20, color: colors.onHeroSoft },
   row: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginTop: 4 },
   learnHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   learnTitle: { flex: 1, fontFamily: fonts.heavy, fontSize: 14, color: colors.ink },
-  countdown: { fontFamily: fonts.heavy, fontSize: 14, color: colors.onRed, marginTop: 2 },
+  countdown: { fontFamily: fonts.heavy, fontSize: 14, color: colors.onHero, marginTop: 2 },
   small: { fontFamily: fonts.body, fontSize: 12.5, color: colors.muted },
 }));

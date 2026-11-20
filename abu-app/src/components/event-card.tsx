@@ -6,7 +6,7 @@ import type { GroupEvent, GroupType } from '@/api/client';
 import { fmtTime, relDay } from '@/lib/dates';
 import { kindLabel } from '@/lib/group-types';
 import { makeStyles, useColors } from '@/theme/theme';
-import { brand, fonts } from '@/theme/tokens';
+import { fonts } from '@/theme/tokens';
 
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 const DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
@@ -48,11 +48,11 @@ export function EventCard({ event, groupType, muted }: { event: GroupEvent; grou
 const useStyles = makeStyles((colors) => ({
   muted: { opacity: 0.6 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.card, borderRadius: 14, borderWidth: 1, borderColor: colors.line, padding: 12 },
-  date: { width: 52, borderRadius: 12, backgroundColor: colors.red, paddingVertical: 6, alignItems: 'center' },
+  date: { width: 52, borderRadius: 12, backgroundColor: colors.primary, paddingVertical: 6, alignItems: 'center' },
   dateRehearsal: { backgroundColor: colors.board },
-  day: { fontFamily: fonts.heavy, fontSize: 10, letterSpacing: 0.6, color: brand.onRedKicker },
-  num: { fontFamily: fonts.heavy, fontSize: 20, lineHeight: 24, color: colors.onRed },
-  kind: { fontFamily: fonts.heavy, fontSize: 11, letterSpacing: 0.6, textTransform: 'uppercase', color: colors.redDeep },
+  day: { fontFamily: fonts.heavy, fontSize: 10, letterSpacing: 0.6, color: colors.onPrimarySoft },
+  num: { fontFamily: fonts.heavy, fontSize: 20, lineHeight: 24, color: colors.onPrimary },
+  kind: { fontFamily: fonts.heavy, fontSize: 11, letterSpacing: 0.6, textTransform: 'uppercase', color: colors.accent },
   title: { fontFamily: fonts.bold, fontSize: 15.5, color: colors.ink },
   small: { fontFamily: fonts.body, fontSize: 12.5, color: colors.muted },
 }));

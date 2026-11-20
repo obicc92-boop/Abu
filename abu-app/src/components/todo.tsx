@@ -59,7 +59,7 @@ export function LeaderTodo({ group }: { group: MyGroup }) {
 
   return (
     <Card>
-      <Kicker color={colors.redDeep}>To do</Kicker>
+      <Kicker color={colors.accent}>To do</Kicker>
       {todo.data && !items.length ? <Text style={styles.done}>All done. Nothing is waiting for you.</Text> : null}
       {items.map((item, i) => {
         const l = line(item, group);
@@ -84,7 +84,7 @@ const useStyles = makeStyles((colors) => ({
   done: { fontFamily: fonts.body, fontSize: 14, color: colors.ok },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderTopWidth: 1, borderTopColor: colors.line },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.gold },
-  dotUrgent: { backgroundColor: colors.red },
+  dotUrgent: { backgroundColor: colors.danger },
   text: { flex: 1, fontFamily: fonts.bold, fontSize: 14, lineHeight: 19, color: colors.ink },
   action: { fontFamily: fonts.heavy, fontSize: 13.5, color: colors.link },
   quick: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },

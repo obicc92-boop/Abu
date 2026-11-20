@@ -26,7 +26,7 @@ export function CheckIn({ eventId }: { eventId: string }) {
   if (result === 'present') return <CheckedIn />;
   return (
     <Card>
-      <Kicker color={colors.redDeep}>Check in</Kicker>
+      <Kicker color={colors.accent}>Check in</Kicker>
       <Body muted>Enter the 4-digit code your leader is showing at the rehearsal.</Body>
       <TextInput
         value={code}
@@ -67,7 +67,7 @@ const useStyles = makeStyles((colors) => ({
     backgroundColor: colors.sand,
     borderRadius: 12,
     paddingVertical: 12,
-    outlineColor: colors.red,
+    outlineColor: colors.primary,
   },
   ok: { backgroundColor: colors.okTint, borderColor: colors.okLine },
   okText: { fontFamily: fonts.heavy, fontSize: 15, color: colors.ok },

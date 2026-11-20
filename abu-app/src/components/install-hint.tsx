@@ -23,7 +23,7 @@ export function InstallHint() {
   };
   return (
     <Card>
-      <Kicker color={colors.redDeep}>Install SolfaScores</Kicker>
+      <Kicker color={colors.accent}>Install SolfaScores</Kicker>
       <Text style={styles.text}>
         {pwa.canInstall
           ? 'Put SolfaScores on your home screen. It opens like an app and works without data in church.'

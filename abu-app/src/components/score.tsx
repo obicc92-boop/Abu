@@ -4,7 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { displayBeat, layoutScore, type ScoreCell, type ScoreSystem } from '@/score/layout';
 import { KEY_NAMES, mod12, partName, type ParsedSong } from '@/solfa';
 import { useTheme } from '@/theme/theme';
-import { darkColors, fonts, lightColors, partColor, partInk, partLetter } from '@/theme/tokens';
+import { fonts, lightColors, partColor, partInk, partLetter, type Palette } from '@/theme/tokens';
 
 /** How the score is drawn: the player's small sand cards, or Perform mode's big type on dark or light. */
 export type ScoreTheme = 'player' | 'dark' | 'light';
@@ -24,12 +24,13 @@ interface Look {
  * player in the app's dark theme sits on raised cards like Perform's dark.
  * Notes are in their part's colour.
  */
-const LOOKS: Record<ScoreTheme | 'playerDark', Look> = {
-  player: { system: lightColors.sand, faint: lightColors.faint, barline: lightColors.barline, lyric: lightColors.muted, heading: lightColors.redDeep, dark: false },
-  playerDark: { system: darkColors.board, faint: darkColors.faint, barline: darkColors.barline, lyric: darkColors.muted, heading: darkColors.redDeep, dark: true },
-  dark: { system: '#241914', faint: '#7D6A60', barline: '#5A4A42', lyric: '#BFAEA5', heading: '#E8A592', dark: true },
-  light: { system: lightColors.sand, faint: '#A8968C', barline: '#BFAEA5', lyric: '#3A2B24', heading: lightColors.redDeep, dark: false },
+const PERFORM_LOOKS: Record<'dark' | 'light', Look> = {
+  dark: { system: '#241914', faint: '#7D6A60', barline: '#5A4A42', lyric: '#BFAEA5', heading: '#E2B25A', dark: true },
+  light: { system: lightColors.sand, faint: '#A8968C', barline: '#BFAEA5', lyric: '#3A2B24', heading: '#7A4F00', dark: false },
 };
+
+/** The player's look: the app's own palette (its look, light or dark). */
+const playerLook = (c: Palette, dark: boolean): Look => ({ system: dark ? c.board : c.sand, faint: c.faint, barline: c.barline, lyric: c.muted, heading: c.accent, dark });
 
 interface ScoreProps {
   song: ParsedSong;
@@ -58,12 +59,13 @@ interface ScoreProps {
  * Layout comes from src/score/layout.ts (a port of scoreHTML in the prototype).
  */
 export function Score({ song, activeBeat, silent, only, maxBeats, onActiveLine, theme = 'player', size = 12.5, transpose = 0, mine = null }: ScoreProps) {
-  const { scheme } = useTheme();
+  const { scheme, colors } = useTheme();
   const systems = useMemo(() => layoutScore(song, { only, maxBeats }), [song, only, maxBeats]);
   const positions = useRef<Record<string, { y: number; height: number }>>({});
   const activeId = systems.find((s) => activeBeat >= s.start && activeBeat < s.start + s.beats)?.id ?? null;
   // Perform chooses its own look; the player follows the app's light or dark.
-  const palette = LOOKS[theme === 'player' && scheme === 'dark' ? 'playerDark' : theme];
+  // Kept the same between beats, so the lines (memoised) don't all draw again on every beat.
+  const palette = useMemo(() => (theme === 'player' ? playerLook(colors, scheme === 'dark') : PERFORM_LOOKS[theme]), [theme, colors, scheme]);
   const big = theme !== 'player';
   const shown = only && song.parts.includes(only) ? [only] : song.parts;
 

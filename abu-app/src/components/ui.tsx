@@ -57,7 +57,7 @@ export function TopBar({ title, subtitle, back, right }: { title: string; subtit
   );
 }
 
-type ButtonKind = 'primary' | 'ghost' | 'light' | 'outlineLight' | 'danger';
+type ButtonKind = 'primary' | 'ghost' | 'light' | 'outlineLight' | 'danger' | 'whatsapp';
 
 export function Button({
   label,
@@ -95,13 +95,15 @@ export function Button({
   );
 }
 
-/** Each kind of button in a palette. "light" and "outlineLight" sit on the red cards, so they look the same in both. */
+/** Each kind of button in a palette. "light" and "outlineLight" sit on the feature cards (`hero`). */
 const buttonsFor = (colors: Palette): Record<ButtonKind, { box: ViewStyle; text: { color: string } }> => ({
-  primary: { box: { backgroundColor: colors.red }, text: { color: colors.onRed } },
+  primary: { box: { backgroundColor: colors.primary }, text: { color: colors.onPrimary } },
   ghost: { box: { backgroundColor: colors.card, borderWidth: 1.5, borderColor: colors.line }, text: { color: colors.ink } },
-  light: { box: { backgroundColor: brand.white }, text: { color: brand.redDeep } },
-  outlineLight: { box: { borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.75)' }, text: { color: colors.onRed } },
-  danger: { box: { backgroundColor: colors.card, borderWidth: 1.5, borderColor: colors.redLine }, text: { color: colors.redDeep } },
+  light: { box: { backgroundColor: colors.onHero }, text: { color: colors.hero } },
+  outlineLight: { box: { borderWidth: 1.5, borderColor: colors.onHeroSoft }, text: { color: colors.onHero } },
+  danger: { box: { backgroundColor: colors.card, borderWidth: 1.5, borderColor: colors.dangerLine }, text: { color: colors.danger } },
+  /** Sharing to WhatsApp, in its own green with white text in every look. */
+  whatsapp: { box: { backgroundColor: brand.whatsapp }, text: { color: brand.white } },
 });
 
 export function Field({ label, hint, error, ...input }: TextInputProps & { label: string; hint?: string; error?: string | null }) {
@@ -117,9 +119,9 @@ export function Field({ label, hint, error, ...input }: TextInputProps & { label
   );
 }
 
-export function Card({ children, style, tone = 'white' }: { children: ReactNode; style?: StyleProp<ViewStyle>; tone?: 'white' | 'sand' | 'red' }) {
+export function Card({ children, style, tone = 'white' }: { children: ReactNode; style?: StyleProp<ViewStyle>; tone?: 'white' | 'sand' | 'hero' }) {
   const styles = useStyles();
-  return <View style={[styles.card, tone === 'sand' && styles.cardSand, tone === 'red' && styles.cardRed, style]}>{children}</View>;
+  return <View style={[styles.card, tone === 'sand' && styles.cardSand, tone === 'hero' && styles.cardHero, style]}>{children}</View>;
 }
 
 /** Small uppercase label above a section or inside a card. */
@@ -255,13 +257,13 @@ const useStyles = makeStyles((colors) => ({
     fontSize: 16,
     color: colors.ink,
     // The focus ring, in the brand red instead of the browser's blue.
-    outlineColor: colors.red,
+    outlineColor: colors.primary,
   },
   hint: { fontFamily: fonts.body, fontSize: 12.5, color: colors.muted },
-  error: { fontFamily: fonts.bold, fontSize: 13.5, color: colors.redDeep },
+  error: { fontFamily: fonts.bold, fontSize: 13.5, color: colors.danger },
   card: { backgroundColor: colors.card, borderRadius: 16, borderWidth: 1, borderColor: colors.line, padding: 16, gap: 8 },
   cardSand: { backgroundColor: colors.board, borderColor: colors.board },
-  cardRed: { backgroundColor: colors.red, borderColor: colors.red, overflow: 'hidden' },
+  cardHero: { backgroundColor: colors.hero, borderColor: colors.hero, overflow: 'hidden' },
   kicker: { fontFamily: fonts.heavy, fontSize: 11.5, letterSpacing: 0.9, textTransform: 'uppercase' },
   text: { fontFamily: fonts.body, fontSize: 15, lineHeight: 21, color: colors.ink },
   loading: { padding: 32, alignItems: 'center', gap: 10 },

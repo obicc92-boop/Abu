@@ -166,7 +166,7 @@ const useStyles = makeStyles((colors) => ({
     fontSize: 15,
     color: colors.ink,
     backgroundColor: colors.card,
-    outlineColor: colors.red,
+    outlineColor: colors.primary,
   },
   tool: { width: 34, height: 34, borderRadius: 9, backgroundColor: colors.sand, alignItems: 'center', justifyContent: 'center' },
   toolText: { fontFamily: fonts.heavy, fontSize: 15, color: colors.ink },

@@ -113,7 +113,7 @@ function friendlyAuthError(message: string | undefined, status: number, signingU
 }
 
 const useStyles = makeStyles((colors) => ({
-  error: { fontFamily: fonts.bold, fontSize: 14, color: colors.redDeep },
+  error: { fontFamily: fonts.bold, fontSize: 14, color: colors.danger },
   switch: { padding: 8 },
   switchStrong: { fontFamily: fonts.heavy, color: colors.link },
 }));

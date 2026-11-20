@@ -37,7 +37,7 @@ export default function CheckInCodeScreen() {
   return (
     <SafeAreaView style={styles.page}>
       <StatusBar style="light" />
-      <Motif color={colors.onRed} opacity={0.16} focus={{ x: 0.5, y: 0.5 }} />
+      <Motif color={colors.onHero} opacity={0.12} focus={{ x: 0.5, y: 0.5 }} glow={colors.heroGlow} glow2={colors.heroGlow2} />
       <View style={styles.head}>
         <Text style={styles.kicker} numberOfLines={1}>
           {e ? `${e.title} · ${fmtDate(e.starts_at)} · ${fmtTime(e.starts_at)}` : ''}
@@ -66,17 +66,17 @@ export default function CheckInCodeScreen() {
 }
 
 const useStyles = makeStyles((colors) => ({
-  page: { flex: 1, backgroundColor: colors.redDeep, overflow: 'hidden' },
+  page: { flex: 1, backgroundColor: colors.hero, overflow: 'hidden' },
   head: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 16 },
-  kicker: { flex: 1, fontFamily: fonts.heavy, fontSize: 12, letterSpacing: 0.8, textTransform: 'uppercase', color: '#FFD9CF' },
+  kicker: { flex: 1, fontFamily: fonts.heavy, fontSize: 12, letterSpacing: 0.8, textTransform: 'uppercase', color: colors.heroKicker },
   done: { backgroundColor: 'rgba(255,255,255,0.16)', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 },
-  doneText: { fontFamily: fonts.heavy, fontSize: 14, color: colors.onRed },
+  doneText: { fontFamily: fonts.heavy, fontSize: 14, color: colors.onHero },
   middle: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, gap: 14 },
-  label: { fontFamily: fonts.heavy, fontSize: 14, letterSpacing: 1.2, textTransform: 'uppercase', color: '#FFD9CF' },
-  code: { fontFamily: fonts.monoBold, fontSize: 96, lineHeight: 110, letterSpacing: 18, color: colors.onRed, textAlign: 'center' },
-  note: { fontFamily: fonts.body, fontSize: 15, lineHeight: 21, color: '#FFE7E0', textAlign: 'center', maxWidth: 360 },
+  label: { fontFamily: fonts.heavy, fontSize: 14, letterSpacing: 1.2, textTransform: 'uppercase', color: colors.heroKicker },
+  code: { fontFamily: fonts.monoBold, fontSize: 96, lineHeight: 110, letterSpacing: 18, color: colors.onHero, textAlign: 'center' },
+  note: { fontFamily: fonts.body, fontSize: 15, lineHeight: 21, color: colors.onHeroSoft, textAlign: 'center', maxWidth: 360 },
   warn: { fontFamily: fonts.bold, fontSize: 13.5, color: colors.gold, textAlign: 'center', maxWidth: 360 },
   foot: { alignItems: 'center', paddingBottom: 28, gap: 2 },
-  count: { fontFamily: fonts.monoBold, fontSize: 40, color: colors.onRed },
-  countLabel: { fontFamily: fonts.bold, fontSize: 14, color: '#FFE7E0' },
+  count: { fontFamily: fonts.monoBold, fontSize: 40, color: colors.onHero },
+  countLabel: { fontFamily: fonts.bold, fontSize: 14, color: colors.onHeroSoft },
 }));

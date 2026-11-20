@@ -40,9 +40,9 @@ export function SongRow({ song, note }: { song: SongSummary; note?: string }) {
 
 const useStyles = makeStyles((colors) => ({
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.card, borderRadius: 14, borderWidth: 1, borderColor: colors.line, padding: 12 },
-  badge: { width: 44, height: 44, borderRadius: 11, backgroundColor: colors.redTint, alignItems: 'center', justifyContent: 'center' },
+  badge: { width: 44, height: 44, borderRadius: 11, backgroundColor: colors.accentTint, alignItems: 'center', justifyContent: 'center' },
   badgeSheet: { backgroundColor: colors.sand },
-  badgeText: { fontFamily: fonts.monoBold, fontSize: 15, color: colors.redDeep },
+  badgeText: { fontFamily: fonts.monoBold, fontSize: 15, color: colors.accent },
   title: { fontFamily: fonts.bold, fontSize: 15, color: colors.ink },
   small: { fontFamily: fonts.body, fontSize: 12.5, color: colors.muted },
   note: { fontFamily: fonts.bold, fontSize: 12, color: colors.ok },

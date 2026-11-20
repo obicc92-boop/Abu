@@ -84,8 +84,8 @@ export function SongActions({ songId, song }: { songId: string; song?: Song }) {
             onValueChange={(v) => knows.mutate(v)}
             accessibilityLabel="I know my part"
             trackColor={{ false: colors.switchOff, true: colors.ok }}
-            thumbColor={colors.onRed}
-            {...({ activeThumbColor: colors.onRed } as object)}
+            thumbColor={colors.onPrimary}
+            {...({ activeThumbColor: colors.onPrimary } as object)}
           />
         </View>
       ) : null}

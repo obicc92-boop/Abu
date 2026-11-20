@@ -212,7 +212,7 @@ const useStyles = makeStyles((colors) => ({
   title: { fontFamily: fonts.heavy, fontSize: 18, lineHeight: 22, color: colors.ink },
   subtitle: { fontFamily: fonts.body, fontSize: 12.5, color: colors.muted },
   body: { paddingHorizontal: 16, paddingBottom: 24, gap: 11, width: '100%', maxWidth: MAX_WIDTH, alignSelf: 'center' },
-  message: { fontFamily: fonts.bold, fontSize: 13, color: colors.redDeep, textAlign: 'center' },
+  message: { fontFamily: fonts.bold, fontSize: 13, color: colors.danger, textAlign: 'center' },
   hint: { fontFamily: fonts.body, fontSize: 12, color: colors.muted, textAlign: 'center' },
   transport: {
     flexDirection: 'row',

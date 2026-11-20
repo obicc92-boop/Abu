@@ -57,7 +57,7 @@ export default function InviteQrScreen() {
 const useStyles = makeStyles((colors) => ({
   page: { flex: 1, backgroundColor: colors.card },
   head: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 16 },
-  kicker: { flex: 1, fontFamily: fonts.heavy, fontSize: 13, letterSpacing: 0.8, textTransform: 'uppercase', color: colors.redDeep },
+  kicker: { flex: 1, fontFamily: fonts.heavy, fontSize: 13, letterSpacing: 0.8, textTransform: 'uppercase', color: colors.accent },
   done: { backgroundColor: colors.sand, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 },
   doneText: { fontFamily: fonts.heavy, fontSize: 14, color: colors.ink },
   middle: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, gap: 14 },

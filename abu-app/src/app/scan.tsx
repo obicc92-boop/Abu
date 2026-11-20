@@ -703,7 +703,7 @@ function ChooseStep(props: {
               ))}
             </View>
           </Card>
-          <IconButton icon={<CameraIcon color={colors.onRed} />} label="Take a photo" onPress={props.onPhoto} />
+          <IconButton icon={<CameraIcon color={colors.onPrimary} />} label="Take a photo" onPress={props.onPhoto} />
           <IconButton icon={<FileIcon color={colors.ink} />} label="Choose a PDF or photos" kind="ghost" onPress={props.onChoose} />
           {error ? <ErrorText message={error} /> : null}
           <Text style={styles.tip}>Best results: the whole page, flat and straight, in good light. Typed sheets read best; handwritten ones need more checking.</Text>
@@ -730,7 +730,7 @@ function ChooseStep(props: {
                   )}
                   {!hasPdf ? <Text style={styles.thumbNo}>{i + 1}</Text> : null}
                   <Pressable onPress={() => props.onRemove(i)} accessibilityRole="button" accessibilityLabel={`Remove ${hasPdf ? c.name : `page ${i + 1}`}`} hitSlop={6} style={styles.thumbRemove}>
-                    <CloseIcon color={colors.onRed} size={12} />
+                    <CloseIcon color={colors.onPrimary} size={12} />
                   </Pressable>
                 </View>
               ))}
@@ -811,7 +811,7 @@ function ReadingStep({ stage, done, lines, note }: { stage: Stage; done: { n: nu
           {STAGES.map((s, i) => (
             <View key={s.key} style={styles.stage}>
               <View style={[styles.stageDot, i < at && styles.stageDone, i === at && styles.stageNow]}>
-                {i < at ? <CheckIcon color={colors.onRed} size={12} /> : i === at ? <ActivityIndicator size="small" color={colors.onRed} /> : null}
+                {i < at ? <CheckIcon color={colors.onPrimary} size={12} /> : i === at ? <ActivityIndicator size="small" color={colors.onPrimary} /> : null}
               </View>
               <Text style={[styles.stageText, i === at && { color: colors.ink }]}>{s.label}</Text>
             </View>
@@ -1022,7 +1022,7 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
                 accessibilityLabel={`Line ${i + 1}${l.checked ? ', checked' : l.skipped ? ', left out' : ''}`}
                 style={[styles.dot, l.checked && styles.dotDone, l.skipped && styles.dotSkipped, on && styles.dotOn]}
               >
-                {l.checked && !on ? <CheckIcon color={colors.ok} size={14} /> : <Text style={[styles.dotText, on && { color: colors.onRed }]}>{l.status === 'failed' ? '!' : i + 1}</Text>}
+                {l.checked && !on ? <CheckIcon color={colors.ok} size={14} /> : <Text style={[styles.dotText, on && { color: colors.onPrimary }]}>{l.status === 'failed' ? '!' : i + 1}</Text>}
               </Pressable>
             );
           })}
@@ -1257,12 +1257,12 @@ const useStyles = makeStyles((colors) => ({
   heroTitle: { fontFamily: fonts.heavy, fontSize: 19, color: colors.ink, textAlign: 'center' },
   steps: { gap: 8, alignSelf: 'stretch', paddingHorizontal: 8 },
   step: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  stepNo: { width: 26, height: 26, borderRadius: 13, backgroundColor: colors.redTint, alignItems: 'center', justifyContent: 'center' },
-  stepNoText: { fontFamily: fonts.heavy, fontSize: 13, color: colors.redDeep },
+  stepNo: { width: 26, height: 26, borderRadius: 13, backgroundColor: colors.accentTint, alignItems: 'center', justifyContent: 'center' },
+  stepNoText: { fontFamily: fonts.heavy, fontSize: 13, color: colors.accent },
   stepText: { fontFamily: fonts.bold, fontSize: 15, color: colors.ink },
-  iconButton: { minHeight: 54, borderRadius: 12, backgroundColor: colors.red, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 18 },
+  iconButton: { minHeight: 54, borderRadius: 12, backgroundColor: colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 18 },
   iconButtonGhost: { backgroundColor: colors.card, borderWidth: 1.5, borderColor: colors.line },
-  iconButtonText: { fontFamily: fonts.heavy, fontSize: 15.5, color: colors.onRed },
+  iconButtonText: { fontFamily: fonts.heavy, fontSize: 15.5, color: colors.onPrimary },
   tip: { fontFamily: fonts.body, fontSize: 13, lineHeight: 18, color: colors.muted },
   muted: { fontFamily: fonts.bold, fontSize: 12.5, color: colors.muted },
   small: { fontFamily: fonts.body, fontSize: 12.5, color: colors.muted },
@@ -1273,17 +1273,17 @@ const useStyles = makeStyles((colors) => ({
   thumbImg: { width: '100%', height: '100%' },
   thumbFile: { alignItems: 'center', justifyContent: 'center', gap: 6, padding: 8, backgroundColor: colors.sand },
   thumbName: { fontFamily: fonts.bold, fontSize: 11, color: colors.muted, textAlign: 'center' },
-  thumbNo: { position: 'absolute', left: 6, bottom: 6, fontFamily: fonts.heavy, fontSize: 12, color: colors.onRed, backgroundColor: 'rgba(34,22,15,0.7)', borderRadius: 8, paddingHorizontal: 6, overflow: 'hidden' },
+  thumbNo: { position: 'absolute', left: 6, bottom: 6, fontFamily: fonts.heavy, fontSize: 12, color: colors.onPrimary, backgroundColor: 'rgba(34,22,15,0.7)', borderRadius: 8, paddingHorizontal: 6, overflow: 'hidden' },
   thumbRemove: { position: 'absolute', right: 6, top: 6, width: 24, height: 24, borderRadius: 12, backgroundColor: 'rgba(34,22,15,0.75)', alignItems: 'center', justifyContent: 'center' },
-  addTile: { borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.red, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center', gap: 6 },
+  addTile: { borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.primary, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center', gap: 6 },
   addText: { fontFamily: fonts.bold, fontSize: 12.5, color: colors.link },
   bar: { height: 8, borderRadius: 4, backgroundColor: colors.board, overflow: 'hidden', flex: 1 },
   barWide: { height: 8, borderRadius: 4, backgroundColor: colors.board, overflow: 'hidden', alignSelf: 'stretch' },
-  barFill: { height: '100%', backgroundColor: colors.red, borderRadius: 4 },
+  barFill: { height: '100%', backgroundColor: colors.primary, borderRadius: 4 },
   stages: { flexDirection: 'row', justifyContent: 'space-between', gap: 6, marginTop: 6 },
   stage: { flex: 1, alignItems: 'center', gap: 6 },
   stageDot: { width: 26, height: 26, borderRadius: 13, backgroundColor: colors.board, alignItems: 'center', justifyContent: 'center' },
-  stageNow: { backgroundColor: colors.red },
+  stageNow: { backgroundColor: colors.primary },
   stageDone: { backgroundColor: colors.ok },
   stageText: { fontFamily: fonts.bold, fontSize: 12.5, color: colors.muted, textAlign: 'center' },
   progressRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -1296,7 +1296,7 @@ const useStyles = makeStyles((colors) => ({
   timeChipText: { fontFamily: fonts.heavy, fontSize: 13, color: colors.ink },
   dots: { gap: 6, paddingVertical: 2 },
   dot: { minWidth: 32, height: 32, borderRadius: 16, borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
-  dotOn: { backgroundColor: colors.red, borderColor: colors.red },
+  dotOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   dotDone: { borderColor: colors.ok },
   dotSkipped: { opacity: 0.4 },
   dotText: { fontFamily: fonts.bold, fontSize: 12.5, color: colors.ink },
@@ -1324,14 +1324,14 @@ const useStyles = makeStyles((colors) => ({
     color: colors.ink,
     borderBottomWidth: 1,
     borderColor: colors.line,
-    outlineColor: colors.red,
+    outlineColor: colors.primary,
   },
   overlay: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, pointerEvents: 'none' },
   // Both marks stop above the row's own border, which is drawn over them; the bar's is the stronger.
-  barTint: { position: 'absolute', height: ROW_HEIGHT - 1, borderBottomWidth: 2, borderColor: colors.red, backgroundColor: colors.redTint },
+  barTint: { position: 'absolute', height: ROW_HEIGHT - 1, borderBottomWidth: 2, borderColor: colors.danger, backgroundColor: colors.dangerTint },
   wholeMark: { position: 'absolute', left: 0, right: 0, height: ROW_HEIGHT - 1, borderBottomWidth: 2, borderColor: colors.warnLine },
-  beats: { position: 'absolute', top: 2, left: 4, minWidth: 13, height: 12, borderRadius: 6, paddingHorizontal: 3, backgroundColor: colors.red, alignItems: 'center', justifyContent: 'center' },
-  beatsText: { fontFamily: fonts.heavy, fontSize: 10, lineHeight: 12, color: colors.onRed },
+  beats: { position: 'absolute', top: 2, left: 4, minWidth: 13, height: 12, borderRadius: 6, paddingHorizontal: 3, backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center' },
+  beatsText: { fontFamily: fonts.heavy, fontSize: 10, lineHeight: 12, color: colors.onDanger },
   barLine: { position: 'absolute', left: 0, width: BAR_LINE, height: ROW_HEIGHT, backgroundColor: colors.ink },
   measureBox: { position: 'absolute', width: 0, height: 0, overflow: 'hidden' },
   measureWide: { width: 4000, alignItems: 'flex-start' },
@@ -1340,7 +1340,7 @@ const useStyles = makeStyles((colors) => ({
   // A row of words shown set under its notes: its own text hidden behind the syllables, until it's typed in.
   laidOut: { color: 'transparent' },
   syllable: { position: 'absolute', height: ROW_HEIGHT, lineHeight: ROW_HEIGHT, fontFamily: fonts.body, fontStyle: 'italic', fontSize: 14, color: colors.muted },
-  problem: { fontFamily: fonts.body, fontSize: 13.5, lineHeight: 19, color: colors.redDeep },
+  problem: { fontFamily: fonts.body, fontSize: 13.5, lineHeight: 19, color: colors.danger },
   doubt: { borderRadius: 999, backgroundColor: colors.warnTint, paddingHorizontal: 10, paddingVertical: 4 },
   doubtText: { fontFamily: fonts.bold, fontSize: 12.5, color: colors.warn },
   okRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },

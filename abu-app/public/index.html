@@ -18,12 +18,14 @@
         }
       } catch (e) {}
     </script>
-    <!-- Light and dark: the page follows the phone unless SolfaScores' own setting (Me → Appearance) says otherwise. -->
+    <!-- Light and dark, and the look (Gold, Silver or Violet): the page follows the phone unless SolfaScores' own setting (Me → Appearance) says otherwise. -->
     <meta name="color-scheme" content="light dark" />
     <script>
       try {
         var t = localStorage.getItem('abu.theme');
         if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+        var l = localStorage.getItem('abu.look');
+        if (l === 'silver' || l === 'violet') document.documentElement.dataset.look = l;
       } catch (e) {}
     </script>
     <!-- Installable: Android offers "Install app"; iPhones use Share, then "Add to Home Screen". -->
@@ -52,17 +54,36 @@
       body {
         overflow: hidden;
         margin: 0;
-        /* The app's page colour, so nothing red shows around it (the red first
-           paint below has its own background): sand, or near-black in dark. */
+        /* The app's page colour in its look, so nothing red shows around it (the
+           red first paint below has its own background): the light page, or the
+           near-black in dark. */
         background: #f7f1ed;
+      }
+      html[data-look='silver'] body {
+        background: #f3f5f8;
+      }
+      html[data-look='violet'] body {
+        background: #f6f4fb;
       }
       @media (prefers-color-scheme: dark) {
         html:not([data-theme='light']) body {
-          background: #15100d;
+          background: #0d0907;
+        }
+        html:not([data-theme='light'])[data-look='silver'] body {
+          background: #0b0c0f;
+        }
+        html:not([data-theme='light'])[data-look='violet'] body {
+          background: #0d0b12;
         }
       }
       html[data-theme='dark'] body {
-        background: #15100d;
+        background: #0d0907;
+      }
+      html[data-theme='dark'][data-look='silver'] body {
+        background: #0b0c0f;
+      }
+      html[data-theme='dark'][data-look='violet'] body {
+        background: #0d0b12;
       }
       #root {
         display: flex;

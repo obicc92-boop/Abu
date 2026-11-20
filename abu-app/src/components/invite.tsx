@@ -26,9 +26,9 @@ export function InviteCard({ groupName, code, intro, showQr = true }: { groupNam
         <Text style={styles.code}>{code}</Text>
       </View>
       <Button
+        kind="whatsapp"
         label="Share on WhatsApp"
         onPress={() => Linking.openURL(`https://wa.me/?text=${encodeURIComponent(inviteMessage(groupName, code))}`)}
-        style={{ backgroundColor: '#1F8F4E' }}
       />
       <View style={styles.row}>
         <Button kind="ghost" small label={copied === 'code' ? 'Copied ✓' : 'Copy code'} onPress={() => copy('code')} style={{ flex: 1 }} />
