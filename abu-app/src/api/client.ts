@@ -126,6 +126,8 @@ export interface ScanPageReading {
 export interface ScanLineReading {
   text: string;
   doubts: { part: string; bar: number }[];
+  /** A new key written with the line ("F", "B♭"), if the reader saw one. */
+  key?: string;
 }
 
 export type EventKind = 'service' | 'rehearsal' | 'concert';
@@ -359,10 +361,10 @@ export const api = {
   },
   /** Cloudflare's reader reads a row of words (a JPEG of the row). */
   scanWords: (image: Blob) => request<{ words: string }>('/scan/words', { method: 'POST', body: image, headers: { 'Content-Type': 'image/jpeg' } }),
-  /** Opus copies a line's words (a JPEG), each part's, given its notes as read: `after` is the part's place. */
+  /** Opus copies a line's words (a JPEG), each part's, given its notes as read (`after` is the part's place), and a new key written with it. */
   scanLineWords: (image: Blob, o: { parts: string[]; notes: string }) => {
     const q = new URLSearchParams({ parts: o.parts.join(','), notes: o.notes });
-    return request<{ words: { after: number; text: string }[] }>(`/scan/line-words?${q}`, { method: 'POST', body: image, headers: { 'Content-Type': 'image/jpeg' } });
+    return request<{ words: { after: number; text: string }[]; key?: string }>(`/scan/line-words?${q}`, { method: 'POST', body: image, headers: { 'Content-Type': 'image/jpeg' } });
   },
   /** The sheet's title, composer, key and time, from a picture of the top of its first page (Cloudflare's reader); "" where none was found. */
   scanHeading: (image: Blob) =>

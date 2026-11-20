@@ -1,32 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 
-import {
-  alignedRows,
-  barColumns,
-  changedShare,
-  freeRepair,
-  joinLine,
-  keepsParts,
-  namesNotWords,
-  noteColumns,
-  problemsByPart,
-  splitLine,
-  tidyNotes,
-  tidyTitle,
-  withBarLinesInStep,
-  withBarsInStep,
-  withFullEmptyBars,
-  withGapsAsBars,
-  withHalfBarsAsBars,
-  withoutNameColumn,
-  withRestingEdges,
-  withShortBarsJoined,
-  withSpacedBeats,
-  withWords,
-  wordsOf,
-  wordsPreferring,
-  wordsUnderNotes,
-} from '../line-text';
+import { alignedRows, barColumns, changedShare, freeRepair, joinLine, keepsParts, namesNotWords, noteColumns, problemsByPart, splitLine, tidyNotes, tidyTitle, withBarLinesInStep, withBarsInStep, withBridgeNotes, withFullEmptyBars, withGapsAsBars, withHalfBarsAsBars, withoutNameColumn, withRestingEdges, withShortBarsJoined, withSpacedBeats, withWords, wordsOf, wordsPreferring, wordsUnderNotes } from '../line-text';
 import { parseSolfa } from '@/solfa';
 
 describe('tidyNotes', () => {
@@ -387,5 +361,27 @@ describe('whose words to keep', () => {
     expect(withWords(answer, wordsPreferring(wordsOf(answer), mine))).toBe(
       ['S  d :r |', 'W  Ke-re-si-me', 'A  m :f |', 'W  Ve-re Sy me', 'T  s :l |', 'W  Le kwa-nu'].join('\n'),
     );
+  });
+});
+
+describe('bridge notes read as two notes run together', () => {
+  it('become bridge notes where every part’s moves doh the same way', () => {
+    expect(withBridgeNotes('S  d :r /sd :r |\nW  Glo-ry\nA  m :f /m1l1 :t1 |')).toBe('S  d :r /s=d :r |\nW  Glo-ry\nA  m :f /m1=l1 :t1 |');
+    expect(withBridgeNotes("S  d :r | d'f :- |\nA  d :t1 | s1d :- |")).toBe("S  d :r | d'=f :- |\nA  d :t1 | s1=d :- |");
+  });
+
+  it('are left alone where they don’t agree, only one part of several has one, or doh wouldn’t move', () => {
+    expect(withBridgeNotes('S  sd :r |\nA  rd :t1 |')).toBeNull();
+    expect(withBridgeNotes('S  sd :r |\nA  m :t1 |')).toBeNull();
+    expect(withBridgeNotes('S  dd :r |\nA  ll :r |')).toBeNull();
+    // One part's alone, even in a line of one part: more likely misread notes.
+    expect(withBridgeNotes('S  d :m=s : |'.replace('=', ''))).toBeNull();
+    expect(withBridgeNotes('S  sd :rl |')).toBeNull();
+    expect(withBridgeNotes('S  d :de /ta :fe |')).toBeNull();
+  });
+
+  it('make a line add up as a free repair', () => {
+    const passes = (t: string) => !parseSolfa(t, { time: '4/4' }).errors.length;
+    expect(freeRepair('S  d :r /m :f | sd :- /- :- |\nA  d :t1 /d :r | m1l1 :- /- :- |', passes, 4)).toBe('S  d :r /m :f | s=d :- /- :- |\nA  d :t1 /d :r | m1=l1 :- /- :- |');
   });
 });

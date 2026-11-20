@@ -43,7 +43,7 @@ import { Body, Button, Card, Chip, ErrorText, Kicker, MAX_WIDTH, Page, TopBar } 
 import { barNumbers, checkRows } from '@/scan/bar-check';
 import { setScanDraft } from '@/scan/draft';
 import { forgetScan, listScans, openScan, saveScan, type SavedScan } from '@/scan/saved';
-import { joinLines, timeFor } from '@/scan/join';
+import { joinLines, linesKeys, timeFor } from '@/scan/join';
 import { alignedRows, barColumns, bestFree, changedShare, joinLine, keepsParts, namesNotWords, problemsByPart, splitLine, tidyNotes, tidyTitle, withBarsInStep, withWords, wordsOf, wordsPreferring, wordsUnderNotes, type LineRow, type LineWords } from '@/scan/line-text';
 import { keepCursor, placeCursor } from '@/lib/field-cursor';
 import { applyKey, lowMarksShown, lowMarksTyped, type Key, type Selection } from '@/lib/solfa-keys';
@@ -51,7 +51,7 @@ import { findLinesOwn, readLineOwn } from '@/scan/own-reader';
 import { cutLine, cutPieces, loadPages, MAX_PAGES, pageForFinding, scanningHere, takePhoto } from '@/scan/pages';
 import { readTypedSheet, type PageText } from '@/scan/pdf-text';
 import type { Box, FoundLine } from '@/scan/types';
-import { parseKey, parseSolfa, parseTime, partName } from '@/solfa';
+import { KEY_NAMES, keyFromSemitone, parseKey, parseSolfa, parseTime, partName } from '@/solfa';
 import { useSession } from '@/state/session';
 import { makeStyles, useColors, usePartInk } from '@/theme/theme';
 import { fonts, partColor } from '@/theme/tokens';
@@ -130,6 +130,11 @@ interface Line {
   error?: string;
   checked: boolean;
   skipped: boolean;
+  /**
+   * A new key from the start of this line ("E♭"): printed above it (a typed PDF), written with it (as the AI
+   * read), or set by the person. Bridge notes in its rows change key where they are.
+   */
+  key?: string;
 }
 
 /** A line as an unfinished scan keeps it: everything but its picture (kept apart) and the canvas it was read from. */
@@ -292,16 +297,21 @@ function Scanner() {
    * read): Cloudflare's reader reads handwritten words poorly (owner's call, 20 November 2026). The app's words
    * stay under a part Opus gave none for, and all of them if it can't be asked.
    */
-  const withOpusWords = async (line: Line, text: string, ai: Readers): Promise<string> => {
-    if (!line.handwritten || !ai.anthropic) return text;
+  const withOpusWords = async (line: Line, text: string, ai: Readers): Promise<{ text: string; key?: string }> => {
+    if (!line.handwritten || !ai.anthropic) return { text };
     try {
       const notes = joinLine(splitLine(text).filter((r) => r.part));
-      const { words } = await api.scanLineWords(line.blob, { parts: line.parts, notes });
-      return words.length ? withWords(text, wordsPreferring(words, wordsOf(text))) : text;
+      const { words, key } = await api.scanLineWords(line.blob, { parts: line.parts, notes });
+      return { text: words.length ? withWords(text, wordsPreferring(words, wordsOf(text))) : text, key };
     } catch {
-      return text;
+      return { text };
     }
   };
+  /**
+   * A new key a reader saw written with the line (owner's request, 20 November 2026): kept unless the line has
+   * one already, or bridge notes, which say exactly where each part changes key.
+   */
+  const keyFrom = (line: Line, text: string, key?: string): Partial<Line> => (key && !line.key && !text.includes('=') ? { key } : {});
 
   const readOne = async (line: Line, head: Heading, songTime: string, ai: Readers, again = false): Promise<string> => {
     const passes = (t: string) => splitLine(t).some((r) => r.part && r.text.trim()) && !parseSolfa(t, { time: songTime }).errors.length;
@@ -314,8 +324,8 @@ function Scanner() {
     // fails for something else (only bar lines move): the person and the AIs then start from bars in step.
     if (!passes(own)) own = withBarsInStep(own, beats) ?? own;
     if (!again && passes(own)) {
-      const text = await withOpusWords(line, own, ai);
-      update(line.id, { status: 'read', text, checked: false });
+      const { text, key } = await withOpusWords(line, own, ai);
+      update(line.id, { status: 'read', text, checked: false, ...keyFrom(line, text, key) });
       return text;
     }
     update(line.id, { status: 'reading', error: undefined });
@@ -344,8 +354,9 @@ function Scanner() {
         const corrected = via === 'cloudflare' || via === 'haiku';
         if (passes(text) && keepsParts(text, draft) && !(corrected && changedShare(text, draft) > 0.2)) {
           // (Not when the person asked again: the words may be theirs.)
-          if (corrected && !again) text = await withOpusWords(line, text, ai);
-          update(line.id, { status: 'read', text, doubts: r.doubts, checked: false, via });
+          let key = r.key;
+          if (corrected && !again) ({ text, key = r.key } = await withOpusWords(line, text, ai));
+          update(line.id, { status: 'read', text, doubts: r.doubts, checked: false, via, ...keyFrom(line, text, key) });
           return text;
         }
       } catch (e) {
@@ -384,7 +395,7 @@ function Scanner() {
       if (more) setNote(`Only the first ${MAX_PAGES} pages are read at a time.`);
       const found: Line[] = [];
       let head: Heading = { title: '', composer: '', key: '', time: '' };
-      const add = async (p: number, box: Box, l: { parts: string[]; words: number; wordRows?: FoundLine['wordRows']; text?: string; lined?: string; draft?: string }) => {
+      const add = async (p: number, box: Box, l: { parts: string[]; words: number; wordRows?: FoundLine['wordRows']; text?: string; lined?: string; draft?: string; key?: string }) => {
         const cut = await cutLine(pages[p], box);
         const text = l.text ?? '';
         const wordRows = l.wordRows ?? [];
@@ -407,6 +418,7 @@ function Scanner() {
           doubts: [],
           checked: false,
           skipped: false,
+          ...(l.key ? { key: l.key } : {}),
         });
       };
 
@@ -533,8 +545,13 @@ function Scanner() {
   };
 
   const save = () => {
-    const kept = lines.filter((l) => !l.skipped && l.text.trim()).map((l) => l.text);
-    setScanDraft({ title: tidyTitle(heading.title) || titleFromFile(chosen[0]?.name), composer: heading.composer, doh, time, solfa: joinLines(kept, time), sheet: chosen[0] ?? null, scanId: scanId ?? undefined });
+    // Each kept line, with a key: line before it where the key changes there (its own new key, or one from lines
+    // left out before it).
+    const left = (l: Line) => l.skipped || !l.text.trim();
+    const keys = linesKeys(lines.map((l) => ({ text: l.text, key: l.key, left: left(l) })), doh, time);
+    const kept = lines.flatMap((l, i) => (left(l) ? [] : [{ text: l.text, key: keys[i].change }]));
+    const solfa = joinLines(kept.map((l) => l.text), time, kept.map((l) => l.key));
+    setScanDraft({ title: tidyTitle(heading.title) || titleFromFile(chosen[0]?.name), composer: heading.composer, doh, time, solfa, sheet: chosen[0] ?? null, scanId: scanId ?? undefined });
     router.push({ pathname: '/song-editor', params: { from: 'scan' } });
   };
 
@@ -911,25 +928,27 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
     while (j >= 0 && !rows[j].part) j--;
     return j >= 0 ? wordsUnderNotes(valueOf(i), valueOf(j), WORDS_CHAR) : null;
   });
-  // The key where this line starts: the song's, moved by any bridge notes in the lines before it.
-  const before = useMemo(() => lines.slice(0, current).map((l) => l.text), [lines, current]);
-  const lineDoh = useMemo(() => {
-    let key = doh;
-    for (const text of before) key = parseSolfa(text, { time, key }).keyChanges.at(-1)?.key?.semitone ?? key;
-    return key;
-  }, [before, time, doh]);
+  // The key where this line starts: the song's, moved by the lines before it (their bridge notes and new keys), or
+  // this line's own new key.
+  const keys = useMemo(() => linesKeys(lines.map((l) => ({ text: l.text, key: l.key, left: l.skipped })), doh, time), [lines, doh, time]);
+  const lineDoh = keys[current]?.start ?? doh;
+  const newKey = line.key && keys[current] && keys[current].start !== keys[current].from ? (parseKey(line.key)?.name ?? keyFromSemitone(keys[current].start).name) : null;
+  const [pickingKey, setPickingKey] = useState(false);
   const parsed = useMemo(() => parseSolfa(line.text, { time, key: lineDoh }), [line.text, time, lineDoh]);
   const empty = !rows.some((r) => r.part && r.text.trim());
   const player = useSongPlayer(empty || parsed.errors.length ? null : parsed, lineDoh);
-  // Where the key changes, said plainly, so a misread bridge note is easy to spot.
+  // Where the key changes, said plainly, so a misread bridge note or key is easy to spot.
   const keyNotes = useMemo(() => {
     const all = Object.values(parsed.events).flat();
-    return parsed.keyChanges.flatMap((k) => {
-      if (!k.key) return [];
-      const bar = all.find((e) => Math.abs(e.start - k.beat) < 1e-6)?.bar;
-      return [`Doh changes to ${k.key.name}${bar ? ` in bar ${bar}` : ''}.`];
-    });
-  }, [parsed]);
+    return [
+      ...(newKey ? [`Doh changes to ${newKey} from this line.`] : []),
+      ...parsed.keyChanges.flatMap((k) => {
+        if (!k.key) return [];
+        const bar = all.find((e) => Math.abs(e.start - k.beat) < 1e-6)?.bar;
+        return [`Doh changes to ${k.key.name}${bar ? ` in bar ${bar}` : ''}.`];
+      }),
+    ];
+  }, [parsed, newKey]);
   const { byPart, other } = problemsByPart(
     parsed.errors.map((e) => e.message),
     rows.flatMap((r) => (r.part ? [r.part] : [])),
@@ -1248,7 +1267,45 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
               <CloseIcon color={colors.muted} size={14} />
               <Text style={styles.toolText}>{line.skipped ? 'Keep this line' : 'Leave this line out'}</Text>
             </Pressable>
+            <Pressable
+              onPress={() => setPickingKey(!pickingKey)}
+              accessibilityRole="button"
+              accessibilityLabel={line.key ? `Key ${line.key} from here. Change` : 'Key change'}
+              accessibilityState={{ expanded: pickingKey }}
+              style={[styles.tool, (pickingKey || !!line.key) && styles.toolOn]}
+            >
+              <Text style={styles.toolGlyph} aria-hidden>
+                ♯♭
+              </Text>
+              <Text style={styles.toolText}>{line.key ? `Key ${line.key} from here` : 'Key change'}</Text>
+            </Pressable>
           </View>
+          {pickingKey ? (
+            <View style={[styles.pad, { paddingTop: 0, gap: 8 }]}>
+              <Text style={styles.small}>Where the sheet changes key at the start of this line, pick the new key. A change inside the line is a bridge note in each part: old name = new name, like s=d.</Text>
+              <View style={styles.wrap}>
+                {KEY_NAMES.map((k) => (
+                  <Chip
+                    key={k}
+                    label={k}
+                    on={!!line.key && parseKey(line.key)?.semitone === parseKey(k)?.semitone}
+                    onPress={() => {
+                      update(line.id, { key: k, checked: false });
+                      setPickingKey(false);
+                    }}
+                  />
+                ))}
+                <Chip
+                  label="No change"
+                  on={!line.key}
+                  onPress={() => {
+                    update(line.id, { key: undefined, checked: false });
+                    setPickingKey(false);
+                  }}
+                />
+              </View>
+            </View>
+          ) : null}
           {line.via ? <Text style={[styles.small, styles.pad, { paddingTop: 0 }]}>{READ_BY[line.via]}</Text> : null}
         </Card>
       </ScrollView>
@@ -1420,6 +1477,8 @@ const useStyles = makeStyles((colors) => ({
   toolbar: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, borderTopWidth: 1, borderColor: colors.line },
   tool: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 10, borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.card, paddingHorizontal: 12, paddingVertical: 8 },
   toolText: { fontFamily: fonts.bold, fontSize: 13, color: colors.ink },
+  toolOn: { borderColor: colors.ink },
+  toolGlyph: { fontFamily: fonts.mono, fontSize: 13, lineHeight: 16, color: colors.muted },
   footer: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.glass, borderTopWidth: 1, borderColor: colors.line },
   footerSolid: { backgroundColor: colors.sand },
   unfinished: { gap: 6, paddingTop: 10, borderTopWidth: 1, borderColor: colors.line },

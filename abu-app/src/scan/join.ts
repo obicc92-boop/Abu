@@ -7,7 +7,7 @@
  * checker only allows at the very start of a song, so the upbeat goes back
  * where it's sung, with its words.
  */
-import { parseTime, splitWords } from '@/solfa';
+import { keyFromSemitone, parseKey, parseSolfa, parseTime, splitWords } from '@/solfa';
 
 interface Row {
   part: string | null;
@@ -126,8 +126,38 @@ function moveUpbeat(prev: Row[], next: Row[], beats: number): [Row[], Row[]] | n
   return [newPrev, newNext];
 }
 
-/** The lines as one song text, a blank line between lines of music, upbeats moved back. */
-export function joinLines(lines: string[], time: string): string {
+/**
+ * Where each line of a scanned sheet is in key (owner's request, 20 November 2026): `from`, the key it comes in
+ * with; `start`, the key it starts in (its own new key, if it has one: printed with it, read by the AI or set by
+ * the person); and `change`, the key's name where the song's text needs a \`key:\` line before it. That's at a
+ * line's own new key, or at the first kept line after lines left out that changed key (with their bridge notes or
+ * their own key). Keys are semitones above C; `doh` is the song's.
+ */
+export function linesKeys(lines: { text: string; key?: string; left?: boolean }[], doh: number, time: string): { from: number; start: number; change?: string }[] {
+  // Where the music is, every line counted; and where the song's text has it, the kept lines only.
+  let real = doh;
+  let song = doh;
+  return lines.map((l) => {
+    const from = real;
+    const own = l.key ? parseKey(l.key) : null;
+    const start = own ? own.semitone : real;
+    // Where its bridge notes leave it.
+    const after = parseSolfa(l.text, { time, key: start }).keyChanges.at(-1)?.key?.semitone ?? start;
+    if (l.left) {
+      real = after;
+      return { from, start };
+    }
+    const change = start !== song ? (own ? own.name : keyFromSemitone(start).name) : undefined;
+    real = song = after;
+    return { from, start, ...(change ? { change } : {}) };
+  });
+}
+
+/**
+ * The lines as one song text, a blank line between lines of music, upbeats moved back. `keys`, the key each line
+ * changes to at its start, if it does (`linesKeys`), goes on a \`key:\` line before it.
+ */
+export function joinLines(lines: string[], time: string, keys: (string | undefined)[] = []): string {
   const beats = parseTime(time)?.pulses ?? guessBeats(lines) ?? 4;
   const rows = lines.map(rowsOf);
   for (let i = 1; i < rows.length; i++) {
@@ -135,13 +165,14 @@ export function joinLines(lines: string[], time: string): string {
     if (moved) [rows[i - 1], rows[i]] = moved;
   }
   return rows
-    .map((line) =>
-      line
+    .map((line, i) => {
+      const text = line
         .filter((r) => r.part || r.body)
         .filter((r) => !r.part || barsOf(r.body).length)
         .map((r) => (r.part ? row(r.part, barsOf(r.body)) : `W  ${r.body}`))
-        .join('\n'),
-    )
+        .join('\n');
+      return text && keys[i] ? `key: ${keys[i]}\n${text}` : text;
+    })
     .filter(Boolean)
     .join('\n\n');
 }

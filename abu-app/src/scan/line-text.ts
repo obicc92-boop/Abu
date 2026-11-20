@@ -2,7 +2,7 @@
  * A scanned line's text as rows to edit one by one: each part's row of notes
  * and the rows of words, in order, and back to text.
  */
-import { parseNote, partName, splitWords } from '@/solfa';
+import { parseNote, partName, splitWords, SYLLABLE_PATTERN, SYLLABLE_SEMITONES } from '@/solfa';
 
 export interface LineRow {
   /** S, A, T, B, Solo... or null for a row of words. */
@@ -559,9 +559,42 @@ export function withBarLinesInStep(text: string, beatsPerBar: number): string | 
   return joinLine(fixed);
 }
 
+/** Two notes run together with nothing between them (`sd`, `s1d`, `d'f`): how SolfaScores' own reader writes a bridge note. */
+const RUN_TOGETHER = new RegExp(`(^|[\\s:|/.,])(${SYLLABLE_PATTERN})('{1,2}|[12])?(${SYLLABLE_PATTERN})('{1,2}|[12])?(?=$|[\\s:|/.,])`, 'g');
+
+/**
+ * Bridge notes, where the key changes (ˢd, the old name small and raised before the new): SolfaScores' own
+ * reader writes one as two notes run together (`sd`), since it has no `=` (it learned from rows with the
+ * bridge's `=` taken out), and the line then fails the checker on a note it doesn't know. Here they become
+ * bridge notes (`s=d`), but only where they agree: every one in the line moves doh the same way (and moves
+ * it), no part has two, and at least two parts have one. Asked for by the owner, 20 November 2026. On the 50
+ * handwritten test pages, 103 of 323 lines read had notes run together, nearly all misread notes; these rules
+ * leave every one alone (with one part's alone allowed, two one-row lines would have passed on a lone
+ * "bridge"). Null if there are none, or they don't agree.
+ */
+export function withBridgeNotes(text: string): string | null {
+  const rows = splitLine(text);
+  const moves = new Set<number>();
+  let found = 0;
+  const out = rows.map((r) => {
+    if (!r.part) return r;
+    let here = 0;
+    const t = r.text.replace(RUN_TOGETHER, (_m, before: string, from: string, fromMark = '', to: string, toMark = '') => {
+      here++;
+      moves.add((((SYLLABLE_SEMITONES[from] - SYLLABLE_SEMITONES[to]) % 12) + 12) % 12);
+      return `${before}${from}${fromMark}=${to}${toMark}`;
+    });
+    if (here > 1) moves.add(-1);
+    if (here) found++;
+    return { ...r, text: t };
+  });
+  if (found < 2 || moves.size !== 1 || moves.has(0) || moves.has(-1)) return null;
+  return joinLine(out);
+}
+
 /**
  * The free repairs for a line that fails the checker, tried in turn and
- * together: a column of part names read as notes, bar lines every part lost
+ * together: bridge notes read as two notes run together, a column of part names read as notes, bar lines every part lost
  * alike, half-bar marks that are bar lines and bar lines that are half-bar
  * marks, bar lines left out, missing beat
  * marks, parts resting through an upbeat, silent bars typed short, and one
@@ -573,6 +606,7 @@ export function withBarLinesInStep(text: string, beatsPerBar: number): string | 
  */
 export function freeRepair(text: string, passes: (t: string) => boolean, beatsPerBar: number): string | null {
   const steps: ((t: string) => string | null)[] = [
+    withBridgeNotes,
     withoutNameColumn,
     (t) => withBarsInStep(t, beatsPerBar),
     (t) => withHalfBarsAsBars(t, beatsPerBar),

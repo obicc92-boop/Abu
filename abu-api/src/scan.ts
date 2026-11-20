@@ -97,6 +97,7 @@ SolfaScores' format:
 - Notes: d r m f s l t; raised de re fe se le; lowered ra ma lo ta (ba is written ta).
 - Octave marks: a mark above or raised after the note (¹, ', a small raised figure or tick) means an octave up: write \`d'\`. A mark below or lowered (₁, a small lowered figure or tick, a comma right after the note) means an octave down: write \`t1\`. Two octaves: \`d''\` and \`s2\`.
 - Bridge notes, where the key changes: a small note printed raised just before a note is that note's name in the old key. Write both joined by \`=\`, old first, each with its own octave marks: \`ˢd\` is \`s=d\`, \`ᵈ'f\` is \`d'=f\`, \`ᵐl₁\` is \`m=l1\`.
+- A new key written with this line, above it or at its start (\`Key F\`, \`Doh is F\`, \`(F)\`, a key in a box), is given as \`key\`: the note's letter with any sharp or flat (\`F\`, \`B♭\`, \`F♯\`). An empty string if none is written there (the key in the sheet's heading isn't one). Write the bridge notes as well, where there are any.
 - If the line begins with a column before its first bar line (an upbeat), write that column as the row's first bar: \`s | d :r /m :f |\`.
 - Every row has the same number of bars, lined up with the rows above and below. A bar with nothing in it for a part is written with its empty beats, e.g. \` : : : \` for 4 beats.
 
@@ -129,8 +130,9 @@ export const LINE_SCHEMA = {
         additionalProperties: false,
       },
     },
+    key: { type: 'string' },
   },
-  required: ['rows', 'doubts'],
+  required: ['rows', 'doubts', 'key'],
   additionalProperties: false,
 };
 
@@ -140,7 +142,9 @@ A small model has already read this line; its reading comes with the picture. It
 
 export const WORDS_LINE_SYSTEM = `You copy the words (lyrics) of one line of music from a picture of a tonic sol-fa choir sheet (typed or handwritten). The line's notes have been read already and come with the picture, one row per part, top to bottom; the words are printed under the parts' rows of notes.
 
-For each part, in the order given, give the words printed under its row of notes, before the next part's row of notes; an empty string if there are none (on many sheets only the top part has words). On a sheet set in a table, a part's words are under its notes in every box: give them in order along the line. Write the words as syllables separated by spaces, with a hyphen after a syllable that runs on into the next (\`peo- ple\` is written \`peo-ple\`). Copy the words exactly as written, in whatever language, with their punctuation; never translate or correct them. The names of the notes (doh, re, mi) and the sol-fa itself are never words.`;
+For each part, in the order given, give the words printed under its row of notes, before the next part's row of notes; an empty string if there are none (on many sheets only the top part has words). On a sheet set in a table, a part's words are under its notes in every box: give them in order along the line. Write the words as syllables separated by spaces, with a hyphen after a syllable that runs on into the next (\`peo- ple\` is written \`peo-ple\`). Copy the words exactly as written, in whatever language, with their punctuation; never translate or correct them. The names of the notes (doh, re, mi) and the sol-fa itself are never words.
+
+Also give as \`key\` a new key written with this line, above it or at its start (\`Key F\`, \`Doh is F\`, \`(F)\`, a key in a box): the note's letter with any sharp or flat (\`F\`, \`B♭\`, \`F♯\`). An empty string if none is written there (the key in the sheet's heading isn't one), and never a key written in the words.`;
 
 export const WORDS_LINE_SCHEMA = {
   type: 'object',
@@ -154,8 +158,9 @@ export const WORDS_LINE_SCHEMA = {
         additionalProperties: false,
       },
     },
+    key: { type: 'string' },
   },
-  required: ['rows'],
+  required: ['rows', 'key'],
   additionalProperties: false,
 };
 
@@ -164,6 +169,19 @@ export interface LineReading {
   text: string;
   /** Bars the reader wasn't sure of, to check first. */
   doubts: { part: string; bar: number }[];
+  /** A new key written with the line ("F", "B♭"), if the reader saw one. */
+  key?: string;
+}
+
+/**
+ * A key as a reader gave it ("F", "Bb", "b flat", "F#"), as SolfaScores writes it ("F", "B♭", "F♯"); undefined if
+ * it isn't one. For a key written partway through a song (owner's request, 20 November 2026).
+ */
+export function keyName(raw: unknown): string | undefined {
+  const m = String(raw ?? '').match(/^\s*(?:key\s*:?\s*|doh\s*is\s*)?([A-Ga-g])\s*(#|♯|b|♭|-?\s*sharp|-?\s*flat)?\s*(?:major)?\s*$/i);
+  if (!m) return undefined;
+  const acc = (m[2] ?? '').replace(/[-\s]/g, '').toLowerCase();
+  return m[1].toUpperCase() + (acc === '#' || acc === '♯' || acc === 'sharp' ? '♯' : acc === 'b' || acc === '♭' || acc === 'flat' ? '♭' : '');
 }
 
 /* ---------- Shaping the answers ---------- */
@@ -418,25 +436,27 @@ export async function readLine(env: Env, image: ArrayBuffer, type: ImageType, op
   ]
     .filter(Boolean)
     .join(' ');
-  const raw = (await ask(env, STRONG, LINE_SYSTEM, LINE_SCHEMA, image, type, prompt)) as { rows?: { part?: string; notes?: string; words?: string }[]; words?: string; doubts?: { part?: string; bar?: number }[] };
+  const raw = (await ask(env, STRONG, LINE_SYSTEM, LINE_SCHEMA, image, type, prompt)) as { rows?: { part?: string; notes?: string; words?: string }[]; words?: string; doubts?: { part?: string; bar?: number }[]; key?: string };
   return shapeReading(raw, opts.parts);
 }
 
 /**
  * A line's words, each part's (Opus, at low effort: copying words needs little thought), given its notes as
  * read. For a handwritten sheet's lines that add up without Opus: Cloudflare's reader reads handwritten words
- * poorly (owner's call, 20 November 2026). `after` is the part's place in `parts` (0 for the first).
+ * poorly (owner's call, 20 November 2026). `after` is the part's place in `parts` (0 for the first). Also a new
+ * key written with the line, if there's one, as SolfaScores' own reader reads only notes.
  */
-export async function readLineWords(env: Env, image: ArrayBuffer, type: ImageType, opts: { parts: string[]; notes: string }): Promise<{ words: { after: number; text: string }[] }> {
+export async function readLineWords(env: Env, image: ArrayBuffer, type: ImageType, opts: { parts: string[]; notes: string }): Promise<{ words: { after: number; text: string }[]; key?: string }> {
   const prompt = `Parts, top to bottom: ${opts.parts.join(', ')}. The line's notes as read:\n${opts.notes}`;
-  const raw = (await ask(env, STRONG, WORDS_LINE_SYSTEM, WORDS_LINE_SCHEMA, image, type, prompt, 'low')) as { rows?: { part?: string; words?: string }[] };
+  const raw = (await ask(env, STRONG, WORDS_LINE_SYSTEM, WORDS_LINE_SCHEMA, image, type, prompt, 'low')) as { rows?: { part?: string; words?: string }[]; key?: string };
   const words: { after: number; text: string }[] = [];
   (raw.rows ?? []).forEach((row, i) => {
     const at = opts.parts.indexOf(partOf(row.part ?? '') ?? '');
     const text = (row.words ?? '').replace(/\s+/g, ' ').trim();
     if (text) words.push({ after: at >= 0 ? at : Math.min(i, opts.parts.length - 1), text });
   });
-  return { words };
+  const key = keyName(raw.key);
+  return { words, ...(key ? { key } : {}) };
 }
 
 /** Checks the reading SolfaScores' own model made of a line against its picture (Haiku), fixing what it got wrong. */
@@ -450,15 +470,17 @@ export async function checkLine(env: Env, image: ArrayBuffer, type: ImageType, o
   ]
     .filter(Boolean)
     .join(' ');
-  const raw = (await ask(env, CHEAP, CHECK_SYSTEM, LINE_SCHEMA, image, type, prompt)) as { rows?: { part?: string; notes?: string; words?: string }[]; words?: string; doubts?: { part?: string; bar?: number }[] };
+  const raw = (await ask(env, CHEAP, CHECK_SYSTEM, LINE_SCHEMA, image, type, prompt)) as { rows?: { part?: string; notes?: string; words?: string }[]; words?: string; doubts?: { part?: string; bar?: number }[]; key?: string };
   return shapeReading(raw, opts.parts);
 }
 
-function shapeReading(raw: { rows?: { part?: string; notes?: string; words?: string }[]; words?: string; doubts?: { part?: string; bar?: number }[] }, parts: string[]): LineReading {
+function shapeReading(raw: { rows?: { part?: string; notes?: string; words?: string }[]; words?: string; doubts?: { part?: string; bar?: number }[]; key?: string }, parts: string[]): LineReading {
+  const key = keyName(raw.key);
   return {
     text: lineText(raw, parts),
     doubts: (raw.doubts ?? [])
       .map((d) => ({ part: partOf(d.part ?? '') ?? '', bar: Math.round(Number(d.bar) || 0) }))
       .filter((d) => d.part && d.bar > 0),
+    ...(key ? { key } : {}),
   };
 }

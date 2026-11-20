@@ -2,12 +2,14 @@
  * The sol-fa keypad: every symbol of the notation a tap away, in place of the phone's keyboard, which keeps
  * the octave mark out of easy reach (owner's request, 20 November 2026). It sends keys (lib/solfa-keys.ts) to
  * the field being edited, which keeps its cursor: a key is pressed without taking the focus from the field.
- * The sharps and flats have a row of their own under the notes. Used to fix a scanned line and to write a song (`parts`: keys for the parts' names and a new line).
+ * The sharps and flats have a row of their own under the notes; "=" writes a bridge note (s=d), and in a song,
+ * "Key" a key change before the lines of music the cursor is in. Used to fix a scanned line and to write a song (`parts`: keys for the parts' names and a new line).
  */
-import { useRef, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { Pressable, Text, View, type GestureResponderEvent } from 'react-native';
 
 import { type Key } from '@/lib/solfa-keys';
+import { KEY_NAMES } from '@/solfa';
 import { makeStyles, useColors } from '@/theme/theme';
 import { fonts } from '@/theme/tokens';
 
@@ -33,6 +35,8 @@ const BEATS: { insert: string; label: string; caption: string }[] = [
   { insert: ':', label: ':', caption: 'beat' },
   { insert: '/', label: '/', caption: 'half bar' },
   { insert: '|', label: '|', caption: 'bar line' },
+  // A bridge note, where the key changes inside a line: the old name, =, the new (s=d).
+  { insert: '=', label: '=', caption: 'bridge' },
   { insert: ' ', label: '␣', caption: 'space' },
 ];
 const PARTS = ['S', 'A', 'T', 'B', 'W'];
@@ -47,6 +51,35 @@ const keepFocus = (e: GestureResponderEvent) => (e as unknown as { preventDefaul
 export function SolfaKeypad({ onKey, onDone, onKeyboard, parts = false }: { onKey(key: Key): void; onDone(): void; onKeyboard?(): void; parts?: boolean }) {
   const styles = useStyles();
   const insert = (text: string) => onKey({ insert: text });
+  // Writing a song: "Key" picks a new key, written before the lines of music the cursor is in.
+  const [pickingKey, setPickingKey] = useState(false);
+  if (pickingKey) {
+    return (
+      <View style={styles.pad} accessibilityLabel="Sol-fa keypad">
+        <Text style={styles.heading}>Change key from these lines of music: doh is</Text>
+        {[KEY_NAMES.slice(0, 6), KEY_NAMES.slice(6)].map((row, r) => (
+          <View key={r} style={styles.row}>
+            {row.map((k) => (
+              <KeyButton
+                key={k}
+                label={k}
+                accessibilityLabel={`Doh is ${k}`}
+                onPress={() => {
+                  onKey({ keyChange: k });
+                  setPickingKey(false);
+                }}
+                note
+              />
+            ))}
+          </View>
+        ))}
+        <Text style={styles.hint}>For a change inside a line, write a bridge note in each part instead: the old name, =, the new one (s=d).</Text>
+        <View style={styles.row}>
+          <KeyButton label="Cancel" onPress={() => setPickingKey(false)} word />
+        </View>
+      </View>
+    );
+  }
   return (
     <View style={styles.pad} accessibilityLabel="Sol-fa keypad">
       {parts ? (
@@ -55,6 +88,7 @@ export function SolfaKeypad({ onKey, onDone, onKeyboard, parts = false }: { onKe
             <KeyButton key={p} label={p} caption={p === 'W' ? 'words' : 'part'} onPress={() => insert(`${p}  `)} small />
           ))}
           <KeyButton label="↵" caption="new line" onPress={() => insert('\n')} small />
+          <KeyButton label="Key" caption="change" onPress={() => setPickingKey(true)} accessibilityLabel="Key change" small />
         </View>
       ) : null}
       <View style={styles.row}>
@@ -100,6 +134,7 @@ function KeyButton({
   narrow,
   small,
   done,
+  word,
   accessibilityLabel,
 }: {
   label: ReactNode;
@@ -110,6 +145,8 @@ function KeyButton({
   narrow?: boolean;
   small?: boolean;
   done?: boolean;
+  /** A word, not a symbol: set in the app's own type. */
+  word?: boolean;
   accessibilityLabel?: string;
 }) {
   const styles = useStyles();
@@ -132,7 +169,7 @@ function KeyButton({
       accessibilityLabel={accessibilityLabel ?? (caption ? `${String(label)} ${caption}` : String(label))}
       style={({ pressed }) => [styles.key, note && styles.noteKey, narrow && styles.narrowKey, small && styles.smallKey, done && styles.doneKey, pressed && styles.pressed]}
     >
-      <Text style={[styles.label, note && styles.noteLabel, narrow && styles.narrowLabel, done && styles.doneLabel, color ? { color } : null]}>{label}</Text>
+      <Text style={[styles.label, note && styles.noteLabel, narrow && styles.narrowLabel, (done || word) && styles.doneLabel, color ? { color } : null]}>{label}</Text>
       {caption ? <Text style={[styles.caption, narrow && styles.narrowCaption, color ? { color } : null]}>{caption}</Text> : null}
     </Pressable>
   );
@@ -168,5 +205,7 @@ const useStyles = makeStyles((colors) => ({
   narrowLabel: { fontSize: 16, lineHeight: 18 },
   doneLabel: { fontFamily: fonts.heavy, fontSize: 15 },
   caption: { fontFamily: fonts.body, fontSize: 10, lineHeight: 12, color: colors.muted },
+  heading: { fontFamily: fonts.bold, fontSize: 14, lineHeight: 18, color: colors.ink, paddingHorizontal: 2, paddingTop: 2 },
+  hint: { fontFamily: fonts.body, fontSize: 12, lineHeight: 16, color: colors.muted, paddingHorizontal: 2 },
   narrowCaption: { fontSize: 11, lineHeight: 12 },
 }));

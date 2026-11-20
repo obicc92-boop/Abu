@@ -2,7 +2,7 @@ import { describe, expect, it } from '@jest/globals';
 
 import { parseSolfa } from '@/solfa';
 
-import { guessBeats, joinLines, timeFor } from '../join';
+import { guessBeats, joinLines, linesKeys, timeFor } from '../join';
 
 const LINE_1 = ['S  s1 | d :r /m :f | s :- /- : |', 'W  O come let us a-dore', 'A  s1 | d :t1 /d :d | d :- /- : |'].join('\n');
 const LINE_2 = ['S  m | r :d /t1 :d | d :- /- :- |', 'W  him the new born king', 'A  d | t1 :l1 /s1 :s1 | s1 :- /- :- |'].join('\n');
@@ -64,5 +64,25 @@ describe('the time', () => {
     expect(guessBeats(['S  d | d :r :m | f :s :l :t :d\' :r\' | m :- :- | s |', 'A  d | m :f :s | l :- :- | t :d\' :- | s |'])).toBe(3);
     // 12/8, each bar 12 beats with a mark every 3.
     expect(guessBeats(['S  d | d :r :m /f :s :l /t :d :r /m :f :s | d :- :- /- :- :- /r :- :- /m :- :- | s |'])).toBe(12);
+  });
+});
+
+describe('key changes in a scanned sheet', () => {
+  it('follows each line’s own new key and its bridge notes', () => {
+    const keys = linesKeys([{ text: 'S  d :r |' }, { text: 'S  m :f |', key: 'F' }, { text: 'S  s=d :r |' }, { text: 'S  d :- |' }], 0, '2/4');
+    expect(keys).toEqual([{ from: 0, start: 0 }, { from: 0, start: 5, change: 'F' }, { from: 5, start: 5 }, { from: 0, start: 0 }]);
+  });
+
+  it('carries a key change from a line left out to the next line kept', () => {
+    const keys = linesKeys([{ text: 'S  d :r |' }, { text: 'S  m :f |', key: 'G', left: true }, { text: 'S  r :d |' }], 0, '2/4');
+    expect(keys.map((k) => k.change)).toEqual([undefined, undefined, 'G']);
+  });
+
+  it('writes no change for a new key the same as the one before', () => {
+    expect(linesKeys([{ text: 'S  d :r |', key: 'C' }, { text: 'S  m :f |', key: 'C' }], 0, '2/4').map((k) => k.change)).toEqual([undefined, undefined]);
+  });
+
+  it('puts a key line before a line that changes key', () => {
+    expect(joinLines(['S  d :r |', 'S  m :f |'], '2/4', [undefined, 'F'])).toBe('S  d :r |\n\nkey: F\nS  m :f |');
   });
 });

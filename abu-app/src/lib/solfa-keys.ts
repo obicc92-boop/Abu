@@ -14,6 +14,8 @@ export interface Selection {
 export type Key =
   /** Writes text at the cursor, in place of any text chosen. */
   | { insert: string }
+  /** A key change: a \`key:\` line before the lines of music the cursor is in (see `withKeyChange`). */
+  | { keyChange: string }
   /** Deletes the text chosen, or the character before the cursor (with the space the keypad put by a mark). */
   | 'erase'
   | 'left'
@@ -24,6 +26,7 @@ const SPACED = new Set([':', '/', '|']);
 
 /** What `key` does to `text` with the cursor at `sel`. */
 export function applyKey(text: string, sel: Selection, key: Key): { text: string; sel: Selection } {
+  if (typeof key === 'object' && 'keyChange' in key) return withKeyChange(text, sel, key.keyChange);
   const start = Math.max(0, Math.min(sel.start, sel.end, text.length));
   const end = Math.min(text.length, Math.max(sel.start, sel.end));
   if (key === 'left') {
@@ -52,6 +55,42 @@ export function applyKey(text: string, sel: Selection, key: Key): { text: string
   }
   const at = start + insert.length;
   return { text: text.slice(0, start) + insert + text.slice(end), sel: { start: at, end: at } };
+}
+
+/** A line that isn't music: blank, a section's name ("[Chorus]") or a heading line ("key: F", "time: 4/4"). */
+const NOT_MUSIC = /^\s*(?:$|\[|(?:title|composer|arranger|lyricist|key|time|tempo)\s*:|doh\s+is\b)/i;
+const KEY_LINE = /^\s*(?:key\s*:|doh\s+is\b)/i;
+
+/**
+ * A key change written into a song (owner's request, 20 November 2026): \`key: F\` on a line of its own before
+ * the lines of music the cursor is in (the block of parts' lines, up to a blank line, a section's name or a
+ * heading line), so the change comes at the start of their first bar, for every part. A \`key:\` line already
+ * there is changed instead. On a blank line, it goes before the lines below. The cursor stays where it was.
+ */
+function withKeyChange(text: string, sel: Selection, name: string): { text: string; sel: Selection } {
+  const line = `key: ${name}`;
+  const cursor = Math.max(0, Math.min(sel.start, text.length));
+  const lineStart = (at: number) => text.lastIndexOf('\n', at - 1) + 1;
+  const lineAt = (from: number) => text.slice(from, text.indexOf('\n', from) < 0 ? text.length : text.indexOf('\n', from));
+  let at = lineStart(cursor);
+  if (!lineAt(at).trim()) {
+    // On a blank line: before the lines of music below it, if there are any.
+    const next = text.indexOf('\n', at);
+    if (next >= 0) at = next + 1;
+  } else {
+    // Up to the first of the block's lines of music.
+    while (at > 0 && !NOT_MUSIC.test(lineAt(lineStart(at - 1)))) at = lineStart(at - 1);
+    // A key line just above it is changed.
+    const above = at > 0 ? lineStart(at - 1) : -1;
+    if (above >= 0 && KEY_LINE.test(lineAt(above))) {
+      const old = lineAt(above);
+      const moved = line.length - old.length;
+      return { text: text.slice(0, above) + line + text.slice(above + old.length), sel: { start: sel.start + moved, end: sel.end + moved } };
+    }
+  }
+  const insert = `${line}\n`;
+  const moved = at <= cursor ? insert.length : 0;
+  return { text: text.slice(0, at) + insert + text.slice(at), sel: { start: sel.start + moved, end: sel.end + moved } };
 }
 
 /**

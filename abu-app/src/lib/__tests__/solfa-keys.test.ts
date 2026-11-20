@@ -63,3 +63,32 @@ describe('low octave marks on screen', () => {
     expect(songLowMarksTyped(shown)).toBe(song);
   });
 });
+
+describe('a key change while writing a song', () => {
+  const song = 'S  d :r |\nA  m :f |\n\nS  s :l |\nA  d :r |';
+  const at = (text: string, find: string) => ({ start: text.indexOf(find), end: text.indexOf(find) });
+
+  it('goes before the lines of music the cursor is in, and the cursor stays put', () => {
+    const first = applyKey(song, at(song, 'm :f'), { keyChange: 'G' });
+    expect(first.text).toBe('key: G\nS  d :r |\nA  m :f |\n\nS  s :l |\nA  d :r |');
+    const second = applyKey(song, at(song, 'A  d :r'), { keyChange: 'G' });
+    expect(second.text).toBe('S  d :r |\nA  m :f |\n\nkey: G\nS  s :l |\nA  d :r |');
+    expect(second.text.slice(second.sel.start, second.sel.start + 7)).toBe('A  d :r');
+  });
+
+  it('changes a key line already there, and goes after a section’s name', () => {
+    const withKey = 'S  d :r |\n\nkey: G\nS  s :l |';
+    expect(applyKey(withKey, at(withKey, 's :l'), { keyChange: 'A' }).text).toBe('S  d :r |\n\nkey: A\nS  s :l |');
+    const chorus = 'S  d :r |\n[Chorus]\nS  s :l |';
+    expect(applyKey(chorus, at(chorus, 's :l'), { keyChange: 'F' }).text).toBe('S  d :r |\n[Chorus]\nkey: F\nS  s :l |');
+  });
+
+  it('on a blank line, goes before the lines below it', () => {
+    const got = applyKey(song, { start: song.indexOf('\n\n') + 1, end: song.indexOf('\n\n') + 1 }, { keyChange: 'E♭' });
+    expect(got.text).toBe('S  d :r |\nA  m :f |\n\nkey: E♭\nS  s :l |\nA  d :r |');
+  });
+
+  it('writes a bridge note with no spaces round its =', () => {
+    expect(type([ins('s'), ins('='), ins('d')]).text).toBe('s=d');
+  });
+});

@@ -64,9 +64,10 @@ export interface TypedSheet {
   time: string;
   /**
    * Each line as SolfaScores text (S, A, T, B rows with W rows of words), with its parts and where it's printed;
-   * `lined` is the same with the parts' bar lines lined up by where they're printed, when that differs.
+   * `lined` is the same with the parts' bar lines lined up by where they're printed, when that differs; `key`,
+   * a new key printed at its start (see `keyPrinted`).
    */
-  lines: { page: number; box: TypedLine['box']; parts: string[]; words: number; text: string; lined?: string }[];
+  lines: { page: number; box: TypedLine['box']; parts: string[]; words: number; text: string; lined?: string; key?: string }[];
   /** A staff score with sol-fa printed with it: its text is only part of the music. */
   staff: boolean;
 }
@@ -717,6 +718,26 @@ interface System {
   page: number;
   x0: number;
   x1: number;
+  /** A new key printed above it (after the heading): the key, and where along the line it's printed. */
+  key?: { name: string; x: number };
+}
+
+/**
+ * A key printed partway through a song, on a row of its own or with bar numbers and the like: "Key E", "Doh is
+ * G", "KEY B b", "Doh is E flat" (owner's request, 20 November 2026; 13 of the 81 typed sample sheets print
+ * one after the heading, several of them books of songs). The letter is a capital and nothing but its sharp or
+ * flat follows it, so words don't pass for one. The key's name ("E♭") and where its first letter is printed.
+ */
+const NEW_KEY = /\b(?:[Kk][Ee][Yy]|[Dd][Oo][Hh]\s*(?:[Ii][Ss]|=))\s*(?:of\s*|:\s*|=\s*)?([A-G])(?:\s*(♭|♯|#|b|flat|sharp))?(?![A-Za-z])/;
+function keyPrinted(text: string, row: PdfChar[]): { name: string; x: number } | null {
+  const m = text.match(NEW_KEY);
+  if (!m) return null;
+  const acc = m[2] ?? '';
+  const name = m[1] + (acc === '♭' || acc === 'b' || acc === 'flat' ? '♭' : acc === '♯' || acc === '#' || acc === 'sharp' ? '♯' : '');
+  const ink = row.filter((c) => c.c.trim());
+  const word = m[0].slice(0, 3).toLowerCase();
+  const at = ink.findIndex((c, i) => ink.slice(i, i + 3).map((g) => g.c).join('').toLowerCase() === word);
+  return { name, x: at >= 0 ? ink[at].x0 : (ink[0]?.x0 ?? 0) };
 }
 
 /** More than five rows of notes is several lines of music: split at ruled lines, or evenly. */
@@ -741,7 +762,7 @@ function splitTall(system: System, across: number[]): System[] {
     const bounds = [...starts, n];
     pieces = bounds.slice(1).map((b, i) => range(bounds[i], b));
   }
-  return pieces.filter((p) => p.length).map((p) => ({ ...system, rows: p.map((i) => system.rows[i]), ys: p.map((i) => ys[i]) }));
+  return pieces.filter((p) => p.length).map((p, k) => ({ ...system, rows: p.map((i) => system.rows[i]), ys: p.map((i) => ys[i]), key: k ? undefined : system.key }));
 }
 
 const barsOf = (row: string) =>
@@ -866,6 +887,8 @@ export function readSystems(pages: PageText[]): { header: string[]; systems: Sys
   const header: string[] = [];
   const systems: System[] = [];
   let music = 0;
+  // Keys printed after the heading, with where they're printed: each goes to the line of music just below it.
+  const keys: { name: string; x: number; y: number; page: number }[] = [];
   pages.forEach((page, number) => {
     music += page.music;
     if (!page.chars.length) return;
@@ -887,6 +910,9 @@ export function readSystems(pages: PageText[]): { header: string[]; systems: Sys
       const ink = r.filter((c) => c.c !== ' ');
       const solfa = isSolfa(plain);
       if (cur && !solfa && ink.length <= 3 && main < 0.7 * cur.main) return; // a stray small figure
+      // A key printed after the heading (the heading's is the song's): kept for the line below it, and not words.
+      const keyHere = !solfa && (systems.length || pageSystems.length) ? keyPrinted(plain, whole) : null;
+      if (keyHere) keys.push({ ...keyHere, y, page: number });
       if (solfa) {
         if (!cur || gap > 2.6 * main) {
           cur = { rows: [], ys: [], main, page: number, x0: 1e9, x1: 0 };
@@ -900,8 +926,10 @@ export function readSystems(pages: PageText[]): { header: string[]; systems: Sys
         cur.ys.push(y);
         lastY = y;
       } else if (cur && gap <= 2.6 * main && WORDISH.test(plain) && !/^[\d\s]+$/.test(plain) && !TEMPO.test(plain)) {
-        cur.rows.push(['w', plain]);
-        cur.ys.push(y);
+        if (!keyHere) {
+          cur.rows.push(['w', plain]);
+          cur.ys.push(y);
+        }
         lastY = y;
       } else {
         if (!systems.length && !pageSystems.length) header.push(plain);
@@ -921,6 +949,12 @@ export function readSystems(pages: PageText[]): { header: string[]; systems: Sys
       systems.push(...splitTall(s, across));
     }
   });
+  // Each printed key to the line of music printed just below it, if it's close above that line's first row of notes.
+  for (const k of keys) {
+    const firstNotes = (s: System) => Math.min(...s.ys.filter((_, i) => s.rows[i][0] === 'n'));
+    const below = systems.filter((s) => s.page === k.page && firstNotes(s) > k.y).sort((a, b) => firstNotes(a) - firstNotes(b))[0];
+    if (below && firstNotes(below) - k.y < 4 * below.main) below.key = { name: k.name, x: k.x };
+  }
   const printed: TypedLine[] = systems.map((s) => ({
     page: s.page,
     box: [s.x0 - 14, Math.min(...s.ys) - 1.2 * s.main, s.x1 + 14, Math.max(...s.ys) + 0.7 * s.main],
@@ -957,7 +991,10 @@ export function readTypedSheet(pages: PageText[]): TypedSheet {
     }
     const text = out.join('\n');
     const lined = alt.join('\n');
-    return { page: s.page, box: printed[i].box, parts: names, words, text, ...(lined !== text ? { lined } : {}) };
+    // A printed key counts from the line's start, if it's printed over the line's first third and the line has no
+    // bridge notes (which, where printed, say exactly where each part changes key).
+    const key = s.key && s.key.x < s.x0 + 0.35 * (s.x1 - s.x0) && !text.includes('=') ? s.key.name : undefined;
+    return { page: s.page, box: printed[i].box, parts: names, words, text, ...(lined !== text ? { lined } : {}), ...(key ? { key } : {}) };
   });
   return { title, key, time, lines, staff: music > 50 };
 }

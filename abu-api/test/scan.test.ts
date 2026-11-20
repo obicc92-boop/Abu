@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ensureUser } from '../src/domain/groups';
 import { scanAllowance, useScan } from '../src/domain/scan';
-import { checkLine, cleanPage, fixLine, keyOf, lineText, readHeading, readLine, readLineWords, readPage, readWords, rowsAnswer, timeOf } from '../src/scan';
+import { checkLine, cleanPage, fixLine, keyName, keyOf, lineText, readHeading, readLine, readLineWords, readPage, readWords, rowsAnswer, timeOf } from '../src/scan';
 import { call, signUp } from './helpers';
 
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
@@ -238,6 +238,23 @@ describe('reading with Claude', () => {
     expect(request.model).toBe('claude-opus-5-5');
     expect(request.output_config.effort).toBe('low');
     expect(request.messages[0].content[1].text).toContain("The line's notes as read:\nS  m :- |");
+  });
+
+  it('gives a new key written with a line, as SolfaScores writes keys, and asks for one', async () => {
+    const fetch = claudeReplies({ rows: [{ part: 'S', notes: 'd :r /m :f |', words: '' }], doubts: [], key: 'Bb' });
+    const line = await readLine(withKey, JPEG.buffer, 'image/jpeg', { parts: ['S'], time: '4/4' });
+    expect(line.key).toBe('B♭');
+    const request = JSON.parse(String(fetch.mock.calls[0][1]?.body));
+    expect(request.output_config.format.schema.required).toContain('key');
+    claudeReplies({ rows: [{ part: 'S', notes: 'd :r |', words: '' }], doubts: [], key: '' });
+    expect((await readLine(withKey, JPEG.buffer, 'image/jpeg', { parts: ['S'] })).key).toBeUndefined();
+    claudeReplies({ rows: [{ part: 'S', words: 'Glo-ry' }], key: 'F sharp' });
+    expect(await readLineWords(withKey, JPEG.buffer, 'image/jpeg', { parts: ['S'], notes: 'S  d :- |' })).toEqual({ words: [{ after: 0, text: 'Glo-ry' }], key: 'F♯' });
+  });
+
+  it('names a key however a reader writes it, and nothing that isn’t one', () => {
+    expect(['F', 'Bb', 'b flat', 'E♭', 'F#', 'Key G', 'Doh is D', 'A major'].map(keyName)).toEqual(['F', 'B♭', 'B♭', 'E♭', 'F♯', 'G', 'D', 'A']);
+    expect(['', 'none', 'H', 'F minor 7', undefined].map(keyName)).toEqual([undefined, undefined, undefined, undefined, undefined]);
   });
 
   it('says plainly when a picture can’t be read', async () => {

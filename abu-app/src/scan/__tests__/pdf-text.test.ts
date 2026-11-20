@@ -300,3 +300,25 @@ describe('a PDF page as pdf.js draws it', () => {
     expect(p.segs).toEqual([[150.25, 140, 160, 0.5]]);
   });
 });
+
+describe('a new key printed partway through', () => {
+  const lineOf = (y: number) => [...typed('d :- |d :t | l :s |d :r', 106, y), ...typed('s :- |l :s | m :m |s :t', 106, y + 14)];
+  const heading = typed('Doh is G   Time 4/4', 106, 90);
+
+  it('starts the line printed just below it, and isn’t read as words', () => {
+    const sheet = readTypedSheet([page([...heading, ...lineOf(150), ...typed('Key A', 106, 200), ...lineOf(220)])]);
+    expect(sheet.key).toBe('G');
+    expect(sheet.lines.map((l) => l.key)).toEqual([undefined, 'A']);
+    expect(sheet.lines.map((l) => l.text).join('\n')).not.toContain('Key');
+    const flat = readTypedSheet([page([...heading, ...lineOf(150), ...typed('Doh is E flat', 106, 200), ...lineOf(220)])]);
+    expect(flat.lines[1].key).toBe('E♭');
+  });
+
+  it('isn’t a key over the middle of a line, or in the words', () => {
+    const middle = readTypedSheet([page([...heading, ...lineOf(150), ...typed('Key A', 200, 200), ...lineOf(220)])]);
+    expect(middle.lines[1].key).toBeUndefined();
+    const words = readTypedSheet([page([...heading, ...lineOf(150), ...typed('Open the key And sing', 106, 178)])]);
+    expect(words.lines[0].key).toBeUndefined();
+    expect(words.lines[0].text).toContain('Open the key And sing');
+  });
+});

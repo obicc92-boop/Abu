@@ -48,7 +48,7 @@ for (const id of ids) {
   for (let n = 1; n <= doc.numPages; n++) pages.push(await pageText((await doc.getPage(n)) as unknown as PdfJsPage, OPS as unknown as Record<string, number>));
   const sheet = readTypedSheet(pages);
   const head = [sheet.title && `title: ${sheet.title}`, sheet.key && `key: ${sheet.key}`, sheet.time && `time: ${sheet.time}`].filter(Boolean);
-  const draft = [...head, '', ...sheet.lines.map((l) => `${l.text}\n`)].join('\n');
+  const draft = [...head, '', ...sheet.lines.map((l) => `${l.key ? `key: ${l.key}\n` : ''}${l.text}\n`)].join('\n');
   writeFileSync(join(root, 'draft-ts', `${id}.txt`), draft);
   const pyFile = join(root, 'draft', `${id}.txt`);
   const py = existsSync(pyFile) ? readFileSync(pyFile, 'utf8') : '';
