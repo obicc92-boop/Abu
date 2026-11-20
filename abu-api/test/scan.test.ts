@@ -67,7 +67,7 @@ describe('the routes', () => {
     const { cookie } = await signUp('Off Scanner');
     const res = await call('/scan/page?w=800&h=1100', { method: 'POST', body: JPEG, headers: { 'content-type': 'image/jpeg' }, cookie });
     expect(res.status).toBe(503);
-    expect(await res.json()).toEqual({ error: 'Claude isn’t switched on for scanning.' });
+    expect(await res.json()).toEqual({ error: 'The AI reader isn’t switched on for scanning.' });
     const left = await call('/scan/allowance', { cookie });
     // The allowance, and which readers the app can call: never Claude without a key.
     expect(await left.json()).toMatchObject({ pages: 40, lines: 400, readers: { anthropic: false } });

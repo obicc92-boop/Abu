@@ -30,7 +30,7 @@
 import { useQuery } from '@tanstack/react-query';
 import * as DocumentPicker from 'expo-document-picker';
 import { Redirect, router } from 'expo-router';
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, Text, TextInput, View, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollViewInstance, type TextInputInstance } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -42,6 +42,7 @@ import { SolfaKeypad } from '@/components/solfa-keypad';
 import { Body, Button, Card, Chip, ErrorText, Kicker, MAX_WIDTH, Page, TopBar } from '@/components/ui';
 import { barNumbers, checkRows } from '@/scan/bar-check';
 import { setScanDraft } from '@/scan/draft';
+import { forgetScan, listScans, openScan, saveScan, type SavedScan } from '@/scan/saved';
 import { joinLines, timeFor } from '@/scan/join';
 import { alignedRows, barColumns, bestFree, changedShare, joinLine, keepsParts, namesNotWords, problemsByPart, splitLine, tidyNotes, tidyTitle, withBarsInStep, withWords, wordsOf, wordsPreferring, wordsUnderNotes, type LineRow, type LineWords } from '@/scan/line-text';
 import { applyKey, type Key, type Selection } from '@/lib/solfa-keys';
@@ -130,6 +131,9 @@ interface Line {
   skipped: boolean;
 }
 
+/** A line as an unfinished scan keeps it: everything but its picture (kept apart) and the canvas it was read from. */
+type SavedLine = Omit<Line, 'blob' | 'url' | 'canvas'>;
+
 interface Heading {
   title: string;
   composer: string;
@@ -175,6 +179,76 @@ function Scanner() {
   // How the sheet is written, as the person says: it decides how it's read and which AIs help.
   const [written, setWritten] = useState<Written | null>(null);
   const [readers, setReaders] = useState<Readers>({ cloudflare: false, anthropic: false });
+  // The scan as it's checked, saved on the phone as it changes, to carry on with after leaving (scan/saved.ts).
+  const [scanId, setScanId] = useState<string | null>(null);
+  const [unfinished, setUnfinished] = useState<SavedScan<SavedLine>[]>([]);
+  useEffect(() => {
+    if (phase === 'choose') listScans<SavedLine>().then(setUnfinished);
+  }, [phase]);
+  // Saved a moment after each change, and straight away on leaving the screen or the page (a back press).
+  const unsaved = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    if (!scanId || (phase !== 'check' && phase !== 'finish') || !lines.length) {
+      unsaved.current = null;
+      return;
+    }
+    const save = () => {
+      unsaved.current = null;
+      const sheet = chosen[0];
+      void saveScan<SavedLine>(
+        {
+          id: scanId,
+          savedAt: Date.now(),
+          phase,
+          current,
+          heading,
+          time,
+          lines: lines.map(({ blob: _blob, url: _url, canvas: _canvas, ...l }) => l),
+          sheet: sheet?.file ? { name: sheet.name, type: sheet.type, size: sheet.size } : null,
+        },
+        Object.fromEntries(lines.map((l) => [l.id, l.blob])),
+        sheet?.file ?? null,
+      );
+    };
+    unsaved.current = save;
+    const wait = setTimeout(save, 600);
+    return () => clearTimeout(wait);
+  }, [scanId, phase, current, heading, time, lines, chosen]);
+  useEffect(() => {
+    const flush = () => unsaved.current?.();
+    const page = typeof window !== 'undefined' && typeof window.addEventListener === 'function' ? window : null;
+    page?.addEventListener('pagehide', flush);
+    return () => {
+      page?.removeEventListener('pagehide', flush);
+      flush();
+    };
+  }, []);
+  /** Carries on with an unfinished scan where it was left. */
+  const carryOn = async (id: string) => {
+    const got = await openScan<SavedLine>(id);
+    if (!got) {
+      setUnfinished(await listScans<SavedLine>());
+      return setError('That scan couldn’t be opened. Scan the sheet again.');
+    }
+    const restored: Line[] = got.scan.lines.map((l) => {
+      const blob = got.pictures[l.id] ?? new Blob();
+      // A line still being read when the scan was left keeps what was read.
+      const status = l.status === 'reading' || l.status === 'waiting' ? (l.text.trim() ? 'read' : 'failed') : l.status;
+      return { ...l, blob, url: URL.createObjectURL(blob), canvas: null, status };
+    });
+    setReaders((await api.scanAllowance().catch(() => null))?.readers ?? { cloudflare: false, anthropic: false });
+    setChosen(got.scan.sheet && got.sheet ? [{ ...got.scan.sheet, uri: URL.createObjectURL(got.sheet), file: got.sheet }] : []);
+    setHeading(got.scan.heading);
+    setTime(got.scan.time);
+    setLines(restored);
+    setCurrent(Math.max(0, Math.min(got.scan.current, restored.length - 1)));
+    setScanId(id);
+    setPhase(got.scan.phase);
+  };
+  const forget = async (id: string) => {
+    await forgetScan(id);
+    setUnfinished(await listScans<SavedLine>());
+  };
   const allowance = useQuery({ queryKey: ['scanAllowance'], queryFn: api.scanAllowance, enabled: phase === 'choose' });
 
   const update = (id: string, patch: Partial<Line>) => setLines((all) => all.map((l) => (l.id === id ? { ...l, ...patch } : l)));
@@ -295,6 +369,7 @@ function Scanner() {
   };
 
   const read = async () => {
+    setScanId(`${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`);
     setPhase('reading');
     setLines([]);
     setNote(null);
@@ -458,7 +533,7 @@ function Scanner() {
 
   const save = () => {
     const kept = lines.filter((l) => !l.skipped && l.text.trim()).map((l) => l.text);
-    setScanDraft({ title: tidyTitle(heading.title), composer: heading.composer, doh, time, solfa: joinLines(kept, time), sheet: chosen[0] ?? null });
+    setScanDraft({ title: tidyTitle(heading.title) || titleFromFile(chosen[0]?.name), composer: heading.composer, doh, time, solfa: joinLines(kept, time), sheet: chosen[0] ?? null, scanId: scanId ?? undefined });
     router.push({ pathname: '/song-editor', params: { from: 'scan' } });
   };
 
@@ -477,6 +552,9 @@ function Scanner() {
         onChoose={choose}
         onRemove={(i) => setChosen(chosen.filter((_, k) => k !== i))}
         onRead={read}
+        unfinished={unfinished}
+        onCarryOn={(id) => void carryOn(id)}
+        onForget={(id) => void forget(id)}
       />
     );
   }
@@ -516,6 +594,63 @@ function Scanner() {
 
 /* ---------- 1. Choose the pages ---------- */
 
+/** A title from a file's name, for a sheet whose heading wasn't read: "Ekeresimesi_Erutego_By_Jude_Nnam-1.pdf" → "Ekeresimesi Erutego By Jude Nnam". */
+function titleFromFile(name?: string): string {
+  return (name ?? '')
+    .replace(/\.[a-z0-9]{2,4}$/i, '')
+    .replace(/[-_ ]\d{1,2}$/, '')
+    .replace(/_+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** "2 hours ago", "yesterday": when an unfinished scan was last saved. */
+function ago(ms: number): string {
+  const minutes = Math.round((Date.now() - ms) / 60000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+  const days = Math.round(hours / 24);
+  return days === 1 ? 'yesterday' : `${days} days ago`;
+}
+
+/** Scans left before the song was saved, to carry on with; each can be deleted (after a second tap). */
+function Unfinished({ scans, onCarryOn, onForget }: { scans: SavedScan<SavedLine>[]; onCarryOn(id: string): void; onForget(id: string): void }) {
+  const styles = useStyles();
+  const [asking, setAsking] = useState<string | null>(null);
+  return (
+    <Card>
+      <Kicker>Carry on where you left off</Kicker>
+      {scans.map((s) => {
+        const checked = s.lines.filter((l) => l.checked || l.skipped).length;
+        return (
+          <View key={s.id} style={styles.unfinished}>
+            <Text style={styles.unfinishedTitle} numberOfLines={1}>
+              {tidyTitle(s.heading.title) || titleFromFile(s.sheet?.name) || 'Untitled sheet'}
+            </Text>
+            <Text style={styles.small}>
+              {checked} of {s.lines.length} lines checked · saved {ago(s.savedAt)}
+            </Text>
+            {asking === s.id ? (
+              <View style={styles.unfinishedButtons}>
+                <Text style={[styles.small, { flex: 1 }]}>Delete this scan and its checking?</Text>
+                <Button small kind="ghost" label="Keep" onPress={() => setAsking(null)} />
+                <Button small label="Delete" onPress={() => onForget(s.id)} />
+              </View>
+            ) : (
+              <View style={styles.unfinishedButtons}>
+                <Button small label={s.phase === 'finish' ? 'Save the song' : 'Carry on checking'} onPress={() => onCarryOn(s.id)} style={{ flex: 1 }} />
+                <Button small kind="ghost" label="Delete" onPress={() => setAsking(s.id)} />
+              </View>
+            )}
+          </View>
+        );
+      })}
+    </Card>
+  );
+}
+
 function ChooseStep(props: {
   chosen: Chosen[];
   hasPdf: boolean;
@@ -529,6 +664,9 @@ function ChooseStep(props: {
   onChoose(): void;
   onRemove(i: number): void;
   onRead(): void;
+  unfinished: SavedScan<SavedLine>[];
+  onCarryOn(id: string): void;
+  onForget(id: string): void;
 }) {
   const styles = useStyles();
   const colors = useColors();
@@ -538,6 +676,7 @@ function ChooseStep(props: {
       <TopBar back title="Scan a sheet" />
       {!chosen.length ? (
         <>
+          {props.unfinished.length ? <Unfinished scans={props.unfinished} onCarryOn={props.onCarryOn} onForget={props.onForget} /> : null}
           <Card style={styles.hero}>
             <ScanIcon color={colors.link} />
             <Text style={styles.heroTitle}>Turn a sol-fa sheet into a song</Text>
@@ -710,12 +849,13 @@ interface CheckProps {
   onFinish(): void;
 }
 
+/** Who read a line, as the person is told: no company's name is shown (owner's rule, 20 November 2026). */
 const READ_BY: Record<NonNullable<Line['via']>, string> = {
   text: 'Read from the PDF’s own text.',
   own: 'Read by SolfaScores itself.',
-  cloudflare: 'Read by SolfaScores, corrected by Cloudflare’s AI.',
-  haiku: 'Read by SolfaScores, corrected by Claude.',
-  strong: 'Read by Claude.',
+  cloudflare: 'Read by SolfaScores, corrected by AI.',
+  haiku: 'Read by SolfaScores, corrected by AI.',
+  strong: 'Read by AI.',
 };
 
 function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, update, canReadAgain, readAgain, onFinish }: CheckProps) {
@@ -848,7 +988,7 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
       <ScrollView contentContainerStyle={[styles.body, keypad && { paddingBottom: KEYPAD_ROOM }]} keyboardShouldPersistTaps="handled">
         <TopBar
           title="Check the reading"
-          subtitle={`Line ${current + 1} of ${lines.length} · page ${line.page}`}
+          subtitle={`Line ${current + 1} of ${lines.length} · page ${line.page} · saved as you go`}
           right={
             <Pressable onPress={() => setShowTimes(!showTimes)} accessibilityRole="button" accessibilityLabel={`Time ${time}. Change`} style={styles.timeChip}>
               <Text style={styles.timeChipText}>Time {time}</Text>
@@ -1284,6 +1424,9 @@ const useStyles = makeStyles((colors) => ({
   toolText: { fontFamily: fonts.bold, fontSize: 13, color: colors.ink },
   footer: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.glass, borderTopWidth: 1, borderColor: colors.line },
   footerSolid: { backgroundColor: colors.sand },
+  unfinished: { gap: 6, paddingTop: 10, borderTopWidth: 1, borderColor: colors.line },
+  unfinishedTitle: { fontFamily: fonts.heavy, fontSize: 16, color: colors.ink },
+  unfinishedButtons: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   footerInner: { flexDirection: 'row', gap: 10, padding: 12, paddingBottom: 16, width: '100%', maxWidth: MAX_WIDTH, alignSelf: 'center' },
   summary: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 6 },
   summaryCell: { alignItems: 'center', gap: 2 },

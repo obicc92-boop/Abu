@@ -227,7 +227,7 @@ export function scanReaders(env: Env): { cloudflare: boolean; anthropic: boolean
 }
 
 async function askCloudflare(env: Env, image: ArrayBuffer, type: ImageType, prompt: string, system: string | null, maxTokens: number): Promise<string> {
-  if (!env.AI) throw new AppError(503, 'Cloudflare’s reader isn’t switched on.');
+  if (!env.AI) throw new AppError(503, 'The AI reader isn’t switched on.');
   const content = [
     { type: 'image_url', image_url: { url: `data:${type};base64,${base64(image)}` } },
     { type: 'text', text: prompt },
@@ -242,7 +242,7 @@ async function askCloudflare(env: Env, image: ArrayBuffer, type: ImageType, prom
     // The free daily allowance of Workers AI (on the Workers Free plan, calls stop there). Not a 429: that
     // means SolfaScores' own allowance is used up, and the app stops reading; this one only skips this reader.
     if (/4006|daily free allocation|neurons/i.test(message)) throw new AppError(503, 'Today’s free AI reading is used up. Check the rest of the lines by eye, or try tomorrow.');
-    throw new AppError(503, 'Cloudflare’s reader is busy or out of reach. Try again in a minute.');
+    throw new AppError(503, 'The AI reader is busy or out of reach. Try again in a minute.');
   }
   return (out?.choices?.[0]?.message?.content ?? out?.response ?? '').trim();
 }
@@ -351,7 +351,7 @@ function base64(buf: ArrayBuffer): string {
 }
 
 async function ask(env: Env, model: string, system: string, schema: Record<string, unknown>, image: ArrayBuffer, type: ImageType, prompt: string, effort: 'low' | 'medium' = 'medium'): Promise<unknown> {
-  if (!env.ANTHROPIC_API_KEY) throw new AppError(503, 'Claude isn’t switched on for scanning.');
+  if (!env.ANTHROPIC_API_KEY) throw new AppError(503, 'The AI reader isn’t switched on for scanning.');
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, baseURL: env.ANTHROPIC_BASE_URL || undefined, maxRetries: 2 });
   let message;
   try {
@@ -386,12 +386,12 @@ async function ask(env: Env, model: string, system: string, schema: Record<strin
 
 /** Refuses straight away when Claude has no key, before anything is counted. */
 export function scanningReady(env: Env): void {
-  if (!env.ANTHROPIC_API_KEY) throw new AppError(503, 'Claude isn’t switched on for scanning.');
+  if (!env.ANTHROPIC_API_KEY) throw new AppError(503, 'The AI reader isn’t switched on for scanning.');
 }
 
 /** Refuses straight away when Cloudflare's reader isn't there, before anything is counted. */
 export function cloudflareReady(env: Env): void {
-  if (!env.AI) throw new AppError(503, 'Cloudflare’s reader isn’t switched on.');
+  if (!env.AI) throw new AppError(503, 'The AI reader isn’t switched on.');
 }
 
 export function checkImage(type: string, bytes: number): ImageType {

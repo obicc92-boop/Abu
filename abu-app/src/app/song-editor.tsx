@@ -20,6 +20,7 @@ import { applyKey, type Key, type Selection } from '@/lib/solfa-keys';
 import { Body, Button, Card, Chip, ErrorText, Field, Kicker, Loading, Page, TopBar } from '@/components/ui';
 import { TAG_GROUPS } from '@/lib/tags';
 import { clearScanDraft, scanDraft, type ScanDraft } from '@/scan/draft';
+import { forgetScan } from '@/scan/saved';
 import { KEY_NAMES, parseSolfa } from '@/solfa';
 import { useSession } from '@/state/session';
 import { makeStyles, useColors } from '@/theme/theme';
@@ -120,7 +121,11 @@ function Editor({ song, draft }: { song?: Song; draft: ScanDraft | null }) {
       return saved;
     },
     onSuccess: async (saved) => {
-      if (draft) clearScanDraft();
+      if (draft) {
+        clearScanDraft();
+        // The scan is done with: no longer offered to carry on with.
+        if (draft.scanId) void forgetScan(draft.scanId);
+      }
       await queryClient.invalidateQueries({ queryKey: ['songs'] });
       await queryClient.invalidateQueries({ queryKey: ['repertoire'] });
       await queryClient.invalidateQueries({ queryKey: ['song', saved.id] });
