@@ -2,8 +2,8 @@
  * Scan a sheet (docs/scan-plan.md), in four steps:
  *
  * 1. Choose: take photos of the pages or choose a PDF or photos; the pages
- *    show as thumbnails to add to or remove before reading, with how many
- *    voice parts the sheet has.
+ *    show as thumbnails to add to or remove before reading, with whether the
+ *    sheet is handwritten or typed and how many voice parts it has.
  * 2. Reading, the app doing all it can before any AI:
  *    - a typed PDF is read from its own text (free, instant, exact);
  *    - on photos and scans, the lines are found by where the ink is and read
@@ -13,10 +13,13 @@
  *      box by box (scan/boxes.ts), its words in pieces put side by side;
  *    - a line that passes SolfaScores' checker is kept as read. Only a line that
  *      fails goes to an AI: Cloudflare's reader, then Claude if the Worker
- *      has a key (Haiku checks a typed PDF's line, Opus reads from scratch;
- *      a line read from a picture skips Haiku, which rarely helps with
- *      handwriting), and an AI's answer is kept only if it passes. Otherwise
- *      the person fixes the line.
+ *      has a key (Haiku checks a typed sheet's line, Opus reads from
+ *      scratch; a handwritten sheet's line skips Haiku, which rarely helps
+ *      with handwriting), and an AI's answer is kept only if it passes.
+ *      Otherwise the person fixes the line.
+ *    The person says whether the sheet is handwritten or typed: a
+ *    handwritten PDF is read from its pictures even if it has text (a
+ *    scanner's guess at the writing).
  * 3. Check: one line at a time, the picture above each part's row (they
  *    scroll sideways together), the parts' bars numbered and lined up, each
  *    bar that doesn't add up marked with its beats, problems under the rows,
@@ -63,6 +66,12 @@ const PART_CHOICES: { n: number; label: string }[] = [
   { n: 1, label: '1' },
   { n: 0, label: 'Not sure' },
 ];
+/** How a sheet is written, as the person says. */
+type Written = 'hand' | 'typed';
+const WRITTEN_CHOICES: { w: Written; label: string }[] = [
+  { w: 'hand', label: 'Handwritten' },
+  { w: 'typed', label: 'Typed' },
+];
 const BLANK_PAGE: PageText = { width: 1, height: 1, chars: [], segs: [], across: [], music: 0, pictured: 1 };
 
 /** The AI readers the Worker has, in the order they're tried. */
@@ -105,8 +114,8 @@ interface Line {
   lined?: string;
   /** Who read it: the PDF's text, SolfaScores' own reader, or an AI that corrected it. */
   via?: 'text' | 'own' | 'cloudflare' | 'haiku' | 'strong';
-  /** Read from a picture (a photo or a scan), not a PDF's text: handwritten as often as not. */
-  picture: boolean;
+  /** On a sheet the person said is handwritten. */
+  handwritten: boolean;
   status: 'waiting' | 'reading' | 'read' | 'failed';
   text: string;
   doubts: { part: string; bar: number }[];
@@ -157,6 +166,8 @@ function Scanner() {
   const [current, setCurrent] = useState(0);
   const [time, setTime] = useState('4/4');
   const [partsWanted, setPartsWanted] = useState(4);
+  // How the sheet is written, as the person says: it decides how it's read and which AIs help.
+  const [written, setWritten] = useState<Written | null>(null);
   const [readers, setReaders] = useState<Readers>({ cloudflare: false, anthropic: false });
   const allowance = useQuery({ queryKey: ['scanAllowance'], queryFn: api.scanAllowance, enabled: phase === 'choose' });
 
@@ -189,10 +200,9 @@ function Scanner() {
    * A line's reading, with AI only as the last resort. A reading that passes SolfaScores' checker is kept as it is
    * (the AIs broke more right lines than they fixed when sent every line). One that fails, or one the
    * person asks to read again, goes to Cloudflare's reader, then Claude if the Worker has a key (Haiku
-   * checks a typed PDF's line, Opus reads it from scratch). A line read from a picture skips Haiku: the app
-   * can't tell handwriting from a photo of print, and on the owner's handwritten sheet Haiku made 1 of 9
-   * failing lines add up where Opus made all 9 (owner's call, 20 November 2026). An answer is kept only if it
-   * passes and keeps every part
+   * checks a typed sheet's line, Opus reads it from scratch). A handwritten sheet's line skips Haiku: on the
+   * owner's handwritten sheet Haiku made 1 of 9 failing lines add up where Opus made all 9 (owner's call,
+   * 20 November 2026). An answer is kept only if it passes and keeps every part
    * (`keepsParts`). Otherwise the line keeps
    * the app's own reading for the person to fix. Throws only when today's allowance is used up.
    */
@@ -216,7 +226,7 @@ function Scanner() {
     const draft = (again && line.text) || own;
     const tries: [NonNullable<Line['via']>, () => Promise<ScanLineReading>][] = [];
     if (ai.cloudflare && draft.trim()) tries.push(['cloudflare', () => api.scanFix(line.blob, { ...opts, draft })]);
-    if (ai.anthropic && draft.trim() && !line.picture) tries.push(['haiku', () => api.scanCheck(line.blob, { ...opts, draft })]);
+    if (ai.anthropic && draft.trim() && !line.handwritten) tries.push(['haiku', () => api.scanCheck(line.blob, { ...opts, draft })]);
     if (ai.anthropic) tries.push(['strong', () => api.scanLine(line.blob, opts)]);
     let problem = '';
     for (const [via, ask] of tries) {
@@ -284,7 +294,7 @@ function Scanner() {
           draft: text || l.draft || '',
           ...(l.lined ? { lined: l.lined } : {}),
           via: text ? 'text' : 'own',
-          picture: !text,
+          handwritten: written === 'hand',
           status: text ? 'read' : 'waiting',
           text,
           doubts: [],
@@ -294,7 +304,8 @@ function Scanner() {
       };
 
       // 1. A typed PDF: read from its own text. A page that's one big picture (a scan) is read as a picture.
-      const texts = pages.map((p) => (p.text && p.text.pictured <= 0.5 ? p.text : null));
+      // A handwritten PDF is read from its pictures: any text in it is a scanner's guess at the writing.
+      const texts = pages.map((p) => (written !== 'hand' && p.text && p.text.pictured <= 0.5 ? p.text : null));
       const typed = texts.some(Boolean) ? readTypedSheet(texts.map((t) => t ?? BLANK_PAGE)) : null;
       const typedLines = typed && !typed.staff ? typed.lines : [];
       if (typed && typedLines.length) head = { title: typed.title, composer: '', key: typed.key, time: typed.time };
@@ -427,6 +438,8 @@ function Scanner() {
         pagesLeft={allowance.data?.pages}
         partsWanted={partsWanted}
         setPartsWanted={setPartsWanted}
+        written={written}
+        setWritten={setWritten}
         onPhoto={photo}
         onChoose={choose}
         onRemove={(i) => setChosen(chosen.filter((_, k) => k !== i))}
@@ -477,6 +490,8 @@ function ChooseStep(props: {
   pagesLeft?: number;
   partsWanted: number;
   setPartsWanted(n: number): void;
+  written: Written | null;
+  setWritten(w: Written): void;
   onPhoto(): void;
   onChoose(): void;
   onRemove(i: number): void;
@@ -544,6 +559,21 @@ function ChooseStep(props: {
             </View>
           </Card>
           <Card>
+            <Kicker>How is the sheet written?</Kicker>
+            <View style={styles.wrap}>
+              {WRITTEN_CHOICES.map((c) => (
+                <Chip key={c.w} label={c.label} on={props.written === c.w} onPress={() => props.setWritten(c.w)} />
+              ))}
+            </View>
+            <Text style={styles.small}>
+              {props.written === 'hand'
+                ? 'Read from the picture. Handwritten sheets need more checking.'
+                : props.written === 'typed'
+                  ? 'A typed PDF is read from its own text, a photo from the picture.'
+                  : 'Choose one, so SolfaScores reads it the right way.'}
+            </Text>
+          </Card>
+          <Card>
             <Kicker>Voice parts in each line</Kicker>
             <View style={styles.wrap}>
               {PART_CHOICES.map((c) => (
@@ -553,7 +583,7 @@ function ChooseStep(props: {
             <Text style={styles.small}>For photos and scans. A typed PDF is read from its own text.</Text>
           </Card>
           {error ? <ErrorText message={error} /> : null}
-          <Button label="Read the sheet" onPress={props.onRead} />
+          <Button label="Read the sheet" onPress={props.onRead} disabled={!props.written} />
           <Text style={styles.tip}>SolfaScores reads the sheet itself, and asks an AI only about lines it can’t get right. Then you check each line before anything is saved.</Text>
         </>
       )}
