@@ -43,7 +43,7 @@ import { Body, Button, Card, Chip, ErrorText, Kicker, MAX_WIDTH, Page, TopBar } 
 import { barNumbers, checkRows } from '@/scan/bar-check';
 import { setScanDraft } from '@/scan/draft';
 import { joinLines, timeFor } from '@/scan/join';
-import { alignedRows, barColumns, bestFree, changedShare, joinLine, keepsParts, namesNotWords, problemsByPart, splitLine, tidyNotes, tidyTitle, withBarsInStep, withWords, wordsOf, wordsUnderNotes, type LineRow, type LineWords } from '@/scan/line-text';
+import { alignedRows, barColumns, bestFree, changedShare, joinLine, keepsParts, namesNotWords, problemsByPart, splitLine, tidyNotes, tidyTitle, withBarsInStep, withWords, wordsOf, wordsPreferring, wordsUnderNotes, type LineRow, type LineWords } from '@/scan/line-text';
 import { applyKey, type Key, type Selection } from '@/lib/solfa-keys';
 import { findLinesOwn, readLineOwn } from '@/scan/own-reader';
 import { cutLine, cutPieces, loadPages, MAX_PAGES, pageForFinding, scanningHere, takePhoto } from '@/scan/pages';
@@ -238,7 +238,9 @@ function Scanner() {
     for (const [via, ask] of tries) {
       try {
         const r = await ask();
-        let text = withWords(r.text, line.wordTexts);
+        // Opus reads handwritten words far better than Cloudflare's reader: its words are kept, and the app's only
+        // under a part it gave none for (owner's call, 20 November 2026). A correction keeps the app's words.
+        let text = withWords(r.text, via === 'strong' ? wordsPreferring(r.text, line.wordTexts) : line.wordTexts);
         // An answer that only lacks what the free repairs mend (a part's rest through an upbeat left out) is mended
         // as the app's own readings are: Opus read a boxed sheet's first line right but for the tenor's empty upbeat.
         if (!passes(text)) text = bestFree([text], passes, beats);

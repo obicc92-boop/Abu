@@ -106,7 +106,7 @@ A  s1 | d :t1 /d :d | d :d /t1 :- |
 T  m | m :s /s :m | l :s /s :- |
 B  d | l1 :s1 /d :l1 | f1 :s1 /s1 :- |
 
-Also give the words printed under the top row of notes (or the first row of words), as syllables separated by spaces, with a hyphen after a syllable that runs on into the next (\`peo- ple\` is written \`peo-ple\`); an empty string if there are none. And list any bars you couldn't read with confidence (part and bar number, counting this line's bars from 1, the upbeat column included).`;
+With each row of notes, give the words printed under it, before the next part's row of notes; an empty string if there are none (on many sheets only the top part has words). On a sheet set in a table, a part's words are under its notes in every box: give them in order along the line. Write the words as syllables separated by spaces, with a hyphen after a syllable that runs on into the next (\`peo- ple\` is written \`peo-ple\`). Copy the words as written, in whatever language; the names of the notes (doh, re, mi) are never words. And list any bars you couldn't read with confidence (part and bar number, counting this line's bars from 1, the upbeat column included).`;
 
 export const LINE_SCHEMA = {
   type: 'object',
@@ -115,12 +115,11 @@ export const LINE_SCHEMA = {
       type: 'array',
       items: {
         type: 'object',
-        properties: { part: { type: 'string' }, notes: { type: 'string' } },
-        required: ['part', 'notes'],
+        properties: { part: { type: 'string' }, notes: { type: 'string' }, words: { type: 'string' } },
+        required: ['part', 'notes', 'words'],
         additionalProperties: false,
       },
     },
-    words: { type: 'string' },
     doubts: {
       type: 'array',
       items: {
@@ -131,7 +130,7 @@ export const LINE_SCHEMA = {
       },
     },
   },
-  required: ['rows', 'words', 'doubts'],
+  required: ['rows', 'doubts'],
   additionalProperties: false,
 };
 
@@ -140,7 +139,7 @@ export const CHECK_SYSTEM = `${LINE_SYSTEM}
 A small model has already read this line; its reading comes with the picture. It is usually close, but check it bar by bar against the picture and correct every mistake: wrong or missing notes, octave marks, holds, rests, beat marks and bar lines. Keep what it got right exactly as it is. List the bars you corrected or still can't read with confidence as doubts.`;
 
 export interface LineReading {
-  /** The line in SolfaScores' format: one row per part, the words under the first. */
+  /** The line in SolfaScores' format: one row per part, each with the words under it, if any. */
   text: string;
   /** Bars the reader wasn't sure of, to check first. */
   doubts: { part: string; bar: number }[];
@@ -173,15 +172,16 @@ export function cleanPage(raw: { title?: string; composer?: string; key?: string
 }
 
 /** The reading as SolfaScores text: "S  d :r |", with the words under the first row. */
-export function lineText(raw: { rows?: { part?: string; notes?: string }[]; words?: string }, parts: string[]): string {
+export function lineText(raw: { rows?: { part?: string; notes?: string; words?: string }[]; words?: string }, parts: string[]): string {
   const out: string[] = [];
   (raw.rows ?? []).forEach((row, i) => {
     const part = partOf(row.part ?? '') ?? parts[i] ?? `P${i + 1}`;
     let notes = (row.notes ?? '').replace(/\s+/g, ' ').trim().replace(/^\|\s*/, '');
     if (notes && !notes.endsWith('|')) notes += ' |';
     out.push(`${part.padEnd(2)} ${notes}`);
-    const words = (raw.words ?? '').replace(/\s+/g, ' ').trim();
-    if (i === 0 && words) out.push(`W  ${words}`);
+    // Each part's own words (Claude), or one row of words for the line under the first part (Cloudflare's reader).
+    const words = (row.words ?? (i === 0 ? raw.words : '') ?? '').replace(/\s+/g, ' ').trim();
+    if (words) out.push(`W  ${words}`);
   });
   return out.join('\n');
 }
@@ -397,7 +397,7 @@ export async function readLine(env: Env, image: ArrayBuffer, type: ImageType, op
   ]
     .filter(Boolean)
     .join(' ');
-  const raw = (await ask(env, STRONG, LINE_SYSTEM, LINE_SCHEMA, image, type, prompt)) as { rows?: { part?: string; notes?: string }[]; words?: string; doubts?: { part?: string; bar?: number }[] };
+  const raw = (await ask(env, STRONG, LINE_SYSTEM, LINE_SCHEMA, image, type, prompt)) as { rows?: { part?: string; notes?: string; words?: string }[]; words?: string; doubts?: { part?: string; bar?: number }[] };
   return shapeReading(raw, opts.parts);
 }
 
@@ -412,11 +412,11 @@ export async function checkLine(env: Env, image: ArrayBuffer, type: ImageType, o
   ]
     .filter(Boolean)
     .join(' ');
-  const raw = (await ask(env, CHEAP, CHECK_SYSTEM, LINE_SCHEMA, image, type, prompt)) as { rows?: { part?: string; notes?: string }[]; words?: string; doubts?: { part?: string; bar?: number }[] };
+  const raw = (await ask(env, CHEAP, CHECK_SYSTEM, LINE_SCHEMA, image, type, prompt)) as { rows?: { part?: string; notes?: string; words?: string }[]; words?: string; doubts?: { part?: string; bar?: number }[] };
   return shapeReading(raw, opts.parts);
 }
 
-function shapeReading(raw: { rows?: { part?: string; notes?: string }[]; words?: string; doubts?: { part?: string; bar?: number }[] }, parts: string[]): LineReading {
+function shapeReading(raw: { rows?: { part?: string; notes?: string; words?: string }[]; words?: string; doubts?: { part?: string; bar?: number }[] }, parts: string[]): LineReading {
   return {
     text: lineText(raw, parts),
     doubts: (raw.doubts ?? [])

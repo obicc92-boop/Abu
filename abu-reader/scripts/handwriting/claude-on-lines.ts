@@ -3,7 +3,7 @@
 // app does: it adds up and keeps every part, and Haiku's changed a fifth of the reading or less. Lines come from
 // a scan in the web app (each line's picture as the app cuts it, and its rows). Uses the trial key in
 // abu-api/.dev.vars.trial, never printed, and reports what each answer cost.
-// Usage (from abu-app): npx tsx --tsconfig tsconfig.json ../abu-reader/scripts/handwriting/claude-on-lines.ts <lines.json> <out.json> [time] [key]
+// OPUS_ONLY=1 skips Haiku. Usage (from abu-app): npx tsx --tsconfig tsconfig.json ../abu-reader/scripts/handwriting/claude-on-lines.ts <lines.json> <out.json> [time] [key]
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -52,7 +52,8 @@ async function main() {
       console.log(`line ${l.line}: ${parts.join(' ')}; ${head}\n${draft}`);
       continue;
     }
-    const check = await ask(MODELS.cheap, CHECK_SYSTEM, l.image, `${head} A small model read the line as:\n${draft}`);
+    // OPUS_ONLY=1 leaves Haiku out, as the app does for a handwritten sheet.
+    const check = process.env.OPUS_ONLY ? { raw: { rows: [] }, cost: 0 } : await ask(MODELS.cheap, CHECK_SYSTEM, l.image, `${head} A small model read the line as:\n${draft}`);
     const checked = lineText(check.raw, parts);
     const read = await ask(MODELS.strong, LINE_SYSTEM, l.image, head);
     const fresh = lineText(read.raw, parts);

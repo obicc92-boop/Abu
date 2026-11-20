@@ -185,30 +185,33 @@ describe('reading with Claude', () => {
     expect(request.messages[0].content[0].source).toMatchObject({ type: 'base64', media_type: 'image/jpeg' });
   });
 
-  it('reads a line into SolfaScores text with the words under the first row', async () => {
-    claudeReplies({
+  it('reads a line into SolfaScores text with each part’s words under it', async () => {
+    const fetch = claudeReplies({
       rows: [
-        { part: 'S', notes: 's1 | d :-.r /m :d | f :m /r :-' },
-        { part: 'A', notes: '| s1 | d :t1 /d :d | d :d /t1 :- |' },
+        { part: 'S', notes: 's1 | d :-.r /m :d | f :m /r :-', words: 'O come let  us a-dore him' },
+        { part: 'A', notes: '| s1 | d :t1 /d :d | d :d /t1 :- |', words: '' },
+        { part: 'T', notes: 'm | m :s /s :m | l :s /s :- |', words: 'Ke-re-si-me-sie' },
       ],
-      words: 'O come let  us a-dore him',
       doubts: [{ part: 'A', bar: 2 }, { part: 'X', bar: 1 }],
     });
-    const line = await readLine(withKey, JPEG.buffer, 'image/jpeg', { parts: ['S', 'A'], time: '4/4', key: 'Ab' });
+    const line = await readLine(withKey, JPEG.buffer, 'image/jpeg', { parts: ['S', 'A', 'T'], time: '4/4', key: 'Ab' });
     expect(line).toEqual({
-      text: 'S  s1 | d :-.r /m :d | f :m /r :- |\nW  O come let us a-dore him\nA  s1 | d :t1 /d :d | d :d /t1 :- |',
+      text: 'S  s1 | d :-.r /m :d | f :m /r :- |\nW  O come let us a-dore him\nA  s1 | d :t1 /d :d | d :d /t1 :- |\nT  m | m :s /s :m | l :s /s :- |\nW  Ke-re-si-me-sie',
       doubts: [{ part: 'A', bar: 2 }],
     });
+    // Asked for each part's words.
+    const request = JSON.parse(String(fetch.mock.calls[0][1]?.body));
+    expect(request.output_config.format.schema.properties.rows.items.required).toEqual(['part', 'notes', 'words']);
   });
 
   it('reads a line from scratch with the strong reader', async () => {
-    const fetch = claudeReplies({ rows: [{ part: 'S', notes: 'd :r' }], words: '', doubts: [] });
+    const fetch = claudeReplies({ rows: [{ part: 'S', notes: 'd :r', words: '' }], doubts: [] });
     await readLine(withKey, JPEG.buffer, 'image/jpeg', { parts: ['S'] });
     expect(JSON.parse(String(fetch.mock.calls[0][1]?.body)).model).toBe('claude-opus-5-5');
   });
 
   it('has Haiku check the reading SolfaScores’ own model made, with the picture', async () => {
-    const fetch = claudeReplies({ rows: [{ part: 'S', notes: "d :r /m :f | s :- /- :- |" }], words: 'Glo-ry to God', doubts: [{ part: 'S', bar: 1 }] });
+    const fetch = claudeReplies({ rows: [{ part: 'S', notes: "d :r /m :f | s :- /- :- |", words: 'Glo-ry to God' }], doubts: [{ part: 'S', bar: 1 }] });
     const line = await checkLine(withKey, JPEG.buffer, 'image/jpeg', { parts: ['S'], time: '4/4', draft: 'S  d :r /m :f | s :- /- :- |' });
     expect(line).toEqual({ text: 'S  d :r /m :f | s :- /- :- |\nW  Glo-ry to God', doubts: [{ part: 'S', bar: 1 }] });
     const request = JSON.parse(String(fetch.mock.calls[0][1]?.body));

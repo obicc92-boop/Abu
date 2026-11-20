@@ -102,6 +102,15 @@ export function wordsOf(text: string): LineWords[] {
   return out;
 }
 
+/**
+ * The words to keep with an answer: the answer's own under each part it gave words for, and `mine` (the
+ * app's) under the others. Opus reads handwritten words far better than Cloudflare's reader.
+ */
+export function wordsPreferring(answer: string, mine: LineWords[]): LineWords[] {
+  const theirs = wordsOf(answer);
+  return [...theirs, ...mine.filter((w) => w.text.trim() && !theirs.some((t) => t.after === w.after))].sort((a, b) => a.after - b.after);
+}
+
 /** The character columns where a row's notes are written, left to right (not its holds or rests). */
 export function noteColumns(text: string): number[] {
   const out: number[] = [];
@@ -140,7 +149,7 @@ export function namesNotWords(words: string): boolean {
     .toLowerCase()
     .split(/[\s\-–,.;:!?'"()]+/)
     .filter(Boolean);
-  return pieces.length >= 3 && pieces.every((p) => /^(doh?|re|ray|mi|me|fah?|soh?|sol|lah?|ti|te|si|do')$/.test(p));
+  return pieces.length >= 3 && pieces.every((p) => /^(d[oa]+h?|re|ray|mi|me|fa+h?|so+h?|sol|la+h?|ti|te|si)$/.test(p));
 }
 
 /**

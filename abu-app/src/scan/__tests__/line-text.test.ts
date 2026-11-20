@@ -24,6 +24,7 @@ import {
   withSpacedBeats,
   withWords,
   wordsOf,
+  wordsPreferring,
   wordsUnderNotes,
 } from '../line-text';
 import { parseSolfa } from '@/solfa';
@@ -363,9 +364,28 @@ describe('words under their notes', () => {
 describe('note names read as words', () => {
   it('spots a row of sol-fa names, not a row of words', () => {
     expect(namesNotWords('fa - mi - fa - mi - re - doh')).toBe(true);
-    expect(namesNotWords('doo - sol - mi - fa - sol - la')).toBe(false);
+    expect(namesNotWords('doo - sol - mi - fa - sol - la - sol - fa - mi - doo -')).toBe(true);
     expect(namesNotWords('Ke-re-si-me-sie lu te go')).toBe(false);
     expect(namesNotWords('Do re mi')).toBe(true);
     expect(namesNotWords('la la')).toBe(false);
+  });
+});
+
+describe('whose words to keep', () => {
+  it('keeps an answer’s words under each part it gave them for, and the app’s under the others', () => {
+    const answer = ['S  d :r |', 'W  Ke-re-si-me', 'A  m :f |', 'T  s :l |', 'W  Le kwa-nu'].join('\n');
+    const mine = [
+      { after: 0, text: 'Fare-91-me' },
+      { after: 1, text: 'Ve-re Sy me' },
+      { after: 2, text: 'Le Kwenue' },
+    ];
+    expect(wordsPreferring(answer, mine)).toEqual([
+      { after: 0, text: 'Ke-re-si-me' },
+      { after: 1, text: 'Ve-re Sy me' },
+      { after: 2, text: 'Le kwa-nu' },
+    ]);
+    expect(withWords(answer, wordsPreferring(answer, mine))).toBe(
+      ['S  d :r |', 'W  Ke-re-si-me', 'A  m :f |', 'W  Ve-re Sy me', 'T  s :l |', 'W  Le kwa-nu'].join('\n'),
+    );
   });
 });
