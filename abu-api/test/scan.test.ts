@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ensureUser } from '../src/domain/groups';
 import { scanAllowance, useScan } from '../src/domain/scan';
-import { checkLine, cleanPage, fixLine, keyOf, lineText, readHeading, readLine, readPage, readWords, rowsAnswer, timeOf } from '../src/scan';
+import { checkLine, cleanPage, fixLine, keyOf, lineText, readHeading, readLine, readLineWords, readPage, readWords, rowsAnswer, timeOf } from '../src/scan';
 import { call, signUp } from './helpers';
 
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
@@ -217,6 +217,27 @@ describe('reading with Claude', () => {
     const request = JSON.parse(String(fetch.mock.calls[0][1]?.body));
     expect(request.model).toBe('claude-haiku-5-5');
     expect(request.messages[0].content[1].text).toContain('A small model read the line as:\nS  d :r /m :f');
+  });
+
+  it('has Opus copy a line’s words, each part’s, given its notes, at low effort', async () => {
+    const fetch = claudeReplies({
+      rows: [
+        { part: 'S', words: 'E  Ke-re-si-me-si Lu te go' },
+        { part: 'Alto', words: '' },
+        { part: 'T', words: 'Le kwa-nu' },
+      ],
+    });
+    const got = await readLineWords(withKey, JPEG.buffer, 'image/jpeg', { parts: ['S', 'A', 'T', 'B'], notes: 'S  m :- |\nA  d :- |\nT  s :- |\nB  d :- |' });
+    expect(got).toEqual({
+      words: [
+        { after: 0, text: 'E Ke-re-si-me-si Lu te go' },
+        { after: 2, text: 'Le kwa-nu' },
+      ],
+    });
+    const request = JSON.parse(String(fetch.mock.calls[0][1]?.body));
+    expect(request.model).toBe('claude-opus-5-5');
+    expect(request.output_config.effort).toBe('low');
+    expect(request.messages[0].content[1].text).toContain("The line's notes as read:\nS  m :- |");
   });
 
   it('says plainly when a picture can’t be read', async () => {

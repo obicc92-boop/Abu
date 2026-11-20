@@ -73,7 +73,7 @@ import {
 } from './domain/songs';
 import { newId } from './domain/access';
 import { scanAllowance, useScan } from './domain/scan';
-import { checkImage, checkLine, cloudflareReady, fixLine, partOf, readHeading, readLine, readPage, readWords, scanningReady, scanReaders } from './scan';
+import { checkImage, checkLine, cloudflareReady, fixLine, partOf, readHeading, readLine, readLineWords, readPage, readWords, scanningReady, scanReaders } from './scan';
 import { AppError, badRequest, notFound } from './errors';
 
 type App = { Bindings: Env; Variables: { userId: string } };
@@ -283,6 +283,19 @@ app.post('/scan/line', signedIn, async (c) => {
   const type = checkImage(contentType(c), image.byteLength);
   await useScan(c.env.DB, c.get('userId'), 'line');
   return c.json(await readLine(c.env, image, type, { parts, ...opts }));
+});
+
+/** A line's words, each part's, given its notes as read (?notes=), with the line's picture as the body (Opus). */
+app.post('/scan/line-words', signedIn, async (c) => {
+  scanningReady(c.env);
+  const parts = lineParts(c);
+  const notes = (c.req.query('notes') ?? '').slice(0, 4000);
+  if (!notes.trim()) throw badRequest('Send the line’s notes.');
+  checkImage(contentType(c), Number(c.req.header('content-length') ?? 1) || 1);
+  const image = await c.req.arrayBuffer();
+  const type = checkImage(contentType(c), image.byteLength);
+  await useScan(c.env.DB, c.get('userId'), 'line');
+  return c.json(await readLineWords(c.env, image, type, { parts, notes }));
 });
 
 /** Checks a line SolfaScores' own model read (?draft=, the reading as text), with the line's picture as the body. */

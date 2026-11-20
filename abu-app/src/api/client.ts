@@ -359,6 +359,11 @@ export const api = {
   },
   /** Cloudflare's reader reads a row of words (a JPEG of the row). */
   scanWords: (image: Blob) => request<{ words: string }>('/scan/words', { method: 'POST', body: image, headers: { 'Content-Type': 'image/jpeg' } }),
+  /** Opus copies a line's words (a JPEG), each part's, given its notes as read: `after` is the part's place. */
+  scanLineWords: (image: Blob, o: { parts: string[]; notes: string }) => {
+    const q = new URLSearchParams({ parts: o.parts.join(','), notes: o.notes });
+    return request<{ words: { after: number; text: string }[] }>(`/scan/line-words?${q}`, { method: 'POST', body: image, headers: { 'Content-Type': 'image/jpeg' } });
+  },
   /** The sheet's title, composer, key and time, from a picture of the top of its first page (Cloudflare's reader); "" where none was found. */
   scanHeading: (image: Blob) =>
     request<{ title: string; composer: string; key: string; time: string }>('/scan/heading', { method: 'POST', body: image, headers: { 'Content-Type': 'image/jpeg' } }),

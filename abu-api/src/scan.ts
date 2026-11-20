@@ -138,6 +138,27 @@ export const CHECK_SYSTEM = `${LINE_SYSTEM}
 
 A small model has already read this line; its reading comes with the picture. It is usually close, but check it bar by bar against the picture and correct every mistake: wrong or missing notes, octave marks, holds, rests, beat marks and bar lines. Keep what it got right exactly as it is. List the bars you corrected or still can't read with confidence as doubts.`;
 
+export const WORDS_LINE_SYSTEM = `You copy the words (lyrics) of one line of music from a picture of a tonic sol-fa choir sheet (typed or handwritten). The line's notes have been read already and come with the picture, one row per part, top to bottom; the words are printed under the parts' rows of notes.
+
+For each part, in the order given, give the words printed under its row of notes, before the next part's row of notes; an empty string if there are none (on many sheets only the top part has words). On a sheet set in a table, a part's words are under its notes in every box: give them in order along the line. Write the words as syllables separated by spaces, with a hyphen after a syllable that runs on into the next (\`peo- ple\` is written \`peo-ple\`). Copy the words exactly as written, in whatever language, with their punctuation; never translate or correct them. The names of the notes (doh, re, mi) and the sol-fa itself are never words.`;
+
+export const WORDS_LINE_SCHEMA = {
+  type: 'object',
+  properties: {
+    rows: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: { part: { type: 'string' }, words: { type: 'string' } },
+        required: ['part', 'words'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['rows'],
+  additionalProperties: false,
+};
+
 export interface LineReading {
   /** The line in SolfaScores' format: one row per part, each with the words under it, if any. */
   text: string;
@@ -329,7 +350,7 @@ function base64(buf: ArrayBuffer): string {
   return btoa(s);
 }
 
-async function ask(env: Env, model: string, system: string, schema: Record<string, unknown>, image: ArrayBuffer, type: ImageType, prompt: string): Promise<unknown> {
+async function ask(env: Env, model: string, system: string, schema: Record<string, unknown>, image: ArrayBuffer, type: ImageType, prompt: string, effort: 'low' | 'medium' = 'medium'): Promise<unknown> {
   if (!env.ANTHROPIC_API_KEY) throw new AppError(503, 'Claude isn’t switched on for scanning.');
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, baseURL: env.ANTHROPIC_BASE_URL || undefined, maxRetries: 2 });
   let message;
@@ -339,7 +360,7 @@ async function ask(env: Env, model: string, system: string, schema: Record<strin
       // Room for its thinking as well as the answer: a reply cut short isn't valid JSON.
       max_tokens: 16000,
       system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
-      output_config: { effort: 'medium', format: { type: 'json_schema', schema } },
+      output_config: { effort, format: { type: 'json_schema', schema } },
       messages: [
         {
           role: 'user',
@@ -399,6 +420,23 @@ export async function readLine(env: Env, image: ArrayBuffer, type: ImageType, op
     .join(' ');
   const raw = (await ask(env, STRONG, LINE_SYSTEM, LINE_SCHEMA, image, type, prompt)) as { rows?: { part?: string; notes?: string; words?: string }[]; words?: string; doubts?: { part?: string; bar?: number }[] };
   return shapeReading(raw, opts.parts);
+}
+
+/**
+ * A line's words, each part's (Opus, at low effort: copying words needs little thought), given its notes as
+ * read. For a handwritten sheet's lines that add up without Opus: Cloudflare's reader reads handwritten words
+ * poorly (owner's call, 20 November 2026). `after` is the part's place in `parts` (0 for the first).
+ */
+export async function readLineWords(env: Env, image: ArrayBuffer, type: ImageType, opts: { parts: string[]; notes: string }): Promise<{ words: { after: number; text: string }[] }> {
+  const prompt = `Parts, top to bottom: ${opts.parts.join(', ')}. The line's notes as read:\n${opts.notes}`;
+  const raw = (await ask(env, STRONG, WORDS_LINE_SYSTEM, WORDS_LINE_SCHEMA, image, type, prompt, 'low')) as { rows?: { part?: string; words?: string }[] };
+  const words: { after: number; text: string }[] = [];
+  (raw.rows ?? []).forEach((row, i) => {
+    const at = opts.parts.indexOf(partOf(row.part ?? '') ?? '');
+    const text = (row.words ?? '').replace(/\s+/g, ' ').trim();
+    if (text) words.push({ after: at >= 0 ? at : Math.min(i, opts.parts.length - 1), text });
+  });
+  return { words };
 }
 
 /** Checks the reading SolfaScores' own model made of a line against its picture (Haiku), fixing what it got wrong. */

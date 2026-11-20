@@ -103,11 +103,10 @@ export function wordsOf(text: string): LineWords[] {
 }
 
 /**
- * The words to keep with an answer: the answer's own under each part it gave words for, and `mine` (the
- * app's) under the others. Opus reads handwritten words far better than Cloudflare's reader.
+ * The words to keep: `theirs` (Opus's) under each part it gave words for, and `mine` (the app's) under the
+ * others. Opus reads handwritten words far better than Cloudflare's reader.
  */
-export function wordsPreferring(answer: string, mine: LineWords[]): LineWords[] {
-  const theirs = wordsOf(answer);
+export function wordsPreferring(theirs: LineWords[], mine: LineWords[]): LineWords[] {
   return [...theirs, ...mine.filter((w) => w.text.trim() && !theirs.some((t) => t.after === w.after))].sort((a, b) => a.after - b.after);
 }
 

@@ -3,12 +3,12 @@
 // app does: it adds up and keeps every part, and Haiku's changed a fifth of the reading or less. Lines come from
 // a scan in the web app (each line's picture as the app cuts it, and its rows). Uses the trial key in
 // abu-api/.dev.vars.trial, never printed, and reports what each answer cost.
-// OPUS_ONLY=1 skips Haiku. Usage (from abu-app): npx tsx --tsconfig tsconfig.json ../abu-reader/scripts/handwriting/claude-on-lines.ts <lines.json> <out.json> [time] [key]
+// OPUS_ONLY=1 skips Haiku; WORDS=1 has Opus copy the words of the lines that add up instead. Usage (from abu-app): npx tsx --tsconfig tsconfig.json ../abu-reader/scripts/handwriting/claude-on-lines.ts <lines.json> <out.json> [time] [key]
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Anthropic from '../../../abu-api/node_modules/@anthropic-ai/sdk/index.mjs';
-import { CHECK_SYSTEM, LINE_SCHEMA, LINE_SYSTEM, lineText } from '../../../abu-api/src/scan';
+import { CHECK_SYSTEM, LINE_SCHEMA, LINE_SYSTEM, lineText, WORDS_LINE_SCHEMA, WORDS_LINE_SYSTEM } from '../../../abu-api/src/scan';
 import { changedShare, keepsParts, splitLine } from '../../../abu-app/src/scan/line-text';
 import { parseSolfa } from '../../../abu-app/src/solfa';
 
@@ -21,13 +21,13 @@ const key = readFileSync(join(HERE, '../../../abu-api/.dev.vars.trial'), 'utf8')
 if (!key) throw new Error('No trial key in abu-api/.dev.vars.trial');
 const client = new Anthropic({ apiKey: key, maxRetries: 2 });
 
-async function ask(model: string, system: string, image: string, prompt: string) {
+async function ask(model: string, system: string, image: string, prompt: string, schema: object = LINE_SCHEMA, effort = 'medium') {
   // As the app asks (abu-api/src/scan.ts `ask`).
   const message = await client.messages.create({
     model,
     max_tokens: 16000,
     system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
-    output_config: { effort: 'medium', format: { type: 'json_schema', schema: LINE_SCHEMA } },
+    output_config: { effort, format: { type: 'json_schema', schema } },
     messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: image } }, { type: 'text', text: prompt }] }],
   } as never);
   const u = (message as { usage: { input_tokens: number; output_tokens: number; cache_creation_input_tokens?: number; cache_read_input_tokens?: number } }).usage;
@@ -44,6 +44,22 @@ async function main() {
   const beats = time.split('/')[0];
   const results = [];
   let total = 0;
+  if (process.env.WORDS) {
+    // WORDS=1: the lines that add up, their words copied by Opus given their notes (abu-api `readLineWords`).
+    for (const l of lines.filter((x) => x.ok && x.image)) {
+      const parts = l.rows.map((r) => r.split(/\s+/)[0]).filter((p) => p !== 'W');
+      const notes = l.rows.filter((r) => !r.startsWith('W')).join('\n');
+      const got = await ask(MODELS.strong, WORDS_LINE_SYSTEM, l.image, `Parts, top to bottom: ${parts.join(', ')}. The line's notes as read:\n${notes}`, WORDS_LINE_SCHEMA, 'low');
+      total += got.cost;
+      const before = l.rows.filter((r) => r.startsWith('W')).map((r) => r.slice(3));
+      const after = ((got.raw as { rows?: { part: string; words: string }[] }).rows ?? []).map((r) => `${r.part}: ${r.words}`);
+      results.push({ line: l.line, before, after, cost: got.cost });
+      console.log(`line ${l.line} (${(got.cost * 100).toFixed(2)}¢)\n  Cloudflare: ${before.join(' / ')}\n  Opus:       ${after.join(' / ')}`);
+    }
+    writeFileSync(out, JSON.stringify(results, null, 1));
+    console.log(`${results.length} lines, US$${total.toFixed(3)} in all`);
+    return;
+  }
   for (const l of lines.filter((x) => !x.ok && x.image)) {
     const draft = l.rows.join('\n');
     const parts = l.rows.map((r) => r.split(/\s+/)[0]).filter((p) => p !== 'W');

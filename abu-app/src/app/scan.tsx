@@ -212,6 +212,22 @@ function Scanner() {
    * (`keepsParts`). Otherwise the line keeps
    * the app's own reading for the person to fix. Throws only when today's allowance is used up.
    */
+  /**
+   * A handwritten sheet's line that adds up without Opus, with Opus's copy of its words (given its notes as
+   * read): Cloudflare's reader reads handwritten words poorly (owner's call, 20 November 2026). The app's words
+   * stay under a part Opus gave none for, and all of them if it can't be asked.
+   */
+  const withOpusWords = async (line: Line, text: string, ai: Readers): Promise<string> => {
+    if (!line.handwritten || !ai.anthropic) return text;
+    try {
+      const notes = joinLine(splitLine(text).filter((r) => r.part));
+      const { words } = await api.scanLineWords(line.blob, { parts: line.parts, notes });
+      return words.length ? withWords(text, wordsPreferring(words, wordsOf(text))) : text;
+    } catch {
+      return text;
+    }
+  };
+
   const readOne = async (line: Line, head: Heading, songTime: string, ai: Readers, again = false): Promise<string> => {
     const passes = (t: string) => splitLine(t).some((r) => r.part && r.text.trim()) && !parseSolfa(t, { time: songTime }).errors.length;
     let own = withWords(line.draft, line.wordTexts);
@@ -223,8 +239,9 @@ function Scanner() {
     // fails for something else (only bar lines move): the person and the AIs then start from bars in step.
     if (!passes(own)) own = withBarsInStep(own, beats) ?? own;
     if (!again && passes(own)) {
-      update(line.id, { status: 'read', text: own, checked: false });
-      return own;
+      const text = await withOpusWords(line, own, ai);
+      update(line.id, { status: 'read', text, checked: false });
+      return text;
     }
     update(line.id, { status: 'reading', error: undefined });
     const semitone = parseKey(head.key)?.semitone;
@@ -235,12 +252,14 @@ function Scanner() {
     if (ai.anthropic && draft.trim() && !line.handwritten) tries.push(['haiku', () => api.scanCheck(line.blob, { ...opts, draft })]);
     if (ai.anthropic) tries.push(['strong', () => api.scanLine(line.blob, opts)]);
     let problem = '';
+    let opusWords: LineWords[] = [];
     for (const [via, ask] of tries) {
       try {
         const r = await ask();
         // Opus reads handwritten words far better than Cloudflare's reader: its words are kept, and the app's only
         // under a part it gave none for (owner's call, 20 November 2026). A correction keeps the app's words.
-        let text = withWords(r.text, via === 'strong' ? wordsPreferring(r.text, line.wordTexts) : line.wordTexts);
+        if (via === 'strong') opusWords = wordsOf(r.text);
+        let text = withWords(r.text, via === 'strong' ? wordsPreferring(opusWords, line.wordTexts) : line.wordTexts);
         // An answer that only lacks what the free repairs mend (a part's rest through an upbeat left out) is mended
         // as the app's own readings are: Opus read a boxed sheet's first line right but for the tenor's empty upbeat.
         if (!passes(text)) text = bestFree([text], passes, beats);
@@ -249,6 +268,8 @@ function Scanner() {
         // handwriting the ones that rewrote more were mostly wrong though they added up; Opus reads it afresh.
         const corrected = via === 'cloudflare' || via === 'haiku';
         if (passes(text) && keepsParts(text, draft) && !(corrected && changedShare(text, draft) > 0.2)) {
+          // (Not when the person asked again: the words may be theirs.)
+          if (corrected && !again) text = await withOpusWords(line, text, ai);
           update(line.id, { status: 'read', text, doubts: r.doubts, checked: false, via });
           return text;
         }
@@ -260,8 +281,10 @@ function Scanner() {
         problem = (e as Error).message;
       }
     }
-    // Nothing better: the line keeps the app's own reading, for the person to fix.
-    const text = again ? draft : own;
+    // Nothing better: the line keeps the app's own reading, for the person to fix, with Opus's words if it read
+    // the line (its notes weren't kept, but its words are still the best read).
+    const mine = again ? draft : own;
+    const text = opusWords.length ? withWords(mine, wordsPreferring(opusWords, wordsOf(mine))) : mine;
     update(line.id, {
       status: text.trim() ? 'read' : 'failed',
       text,

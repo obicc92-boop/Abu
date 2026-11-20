@@ -379,12 +379,12 @@ describe('whose words to keep', () => {
       { after: 1, text: 'Ve-re Sy me' },
       { after: 2, text: 'Le Kwenue' },
     ];
-    expect(wordsPreferring(answer, mine)).toEqual([
+    expect(wordsPreferring(wordsOf(answer), mine)).toEqual([
       { after: 0, text: 'Ke-re-si-me' },
       { after: 1, text: 'Ve-re Sy me' },
       { after: 2, text: 'Le kwa-nu' },
     ]);
-    expect(withWords(answer, wordsPreferring(answer, mine))).toBe(
+    expect(withWords(answer, wordsPreferring(wordsOf(answer), mine))).toBe(
       ['S  d :r |', 'W  Ke-re-si-me', 'A  m :f |', 'W  Ve-re Sy me', 'T  s :l |', 'W  Le kwa-nu'].join('\n'),
     );
   });
