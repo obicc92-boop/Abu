@@ -2,9 +2,9 @@
  * The sol-fa keypad: every symbol of the notation a tap away, in place of the phone's keyboard, which keeps
  * the octave mark out of easy reach (owner's request, 20 November 2026). It sends keys (lib/solfa-keys.ts) to
  * the field being edited, which keeps its cursor: a key is pressed without taking the focus from the field.
- * Used to fix a scanned line and to write a song (`parts`: keys for the parts' names and a new line).
+ * The sharps and flats have a row of their own under the notes. Used to fix a scanned line and to write a song (`parts`: keys for the parts' names and a new line).
  */
-import { useRef, useState, type ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
 import { Pressable, Text, View, type GestureResponderEvent } from 'react-native';
 
 import { type Key } from '@/lib/solfa-keys';
@@ -14,8 +14,12 @@ import { fonts } from '@/theme/tokens';
 import { MAX_WIDTH } from './ui';
 
 const NOTES = ['d', 'r', 'm', 'f', 's', 'l', 't'];
-/** Sharpened going up, flattened going down (docs/solfa-format.md). */
-const CHROMATIC = ['de', 're', 'fe', 'se', 'le', 'ta', 'ma', 'ra'];
+/**
+ * Sharpened (raised) and flattened (lowered) notes, as docs/solfa-format.md lists them: always on show, under
+ * the notes (owner's request, 20 November 2026; they were behind a ♯♭ key before).
+ */
+const RAISED = ['de', 're', 'fe', 'se', 'le'];
+const LOWERED = ['ra', 'ma', 'lo', 'ta'];
 /** Marks, with what each is called under it. */
 const MARKS: { insert: string; label: string; caption: string }[] = [
   { insert: "'", label: "'", caption: 'high' },
@@ -42,7 +46,6 @@ const keepFocus = (e: GestureResponderEvent) => (e as unknown as { preventDefaul
 
 export function SolfaKeypad({ onKey, onDone, onKeyboard, parts = false }: { onKey(key: Key): void; onDone(): void; onKeyboard?(): void; parts?: boolean }) {
   const styles = useStyles();
-  const [chromatic, setChromatic] = useState(false);
   const insert = (text: string) => onKey({ insert: text });
   return (
     <View style={styles.pad} accessibilityLabel="Sol-fa keypad">
@@ -55,8 +58,17 @@ export function SolfaKeypad({ onKey, onDone, onKeyboard, parts = false }: { onKe
         </View>
       ) : null}
       <View style={styles.row}>
-        {(chromatic ? CHROMATIC : NOTES).map((n) => (
+        {NOTES.map((n) => (
           <KeyButton key={n} label={n} onPress={() => insert(n)} note />
+        ))}
+      </View>
+      <View style={styles.row}>
+        {RAISED.map((n) => (
+          <KeyButton key={n} label={n} caption="♯" onPress={() => insert(n)} accessibilityLabel={`${n}, sharp`} note narrow />
+        ))}
+        <View style={styles.split} />
+        {LOWERED.map((n) => (
+          <KeyButton key={n} label={n} caption="♭" onPress={() => insert(n)} accessibilityLabel={`${n}, flat`} note narrow />
         ))}
       </View>
       <View style={styles.row}>
@@ -73,7 +85,6 @@ export function SolfaKeypad({ onKey, onDone, onKeyboard, parts = false }: { onKe
       <View style={styles.row}>
         <KeyButton label="◀" onPress={() => onKey('left')} accessibilityLabel="Cursor left" />
         <KeyButton label="▶" onPress={() => onKey('right')} accessibilityLabel="Cursor right" />
-        <KeyButton label={chromatic ? 'drm' : '♯♭'} caption={chromatic ? 'notes' : 'sharp, flat'} onPress={() => setChromatic(!chromatic)} on={chromatic} />
         {onKeyboard ? <KeyButton label="ABC" caption="keyboard" onPress={onKeyboard} /> : null}
         <KeyButton label="Done" onPress={onDone} done />
       </View>
@@ -86,23 +97,24 @@ function KeyButton({
   caption,
   onPress,
   note,
+  narrow,
   small,
   done,
-  on,
   accessibilityLabel,
 }: {
   label: ReactNode;
   caption?: string;
   onPress(): void;
   note?: boolean;
+  /** A key in the row of nine sharps and flats. */
+  narrow?: boolean;
   small?: boolean;
   done?: boolean;
-  on?: boolean;
   accessibilityLabel?: string;
 }) {
   const styles = useStyles();
   const colors = useColors();
-  const color = done ? colors.onRed : on ? colors.onInk : undefined;
+  const color = done ? colors.onRed : undefined;
   const touched = useRef(false);
   return (
     <Pressable
@@ -118,37 +130,43 @@ function KeyButton({
       focusable={false}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? (caption ? `${String(label)} ${caption}` : String(label))}
-      style={({ pressed }) => [styles.key, note && styles.noteKey, small && styles.smallKey, done && styles.doneKey, on && styles.onKey, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.key, note && styles.noteKey, narrow && styles.narrowKey, small && styles.smallKey, done && styles.doneKey, pressed && styles.pressed]}
     >
-      <Text style={[styles.label, note && styles.noteLabel, done && styles.doneLabel, color ? { color } : null]}>{label}</Text>
-      {caption ? <Text style={[styles.caption, color ? { color } : null]}>{caption}</Text> : null}
+      <Text style={[styles.label, note && styles.noteLabel, narrow && styles.narrowLabel, done && styles.doneLabel, color ? { color } : null]}>{label}</Text>
+      {caption ? <Text style={[styles.caption, narrow && styles.narrowCaption, color ? { color } : null]}>{caption}</Text> : null}
     </Pressable>
   );
 }
 
 const useStyles = makeStyles((colors) => ({
-  pad: { gap: 6, paddingHorizontal: 8, paddingTop: 8, paddingBottom: 10, width: '100%', maxWidth: MAX_WIDTH, alignSelf: 'center' },
-  row: { flexDirection: 'row', gap: 6 },
+  // Smaller keys since the sharps and flats got a row of their own (owner's request, 20 November 2026): about
+  // as tall as before, with one row more.
+  pad: { gap: 5, paddingHorizontal: 6, paddingTop: 6, paddingBottom: 8, width: '100%', maxWidth: MAX_WIDTH, alignSelf: 'center' },
+  row: { flexDirection: 'row', gap: 5 },
   key: {
     flex: 1,
-    minHeight: 46,
-    borderRadius: 10,
+    minHeight: 40,
+    borderRadius: 9,
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.line,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 4,
+    paddingVertical: 3,
     // No text selection or the browser's tap highlight on a key.
     ...({ userSelect: 'none', WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' } as object),
   },
-  noteKey: { minHeight: 50, backgroundColor: colors.board },
-  smallKey: { minHeight: 40 },
+  noteKey: { minHeight: 44, backgroundColor: colors.board, borderColor: colors.board },
+  narrowKey: { minHeight: 40, paddingVertical: 2 },
+  smallKey: { minHeight: 34 },
   doneKey: { flex: 1.4, backgroundColor: colors.red, borderColor: colors.red },
-  onKey: { backgroundColor: colors.ink, borderColor: colors.ink },
   pressed: { opacity: 0.6 },
-  label: { fontFamily: fonts.mono, fontSize: 19, lineHeight: 22, color: colors.ink },
-  noteLabel: { fontSize: 22, lineHeight: 26 },
-  doneLabel: { fontFamily: fonts.heavy, fontSize: 16 },
-  caption: { fontFamily: fonts.body, fontSize: 10.5, lineHeight: 13, color: colors.muted },
+  /** The gap between the sharps and the flats. */
+  split: { width: 4 },
+  label: { fontFamily: fonts.mono, fontSize: 17, lineHeight: 20, color: colors.ink },
+  noteLabel: { fontSize: 21, lineHeight: 24 },
+  narrowLabel: { fontSize: 16, lineHeight: 18 },
+  doneLabel: { fontFamily: fonts.heavy, fontSize: 15 },
+  caption: { fontFamily: fonts.body, fontSize: 10, lineHeight: 12, color: colors.muted },
+  narrowCaption: { fontSize: 11, lineHeight: 12 },
 }));
