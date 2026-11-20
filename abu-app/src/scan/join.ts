@@ -129,7 +129,7 @@ function moveUpbeat(prev: Row[], next: Row[], beats: number): [Row[], Row[]] | n
 /**
  * Where each line of a scanned sheet is in key (owner's request, 20 November 2026): `from`, the key it comes in
  * with; `start`, the key it starts in (its own new key, if it has one: printed with it, read by the AI or set by
- * the person); and `change`, the key's name where the song's text needs a \`key:\` line before it. That's at a
+ * the person); and `change`, the key's name where the song's text needs a key line before it. That's at a
  * line's own new key, or at the first kept line after lines left out that changed key (with their bridge notes or
  * their own key). Keys are semitones above C; `doh` is the song's.
  */
@@ -155,7 +155,7 @@ export function linesKeys(lines: { text: string; key?: string; left?: boolean }[
 
 /**
  * The lines as one song text, a blank line between lines of music, upbeats moved back. `keys`, the key each line
- * changes to at its start, if it does (`linesKeys`), goes on a \`key:\` line before it.
+ * changes to at its start, if it does (`linesKeys`), goes on a line before it as sheets print it: \`Doh is F\`.
  */
 export function joinLines(lines: string[], time: string, keys: (string | undefined)[] = []): string {
   const beats = parseTime(time)?.pulses ?? guessBeats(lines) ?? 4;
@@ -171,7 +171,7 @@ export function joinLines(lines: string[], time: string, keys: (string | undefin
         .filter((r) => !r.part || barsOf(r.body).length)
         .map((r) => (r.part ? row(r.part, barsOf(r.body)) : `W  ${r.body}`))
         .join('\n');
-      return text && keys[i] ? `key: ${keys[i]}\n${text}` : text;
+      return text && keys[i] ? `Doh is ${keys[i]}\n${text}` : text;
     })
     .filter(Boolean)
     .join('\n\n');

@@ -14,8 +14,6 @@ export interface Selection {
 export type Key =
   /** Writes text at the cursor, in place of any text chosen. */
   | { insert: string }
-  /** A key change: a \`key:\` line before the lines of music the cursor is in (see `withKeyChange`). */
-  | { keyChange: string }
   /** Deletes the text chosen, or the character before the cursor (with the space the keypad put by a mark). */
   | 'erase'
   | 'left'
@@ -26,7 +24,6 @@ const SPACED = new Set([':', '/', '|']);
 
 /** What `key` does to `text` with the cursor at `sel`. */
 export function applyKey(text: string, sel: Selection, key: Key): { text: string; sel: Selection } {
-  if (typeof key === 'object' && 'keyChange' in key) return withKeyChange(text, sel, key.keyChange);
   const start = Math.max(0, Math.min(sel.start, sel.end, text.length));
   const end = Math.min(text.length, Math.max(sel.start, sel.end));
   if (key === 'left') {
@@ -62,31 +59,36 @@ const NOT_MUSIC = /^\s*(?:$|\[|(?:title|composer|arranger|lyricist|key|time|temp
 const KEY_LINE = /^\s*(?:key\s*:|doh\s+is\b)/i;
 
 /**
- * A key change written into a song (owner's request, 20 November 2026): \`key: F\` on a line of its own before
+ * Where a key change written at the cursor goes (owner's request, 20 November 2026): on a line of its own before
  * the lines of music the cursor is in (the block of parts' lines, up to a blank line, a section's name or a
- * heading line), so the change comes at the start of their first bar, for every part. A \`key:\` line already
- * there is changed instead. On a blank line, it goes before the lines below. The cursor stays where it was.
+ * heading line), so it starts at their first bar, for every part. On a blank line, before the lines below it.
+ * `at` is where; `existing`, a key line already just above them, which is changed instead.
  */
-function withKeyChange(text: string, sel: Selection, name: string): { text: string; sel: Selection } {
-  const line = `key: ${name}`;
-  const cursor = Math.max(0, Math.min(sel.start, text.length));
+export function keyChangePlace(text: string, cursor: number): { at: number; existing?: { from: number; length: number } } {
   const lineStart = (at: number) => text.lastIndexOf('\n', at - 1) + 1;
   const lineAt = (from: number) => text.slice(from, text.indexOf('\n', from) < 0 ? text.length : text.indexOf('\n', from));
-  let at = lineStart(cursor);
+  let at = lineStart(Math.max(0, Math.min(cursor, text.length)));
   if (!lineAt(at).trim()) {
-    // On a blank line: before the lines of music below it, if there are any.
     const next = text.indexOf('\n', at);
-    if (next >= 0) at = next + 1;
-  } else {
-    // Up to the first of the block's lines of music.
-    while (at > 0 && !NOT_MUSIC.test(lineAt(lineStart(at - 1)))) at = lineStart(at - 1);
-    // A key line just above it is changed.
-    const above = at > 0 ? lineStart(at - 1) : -1;
-    if (above >= 0 && KEY_LINE.test(lineAt(above))) {
-      const old = lineAt(above);
-      const moved = line.length - old.length;
-      return { text: text.slice(0, above) + line + text.slice(above + old.length), sel: { start: sel.start + moved, end: sel.end + moved } };
-    }
+    return { at: next >= 0 ? next + 1 : at };
+  }
+  // Up to the first of the block's lines of music.
+  while (at > 0 && !NOT_MUSIC.test(lineAt(lineStart(at - 1)))) at = lineStart(at - 1);
+  const above = at > 0 ? lineStart(at - 1) : -1;
+  return above >= 0 && KEY_LINE.test(lineAt(above)) ? { at, existing: { from: above, length: lineAt(above).length } } : { at };
+}
+
+/**
+ * A key change written into a song: \`Doh is F\`, as sheets print it, where `keyChangePlace` says (a key line
+ * already there is changed). The cursor stays where it was in the music.
+ */
+export function withKeyChange(text: string, sel: Selection, name: string): { text: string; sel: Selection } {
+  const line = `Doh is ${name}`;
+  const cursor = Math.max(0, Math.min(sel.start, text.length));
+  const { at, existing } = keyChangePlace(text, cursor);
+  if (existing) {
+    const moved = line.length - existing.length;
+    return { text: text.slice(0, existing.from) + line + text.slice(existing.from + existing.length), sel: { start: sel.start + moved, end: sel.end + moved } };
   }
   const insert = `${line}\n`;
   const moved = at <= cursor ? insert.length : 0;

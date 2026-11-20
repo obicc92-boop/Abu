@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 
-import { applyKey, lowMarksShown, lowMarksTyped, songLowMarksShown, songLowMarksTyped, type Key, type Selection } from '../solfa-keys';
+import { applyKey, keyChangePlace, lowMarksShown, lowMarksTyped, songLowMarksShown, songLowMarksTyped, withKeyChange, type Key, type Selection } from '../solfa-keys';
 
 /** Types the keys in turn from an empty row (or `from`, cursor at its end), and gives the text. */
 function type(keys: Key[], from = ''): { text: string; sel: Selection } {
@@ -68,24 +68,26 @@ describe('a key change while writing a song', () => {
   const song = 'S  d :r |\nA  m :f |\n\nS  s :l |\nA  d :r |';
   const at = (text: string, find: string) => ({ start: text.indexOf(find), end: text.indexOf(find) });
 
-  it('goes before the lines of music the cursor is in, and the cursor stays put', () => {
-    const first = applyKey(song, at(song, 'm :f'), { keyChange: 'G' });
-    expect(first.text).toBe('key: G\nS  d :r |\nA  m :f |\n\nS  s :l |\nA  d :r |');
-    const second = applyKey(song, at(song, 'A  d :r'), { keyChange: 'G' });
-    expect(second.text).toBe('S  d :r |\nA  m :f |\n\nkey: G\nS  s :l |\nA  d :r |');
+  it('goes before the lines of music the cursor is in, as sheets print it, and the cursor stays put', () => {
+    expect(withKeyChange(song, at(song, 'm :f'), 'G').text).toBe('Doh is G\nS  d :r |\nA  m :f |\n\nS  s :l |\nA  d :r |');
+    const second = withKeyChange(song, at(song, 'A  d :r'), 'G');
+    expect(second.text).toBe('S  d :r |\nA  m :f |\n\nDoh is G\nS  s :l |\nA  d :r |');
     expect(second.text.slice(second.sel.start, second.sel.start + 7)).toBe('A  d :r');
+    expect(keyChangePlace(song, song.indexOf('A  d :r')).at).toBe(song.indexOf('S  s :l'));
   });
 
   it('changes a key line already there, and goes after a section’s name', () => {
-    const withKey = 'S  d :r |\n\nkey: G\nS  s :l |';
-    expect(applyKey(withKey, at(withKey, 's :l'), { keyChange: 'A' }).text).toBe('S  d :r |\n\nkey: A\nS  s :l |');
+    const withKey = 'S  d :r |\n\nDoh is G\nS  s :l |';
+    expect(withKeyChange(withKey, at(withKey, 's :l'), 'A').text).toBe('S  d :r |\n\nDoh is A\nS  s :l |');
+    const old = 'S  d :r |\n\nkey: G\nS  s :l |';
+    expect(withKeyChange(old, at(old, 's :l'), 'A').text).toBe('S  d :r |\n\nDoh is A\nS  s :l |');
     const chorus = 'S  d :r |\n[Chorus]\nS  s :l |';
-    expect(applyKey(chorus, at(chorus, 's :l'), { keyChange: 'F' }).text).toBe('S  d :r |\n[Chorus]\nkey: F\nS  s :l |');
+    expect(withKeyChange(chorus, at(chorus, 's :l'), 'F').text).toBe('S  d :r |\n[Chorus]\nDoh is F\nS  s :l |');
   });
 
   it('on a blank line, goes before the lines below it', () => {
-    const got = applyKey(song, { start: song.indexOf('\n\n') + 1, end: song.indexOf('\n\n') + 1 }, { keyChange: 'E♭' });
-    expect(got.text).toBe('S  d :r |\nA  m :f |\n\nkey: E♭\nS  s :l |\nA  d :r |');
+    const got = withKeyChange(song, { start: song.indexOf('\n\n') + 1, end: song.indexOf('\n\n') + 1 }, 'E♭');
+    expect(got.text).toBe('S  d :r |\nA  m :f |\n\nDoh is E♭\nS  s :l |\nA  d :r |');
   });
 
   it('writes a bridge note with no spaces round its =', () => {

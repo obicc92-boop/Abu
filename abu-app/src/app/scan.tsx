@@ -38,7 +38,7 @@ import { api, ApiError, type PickedFile, type ScanLineReading } from '@/api/clie
 import { useSongPlayer } from '@/audio/use-song-player';
 import { AgainIcon, CameraIcon, CheckIcon, CloseIcon, FileIcon, PlusIcon, ScanIcon, ZoomIcon } from '@/components/icons';
 import { PlayButton } from '@/components/player-controls';
-import { SolfaKeypad } from '@/components/solfa-keypad';
+import { keysJustTouched, PhoneKeyboardBar, SolfaKeypad } from '@/components/solfa-keypad';
 import { Body, Button, Card, Chip, ErrorText, Kicker, MAX_WIDTH, Page, TopBar } from '@/components/ui';
 import { barNumbers, checkRows } from '@/scan/bar-check';
 import { setScanDraft } from '@/scan/draft';
@@ -898,6 +898,8 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
   const [keyboard, setKeyboard] = useState(false);
   const editingRow = editing && editing.id === line.id ? editing.row : -1;
   const keypad = editingRow >= 0 && !!rows[editingRow]?.part && !keyboard;
+  // A row of notes being typed with the phone's keyboard: a bar over it, to come back to the keypad.
+  const keyboardBar = editingRow >= 0 && !!rows[editingRow]?.part && keyboard;
   const pressKey = (key: Key) => {
     if (!editing || editingRow < 0) return;
     const next = applyKey(editing.value, sel, key);
@@ -914,10 +916,10 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
     setEditing(null);
     setKeyboard(false);
   };
-  const useKeyboard = () => {
-    // The phone's keyboard comes up as the field is focused again.
+  /** The phone's keyboard in place of the keypad, or back: it comes up, or goes, as the row is focused again. */
+  const switchKeys = (phone: boolean) => {
     const field = inputs.current[editingRow];
-    setKeyboard(true);
+    setKeyboard(phone);
     field?.blur();
     setTimeout(() => field?.focus(), 50);
   };
@@ -1165,10 +1167,9 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
                         // 20 November 2026); the text keeps t1.
                         value={r.part ? lowMarksShown(valueOf(i)) : valueOf(i)}
                         onFocus={() => {
-                          if (editingRow !== i) {
-                            setEditing({ id: line.id, row: i, value: shown[i] });
-                            setKeyboard(false);
-                          }
+                          if (editingRow === i) return;
+                          setEditing({ id: line.id, row: i, value: shown[i] });
+                          setKeyboard(false);
                           // In sight above the keypad, once it's up.
                           if (r.part) setTimeout(() => (inputs.current[i] as unknown as { scrollIntoView?: (o: object) => void } | null)?.scrollIntoView?.({ block: 'center', behavior: 'smooth' }), 150);
                         }}
@@ -1180,9 +1181,13 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
                         }}
                         onSelectionChange={(e) => setSel(e.nativeEvent.selection)}
                         onBlur={() => {
-                          // The row is left unless it has the focus again straight away (the switch to the phone's
-                          // keyboard, or a key that took the focus for a moment).
-                          setTimeout(() => !inputs.current[i]?.isFocused() && setEditing((e) => (e && e.row === i ? null : e)), 120);
+                          // The row is left unless it has the focus again straight away (switching keyboards), or
+                          // the keys were just touched (the focus goes back to it).
+                          setTimeout(() => {
+                            if (inputs.current[i]?.isFocused()) return;
+                            if (keysJustTouched()) inputs.current[i]?.focus();
+                            else setEditing((e) => (e && e.row === i ? null : e));
+                          }, 120);
                         }}
                         inputMode={withKeys ? 'none' : 'text'}
                         showSoftInputOnFocus={!withKeys}
@@ -1282,7 +1287,7 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
           </View>
           {pickingKey ? (
             <View style={[styles.pad, { paddingTop: 0, gap: 8 }]}>
-              <Text style={styles.small}>Where the sheet changes key at the start of this line, pick the new key. A change inside the line is a bridge note in each part: old name = new name, like s=d.</Text>
+              <Text style={styles.small}>Does the sheet change key where this line starts? Tap the new doh.</Text>
               <View style={styles.wrap}>
                 {KEY_NAMES.map((k) => (
                   <Chip
@@ -1310,9 +1315,11 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
         </Card>
       </ScrollView>
 
-      <View style={[styles.footer, keypad && styles.footerSolid]}>
+      <View style={[styles.footer, (keypad || keyboardBar) && styles.footerSolid]}>
         {keypad ? (
-          <SolfaKeypad onKey={pressKey} onDone={leaveRow} onKeyboard={useKeyboard} />
+          <SolfaKeypad bridge onKey={pressKey} onDone={leaveRow} onKeyboard={() => switchKeys(true)} />
+        ) : keyboardBar ? (
+          <PhoneKeyboardBar onSolfaKeys={() => switchKeys(false)} onDone={leaveRow} />
         ) : (
           <View style={styles.footerInner}>
             <Button kind="ghost" label="Back" onPress={() => go(current - 1)} disabled={current === 0} style={{ minWidth: 92 }} />

@@ -2,11 +2,13 @@
  * The sol-fa keypad: every symbol of the notation a tap away, in place of the phone's keyboard, which keeps
  * the octave mark out of easy reach (owner's request, 20 November 2026). It sends keys (lib/solfa-keys.ts) to
  * the field being edited, which keeps its cursor: a key is pressed without taking the focus from the field.
- * The sharps and flats have a row of their own under the notes; "=" writes a bridge note (s=d), and in a song,
- * "Key" a key change before the lines of music the cursor is in. Used to fix a scanned line and to write a song (`parts`: keys for the parts' names and a new line).
+ * The sharps and flats have a row of their own under the notes. Used to fix a scanned line (`bridge`: an "="
+ * key for the bridge notes sheets print) and to write a song (`parts`: keys for the parts' names and a new line;
+ * `keyChange`: a key to change key). While the phone's keyboard is in use instead, `PhoneKeyboardBar` sits over
+ * it, to come back.
  */
-import { useRef, useState, type ReactNode } from 'react';
-import { Pressable, Text, View, type GestureResponderEvent } from 'react-native';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Pressable, Text, View, type ViewInstance } from 'react-native';
 
 import { type Key } from '@/lib/solfa-keys';
 import { KEY_NAMES } from '@/solfa';
@@ -35,93 +37,161 @@ const BEATS: { insert: string; label: string; caption: string }[] = [
   { insert: ':', label: ':', caption: 'beat' },
   { insert: '/', label: '/', caption: 'half bar' },
   { insert: '|', label: '|', caption: 'bar line' },
-  // A bridge note, where the key changes inside a line: the old name, =, the new (s=d).
-  { insert: '=', label: '=', caption: 'bridge' },
   { insert: ' ', label: '␣', caption: 'space' },
 ];
+/** A bridge note as sheets print it, where the key changes inside a line: the old name, =, the new (s=d). */
+const BRIDGE = { insert: '=', label: '=', caption: 'bridge' };
 const PARTS = ['S', 'A', 'T', 'B', 'W'];
 
-/**
- * Pressing a key mustn't take the focus from the field (in a browser, a tap moves it): the field keeps its
- * cursor. So a key acts as it's touched, as a phone's keyboard does, and the touch goes no further (which in a
- * browser also stops the tap that would follow). A screen reader's tap, with no touch first, still works.
- */
-const keepFocus = (e: GestureResponderEvent) => (e as unknown as { preventDefault?: () => void }).preventDefault?.();
+/** When the keys were last touched: a field's blur just then isn't the person leaving it (unless it was Done). */
+let lastTouch = 0;
+export const keysJustTouched = () => Date.now() - lastTouch < 700;
+/** Done: the person is leaving the field, so its blur isn't undone. */
+const leaving = (onDone: () => void) => () => {
+  lastTouch = 0;
+  onDone();
+};
 
-export function SolfaKeypad({ onKey, onDone, onKeyboard, parts = false }: { onKey(key: Key): void; onDone(): void; onKeyboard?(): void; parts?: boolean }) {
+/**
+ * Touching the keys mustn't take the focus from the field being edited, or the field closes and the keys go
+ * with it (as they did on the owner's phone after every key, 20 November 2026). A tap moves the focus as the
+ * touch ends; the touch is cancelled on the keys themselves so it doesn't. (Cancelling it in a key's own
+ * handler did nothing on a phone: the browser treats those touch handlers as ones that can't cancel.) The keys
+ * act as they're touched, as a phone's keyboard does.
+ */
+function useHoldFocus() {
+  const ref = useRef<ViewInstance>(null);
+  useEffect(() => {
+    const node = ref.current as unknown as { addEventListener?: HTMLElement['addEventListener']; removeEventListener?: HTMLElement['removeEventListener'] } | null;
+    if (!node?.addEventListener || !node.removeEventListener) return;
+    const hold = (e: Event) => {
+      lastTouch = Date.now();
+      if (e.cancelable) e.preventDefault();
+    };
+    node.addEventListener('touchstart', hold, { passive: false });
+    node.addEventListener('mousedown', hold);
+    return () => {
+      node.removeEventListener?.('touchstart', hold);
+      node.removeEventListener?.('mousedown', hold);
+    };
+  }, []);
+  return ref;
+}
+
+/** Where a key change being written would start: the bar (null at the song's start) and the key there. */
+export interface KeyPlace {
+  bar: number | null;
+  doh: string;
+}
+
+export function SolfaKeypad({
+  onKey,
+  onDone,
+  onKeyboard,
+  parts = false,
+  bridge = false,
+  keyChange,
+}: {
+  onKey(key: Key): void;
+  onDone(): void;
+  onKeyboard?(): void;
+  parts?: boolean;
+  bridge?: boolean;
+  /** Writing a song: "Key" picks a new key for the lines of music the cursor is in (`where` says which bar). */
+  keyChange?: { where(): KeyPlace; pick(name: string): void };
+}) {
   const styles = useStyles();
+  const hold = useHoldFocus();
   const insert = (text: string) => onKey({ insert: text });
-  // Writing a song: "Key" picks a new key, written before the lines of music the cursor is in.
-  const [pickingKey, setPickingKey] = useState(false);
-  if (pickingKey) {
-    return (
-      <View style={styles.pad} accessibilityLabel="Sol-fa keypad">
-        <Text style={styles.heading}>Change key from these lines of music: doh is</Text>
-        {[KEY_NAMES.slice(0, 6), KEY_NAMES.slice(6)].map((row, r) => (
-          <View key={r} style={styles.row}>
-            {row.map((k) => (
-              <KeyButton
-                key={k}
-                label={k}
-                accessibilityLabel={`Doh is ${k}`}
-                onPress={() => {
-                  onKey({ keyChange: k });
-                  setPickingKey(false);
-                }}
-                note
-              />
+  const [place, setPlace] = useState<KeyPlace | null>(null);
+  const beats = bridge ? [...BEATS.slice(0, 3), BRIDGE, BEATS[3]] : BEATS;
+  return (
+    <View ref={hold} style={styles.pad} accessibilityLabel="Sol-fa keypad">
+      {place && keyChange ? (
+        // Picking a new key: plainly where it starts, and doh there now.
+        <>
+          <Text style={styles.heading}>{place.bar ? `New key from bar ${place.bar}` : 'The song’s key'}</Text>
+          <Text style={styles.hint}>Doh is now {place.doh}. Tap the new doh:</Text>
+          {[KEY_NAMES.slice(0, 6), KEY_NAMES.slice(6)].map((row, r) => (
+            <View key={r} style={styles.row}>
+              {row.map((k) => (
+                <KeyButton
+                  key={k}
+                  label={k}
+                  accessibilityLabel={`Doh is ${k}`}
+                  onPress={() => {
+                    keyChange.pick(k);
+                    setPlace(null);
+                  }}
+                  note
+                  on={k === place.doh}
+                />
+              ))}
+            </View>
+          ))}
+          <View style={styles.row}>
+            <KeyButton label="Cancel" onPress={() => setPlace(null)} word />
+          </View>
+        </>
+      ) : (
+        <>
+          {parts ? (
+            <View style={styles.row}>
+              {PARTS.map((p) => (
+                <KeyButton key={p} label={p} caption={p === 'W' ? 'words' : 'part'} onPress={() => insert(`${p}  `)} small />
+              ))}
+              <KeyButton label="↵" caption="new line" onPress={() => insert('\n')} small />
+              {keyChange ? <KeyButton label="Key" caption="change" onPress={() => setPlace(keyChange.where())} accessibilityLabel="Change key" small /> : null}
+            </View>
+          ) : null}
+          <View style={styles.row}>
+            {NOTES.map((n) => (
+              <KeyButton key={n} label={n} onPress={() => insert(n)} note />
             ))}
           </View>
-        ))}
-        <Text style={styles.hint}>For a change inside a line, write a bridge note in each part instead: the old name, =, the new one (s=d).</Text>
-        <View style={styles.row}>
-          <KeyButton label="Cancel" onPress={() => setPickingKey(false)} word />
-        </View>
-      </View>
-    );
-  }
+          <View style={styles.row}>
+            {RAISED.map((n) => (
+              <KeyButton key={n} label={n} caption="♯" onPress={() => insert(n)} accessibilityLabel={`${n}, sharp`} note narrow />
+            ))}
+            <View style={styles.split} />
+            {LOWERED.map((n) => (
+              <KeyButton key={n} label={n} caption="♭" onPress={() => insert(n)} accessibilityLabel={`${n}, flat`} note narrow />
+            ))}
+          </View>
+          <View style={styles.row}>
+            {MARKS.map((m) => (
+              <KeyButton key={m.caption} label={m.label} caption={m.caption} onPress={() => insert(m.insert)} />
+            ))}
+          </View>
+          <View style={styles.row}>
+            {beats.map((b) => (
+              <KeyButton key={b.caption} label={b.label} caption={b.caption} onPress={() => insert(b.insert)} />
+            ))}
+            <KeyButton label="⌫" caption="delete" onPress={() => onKey('erase')} accessibilityLabel="Delete" />
+          </View>
+          <View style={styles.row}>
+            <KeyButton label="◀" onPress={() => onKey('left')} accessibilityLabel="Cursor left" />
+            <KeyButton label="▶" onPress={() => onKey('right')} accessibilityLabel="Cursor right" />
+            {onKeyboard ? <KeyButton label="ABC" caption="keyboard" onPress={onKeyboard} /> : null}
+            <KeyButton label="Done" onPress={leaving(onDone)} done />
+          </View>
+        </>
+      )}
+    </View>
+  );
+}
+
+/**
+ * Over the phone's keyboard while it's in use for a row of notes (for words, say): the way back to the sol-fa
+ * keys, and Done (owner's request, 20 November 2026: there was no way back).
+ */
+export function PhoneKeyboardBar({ onSolfaKeys, onDone }: { onSolfaKeys(): void; onDone(): void }) {
+  const styles = useStyles();
+  const hold = useHoldFocus();
   return (
-    <View style={styles.pad} accessibilityLabel="Sol-fa keypad">
-      {parts ? (
-        <View style={styles.row}>
-          {PARTS.map((p) => (
-            <KeyButton key={p} label={p} caption={p === 'W' ? 'words' : 'part'} onPress={() => insert(`${p}  `)} small />
-          ))}
-          <KeyButton label="↵" caption="new line" onPress={() => insert('\n')} small />
-          <KeyButton label="Key" caption="change" onPress={() => setPickingKey(true)} accessibilityLabel="Key change" small />
-        </View>
-      ) : null}
-      <View style={styles.row}>
-        {NOTES.map((n) => (
-          <KeyButton key={n} label={n} onPress={() => insert(n)} note />
-        ))}
-      </View>
-      <View style={styles.row}>
-        {RAISED.map((n) => (
-          <KeyButton key={n} label={n} caption="♯" onPress={() => insert(n)} accessibilityLabel={`${n}, sharp`} note narrow />
-        ))}
-        <View style={styles.split} />
-        {LOWERED.map((n) => (
-          <KeyButton key={n} label={n} caption="♭" onPress={() => insert(n)} accessibilityLabel={`${n}, flat`} note narrow />
-        ))}
-      </View>
-      <View style={styles.row}>
-        {MARKS.map((m) => (
-          <KeyButton key={m.caption} label={m.label} caption={m.caption} onPress={() => insert(m.insert)} />
-        ))}
-      </View>
-      <View style={styles.row}>
-        {BEATS.map((b) => (
-          <KeyButton key={b.caption} label={b.label} caption={b.caption} onPress={() => insert(b.insert)} />
-        ))}
-        <KeyButton label="⌫" caption="delete" onPress={() => onKey('erase')} accessibilityLabel="Delete" />
-      </View>
-      <View style={styles.row}>
-        <KeyButton label="◀" onPress={() => onKey('left')} accessibilityLabel="Cursor left" />
-        <KeyButton label="▶" onPress={() => onKey('right')} accessibilityLabel="Cursor right" />
-        {onKeyboard ? <KeyButton label="ABC" caption="keyboard" onPress={onKeyboard} /> : null}
-        <KeyButton label="Done" onPress={onDone} done />
-      </View>
+    <View ref={hold} style={[styles.pad, styles.row]} accessibilityLabel="Keyboard choice">
+      <KeyButton label="♪ Sol-fa keys" onPress={onSolfaKeys} word />
+      <KeyButton label="Done" onPress={leaving(onDone)} done />
     </View>
   );
 }
@@ -135,6 +205,7 @@ function KeyButton({
   small,
   done,
   word,
+  on,
   accessibilityLabel,
 }: {
   label: ReactNode;
@@ -147,16 +218,17 @@ function KeyButton({
   done?: boolean;
   /** A word, not a symbol: set in the app's own type. */
   word?: boolean;
+  /** The one chosen now. */
+  on?: boolean;
   accessibilityLabel?: string;
 }) {
   const styles = useStyles();
   const colors = useColors();
-  const color = done ? colors.onRed : undefined;
+  const color = done ? colors.onRed : on ? colors.onInk : undefined;
   const touched = useRef(false);
   return (
     <Pressable
-      onPressIn={(e) => {
-        keepFocus(e);
+      onPressIn={() => {
         touched.current = true;
         onPress();
       }}
@@ -167,7 +239,7 @@ function KeyButton({
       focusable={false}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? (caption ? `${String(label)} ${caption}` : String(label))}
-      style={({ pressed }) => [styles.key, note && styles.noteKey, narrow && styles.narrowKey, small && styles.smallKey, done && styles.doneKey, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.key, note && styles.noteKey, narrow && styles.narrowKey, small && styles.smallKey, done && styles.doneKey, on && styles.onKey, pressed && styles.pressed]}
     >
       <Text style={[styles.label, note && styles.noteLabel, narrow && styles.narrowLabel, (done || word) && styles.doneLabel, color ? { color } : null]}>{label}</Text>
       {caption ? <Text style={[styles.caption, narrow && styles.narrowCaption, color ? { color } : null]}>{caption}</Text> : null}
@@ -197,6 +269,7 @@ const useStyles = makeStyles((colors) => ({
   narrowKey: { minHeight: 40, paddingVertical: 2 },
   smallKey: { minHeight: 34 },
   doneKey: { flex: 1.4, backgroundColor: colors.red, borderColor: colors.red },
+  onKey: { backgroundColor: colors.ink, borderColor: colors.ink },
   pressed: { opacity: 0.6 },
   /** The gap between the sharps and the flats. */
   split: { width: 4 },

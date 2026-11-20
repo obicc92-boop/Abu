@@ -83,6 +83,6 @@ describe('key changes in a scanned sheet', () => {
   });
 
   it('puts a key line before a line that changes key', () => {
-    expect(joinLines(['S  d :r |', 'S  m :f |'], '2/4', [undefined, 'F'])).toBe('S  d :r |\n\nkey: F\nS  m :f |');
+    expect(joinLines(['S  d :r |', 'S  m :f |'], '2/4', [undefined, 'F'])).toBe('S  d :r |\n\nDoh is F\nS  m :f |');
   });
 });

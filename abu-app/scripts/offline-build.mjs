@@ -25,6 +25,13 @@ if (fonts.length && !html.includes('rel="preload"')) {
 }
 console.log(`Preloading ${fonts.length} fonts.`);
 
+// On a phone, the page is made smaller while the phone's keyboard is up (rather than the keyboard covering it), so
+// what sits at the bottom of a screen, like the bar to come back to the sol-fa keys, stays in sight above it.
+const page = readFileSync('dist/index.html', 'utf8');
+if (!page.includes('interactive-widget')) {
+  writeFileSync('dist/index.html', page.replace(/(<meta name="viewport" content="[^"]*)"/, '$1, interactive-widget=resizes-content"'));
+}
+
 const { count, size, warnings } = await generateSW({
   globDirectory: 'dist',
   globPatterns: ['**/*.{html,js,css,json,png,ico,svg,ttf,otf,woff,woff2}'],

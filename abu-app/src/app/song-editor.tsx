@@ -15,9 +15,9 @@ import { useSongPlayer } from '@/audio/use-song-player';
 import { PlayButton } from '@/components/player-controls';
 import { Score } from '@/components/score';
 import { SolfaCheck } from '@/components/solfa-check';
-import { SolfaKeypad } from '@/components/solfa-keypad';
+import { keysJustTouched, PhoneKeyboardBar, SolfaKeypad, type KeyPlace } from '@/components/solfa-keypad';
 import { keepCursor, placeCursor } from '@/lib/field-cursor';
-import { applyKey, songLowMarksShown, songLowMarksTyped, type Key, type Selection } from '@/lib/solfa-keys';
+import { applyKey, keyChangePlace, songLowMarksShown, songLowMarksTyped, withKeyChange, type Key, type Selection } from '@/lib/solfa-keys';
 import { Body, Button, Card, Chip, ErrorText, Field, Kicker, Loading, Page, TopBar } from '@/components/ui';
 import { TAG_GROUPS } from '@/lib/tags';
 import { clearScanDraft, scanDraft, type ScanDraft } from '@/scan/draft';
@@ -69,23 +69,49 @@ function Editor({ song, draft }: { song?: Song; draft: ScanDraft | null }) {
   const [tags, setTags] = useState<string[]>(song?.tags ?? []);
   const [solfa, setSolfa] = useState(song?.solfa ?? draft?.solfa ?? '');
   // The sol-fa is written with the sol-fa keypad (every symbol a tap away, parts' names and new lines too);
-  // "ABC" swaps in the phone's keyboard, for the words, until the field is left.
+  // "ABC" swaps in the phone's keyboard, for the words, with a bar over it to come back.
   const field = useRef<TextInputInstance | null>(null);
   const [writing, setWriting] = useState(false);
   const [keyboard, setKeyboard] = useState(false);
   const [sel, setSel] = useState<Selection>({ start: 0, end: 0 });
-  const pressKey = (key: Key) => {
-    const next = applyKey(solfa, sel, key);
+  /** The text as a key left it, with the cursor where the key put it. */
+  const write = (next: { text: string; sel: Selection }) => {
     setSolfa(next.text);
     setSel(next.sel);
     const f = field.current;
     if (f && !f.isFocused()) f.focus();
     requestAnimationFrame(() => placeCursor(f, next.sel));
   };
-  const useKeyboard = () => {
-    setKeyboard(true);
+  const pressKey = (key: Key) => write(applyKey(solfa, sel, key));
+  /** The phone's keyboard in place of the keypad, or back: the field is focused again to bring it up or put it away. */
+  const switchKeys = (phone: boolean) => {
+    setKeyboard(phone);
     field.current?.blur();
     setTimeout(() => field.current?.focus(), 50);
+  };
+  const stopWriting = () => {
+    field.current?.blur();
+    setWriting(false);
+    setKeyboard(false);
+  };
+  // A key change (owner's request, 20 November 2026, made simpler the same evening): "Key" says plainly where it
+  // starts, the first bar of the lines of music the cursor is in, and the key there now; at the song's start
+  // it's the song's own key.
+  const keyChange = {
+    where: (): KeyPlace => {
+      const before = parseSolfa(solfa.slice(0, keyChangePlace(solfa, sel.start).at), { time, key: doh });
+      const bars = Math.max(0, ...Object.values(before.events).flatMap((events) => events.map((e) => e.bar)));
+      const now = before.keyChanges.at(-1)?.key ?? before.meta.key;
+      return { bar: bars ? bars + 1 : null, doh: now?.name ?? KEY_NAMES[doh] };
+    },
+    pick: (name: string) => {
+      const { bar } = keyChange.where();
+      const place = keyChangePlace(solfa, sel.start);
+      if (bar) return write(withKeyChange(solfa, sel, name));
+      // The song's key: a key line already at the top is changed too, so the two agree.
+      setDoh(Math.max(0, KEY_NAMES.indexOf(name as (typeof KEY_NAMES)[number])));
+      if (place.existing) write(withKeyChange(solfa, sel, name));
+    },
   };
   const withKeys = writing && !keyboard;
   const [from, setFrom] = useState<string | null>(defaultFrom);
@@ -156,15 +182,9 @@ function Editor({ song, draft }: { song?: Song; draft: ScanDraft | null }) {
     <Page
       footer={
         withKeys ? (
-          <SolfaKeypad
-            parts
-            onKey={pressKey}
-            onKeyboard={useKeyboard}
-            onDone={() => {
-              field.current?.blur();
-              setWriting(false);
-            }}
-          />
+          <SolfaKeypad parts keyChange={keyChange} onKey={pressKey} onKeyboard={() => switchKeys(true)} onDone={stopWriting} />
+        ) : writing && keyboard ? (
+          <PhoneKeyboardBar onSolfaKeys={() => switchKeys(false)} onDone={stopWriting} />
         ) : undefined
       }
     >
@@ -220,18 +240,19 @@ function Editor({ song, draft }: { song?: Song; draft: ScanDraft | null }) {
           }}
           onSelectionChange={(e) => setSel(e.nativeEvent.selection)}
           onFocus={() => {
-            if (!writing) setKeyboard(false);
+            if (writing) return;
+            setKeyboard(false);
             setWriting(true);
             // In sight above the keypad, once it's up.
             setTimeout(() => (field.current as unknown as { scrollIntoView?: (o: object) => void } | null)?.scrollIntoView?.({ block: 'center', behavior: 'smooth' }), 150);
           }}
           onBlur={() => {
-            // Left, unless it has the focus again straight away (the switch to the phone's keyboard).
+            // Left, unless it has the focus again straight away (switching keyboards), or the keys were just
+            // touched (the focus goes back to it).
             setTimeout(() => {
-              if (!field.current?.isFocused()) {
-                setWriting(false);
-                setKeyboard(false);
-              }
+              if (field.current?.isFocused()) return;
+              if (keysJustTouched()) field.current?.focus();
+              else stopWriting();
             }, 120);
           }}
           inputMode={withKeys ? 'none' : 'text'}
@@ -348,7 +369,7 @@ function Help({ onExample }: { onExample: () => void }) {
     '- holds a note on; an empty beat or x is a rest.',
     'd\' is the high doh and t1 the low ti (d¹ and t₁ work too).',
     '[Verse] or [Chorus] on its own line starts a section.',
-    'Key change: the Key key on the keypad writes key: D before the lines of music you’re in. Inside a line, write the bridge note in each part, old name = new name (s=d), with the = key.',
+    'Key change: tap Key on the keypad and pick the new doh. It starts at the first bar of the lines you’re in, and shows as “Doh is F”. (Bridge notes as printed, s=d, work too.)',
     'Write tenor as on the sheet; SolfaScores plays it an octave lower.',
   ];
   return (
