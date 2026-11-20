@@ -13,8 +13,10 @@
  *      box by box (scan/boxes.ts), its words in pieces put side by side;
  *    - a line that passes SolfaScores' checker is kept as read. Only a line that
  *      fails goes to an AI: Cloudflare's reader, then Claude if the Worker
- *      has a key (Haiku checks, Opus reads from scratch), and an AI's answer
- *      is kept only if it passes. Otherwise the person fixes the line.
+ *      has a key (Haiku checks a typed PDF's line, Opus reads from scratch;
+ *      a line read from a picture skips Haiku, which rarely helps with
+ *      handwriting), and an AI's answer is kept only if it passes. Otherwise
+ *      the person fixes the line.
  * 3. Check: one line at a time, the picture above each part's row (they
  *    scroll sideways together), the parts' bars numbered and lined up, each
  *    bar that doesn't add up marked with its beats, problems under the rows,
@@ -103,6 +105,8 @@ interface Line {
   lined?: string;
   /** Who read it: the PDF's text, SolfaScores' own reader, or an AI that corrected it. */
   via?: 'text' | 'own' | 'cloudflare' | 'haiku' | 'strong';
+  /** Read from a picture (a photo or a scan), not a PDF's text: handwritten as often as not. */
+  picture: boolean;
   status: 'waiting' | 'reading' | 'read' | 'failed';
   text: string;
   doubts: { part: string; bar: number }[];
@@ -185,7 +189,10 @@ function Scanner() {
    * A line's reading, with AI only as the last resort. A reading that passes SolfaScores' checker is kept as it is
    * (the AIs broke more right lines than they fixed when sent every line). One that fails, or one the
    * person asks to read again, goes to Cloudflare's reader, then Claude if the Worker has a key (Haiku
-   * checks it, Opus reads it from scratch); an answer is kept only if it passes and keeps every part
+   * checks a typed PDF's line, Opus reads it from scratch). A line read from a picture skips Haiku: the app
+   * can't tell handwriting from a photo of print, and on the owner's handwritten sheet Haiku made 1 of 9
+   * failing lines add up where Opus made all 9 (owner's call, 20 November 2026). An answer is kept only if it
+   * passes and keeps every part
    * (`keepsParts`). Otherwise the line keeps
    * the app's own reading for the person to fix. Throws only when today's allowance is used up.
    */
@@ -209,7 +216,7 @@ function Scanner() {
     const draft = (again && line.text) || own;
     const tries: [NonNullable<Line['via']>, () => Promise<ScanLineReading>][] = [];
     if (ai.cloudflare && draft.trim()) tries.push(['cloudflare', () => api.scanFix(line.blob, { ...opts, draft })]);
-    if (ai.anthropic && draft.trim()) tries.push(['haiku', () => api.scanCheck(line.blob, { ...opts, draft })]);
+    if (ai.anthropic && draft.trim() && !line.picture) tries.push(['haiku', () => api.scanCheck(line.blob, { ...opts, draft })]);
     if (ai.anthropic) tries.push(['strong', () => api.scanLine(line.blob, opts)]);
     let problem = '';
     for (const [via, ask] of tries) {
@@ -277,6 +284,7 @@ function Scanner() {
           draft: text || l.draft || '',
           ...(l.lined ? { lined: l.lined } : {}),
           via: text ? 'text' : 'own',
+          picture: !text,
           status: text ? 'read' : 'waiting',
           text,
           doubts: [],
