@@ -7,14 +7,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as DocumentPicker from 'expo-document-picker';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
-import { useDeferredValue, useMemo, useState } from 'react';
-import { Platform, Pressable, Switch, Text, TextInput, View } from 'react-native';
+import { useDeferredValue, useMemo, useRef, useState } from 'react';
+import { Platform, Pressable, Switch, Text, TextInput, View, type TextInputInstance } from 'react-native';
 
 import { api, type PickedFile, type Song } from '@/api/client';
 import { useSongPlayer } from '@/audio/use-song-player';
 import { PlayButton } from '@/components/player-controls';
 import { Score } from '@/components/score';
 import { SolfaCheck } from '@/components/solfa-check';
+import { SolfaKeypad } from '@/components/solfa-keypad';
+import { applyKey, type Key, type Selection } from '@/lib/solfa-keys';
 import { Body, Button, Card, Chip, ErrorText, Field, Kicker, Loading, Page, TopBar } from '@/components/ui';
 import { TAG_GROUPS } from '@/lib/tags';
 import { clearScanDraft, scanDraft, type ScanDraft } from '@/scan/draft';
@@ -64,6 +66,30 @@ function Editor({ song, draft }: { song?: Song; draft: ScanDraft | null }) {
   const [time, setTime] = useState(song?.time_signature ?? draft?.time ?? '4/4');
   const [tags, setTags] = useState<string[]>(song?.tags ?? []);
   const [solfa, setSolfa] = useState(song?.solfa ?? draft?.solfa ?? '');
+  // The sol-fa is written with the sol-fa keypad (every symbol a tap away, parts' names and new lines too);
+  // "ABC" swaps in the phone's keyboard, for the words, until the field is left.
+  const field = useRef<TextInputInstance | null>(null);
+  const [writing, setWriting] = useState(false);
+  const [keyboard, setKeyboard] = useState(false);
+  const [sel, setSel] = useState<Selection>({ start: 0, end: 0 });
+  const pressKey = (key: Key) => {
+    const next = applyKey(solfa, sel, key);
+    setSolfa(next.text);
+    setSel(next.sel);
+    const f = field.current;
+    if (f && !f.isFocused()) f.focus();
+    requestAnimationFrame(() => {
+      const el = f as unknown as { setSelectionRange?: (a: number, b: number) => void; setSelection?: (a: number, b: number) => void } | null;
+      if (el?.setSelectionRange) el.setSelectionRange(next.sel.start, next.sel.end);
+      else el?.setSelection?.(next.sel.start, next.sel.end);
+    });
+  };
+  const useKeyboard = () => {
+    setKeyboard(true);
+    field.current?.blur();
+    setTimeout(() => field.current?.focus(), 50);
+  };
+  const withKeys = writing && !keyboard;
   const [from, setFrom] = useState<string | null>(defaultFrom);
   const [addToRep, setAddToRep] = useState(true);
   const [picked, setPicked] = useState<PickedFile | null>(draft?.sheet ?? null);
@@ -125,7 +151,21 @@ function Editor({ song, draft }: { song?: Song; draft: ScanDraft | null }) {
   const blocked = !title.trim() || (!empty && parsed.errors.length > 0);
 
   return (
-    <Page>
+    <Page
+      footer={
+        withKeys ? (
+          <SolfaKeypad
+            parts
+            onKey={pressKey}
+            onKeyboard={useKeyboard}
+            onDone={() => {
+              field.current?.blur();
+              setWriting(false);
+            }}
+          />
+        ) : undefined
+      }
+    >
       <TopBar
         back
         title={editing ? 'Edit song' : draft ? 'Save the scanned song' : 'Add a song'}
@@ -168,8 +208,27 @@ function Editor({ song, draft }: { song?: Song; draft: ScanDraft | null }) {
         </View>
         {showHelp ? <Help onExample={() => setSolfa(EXAMPLE)} /> : null}
         <TextInput
+          ref={field}
           value={solfa}
           onChangeText={setSolfa}
+          onSelectionChange={(e) => setSel(e.nativeEvent.selection)}
+          onFocus={() => {
+            if (!writing) setKeyboard(false);
+            setWriting(true);
+            // In sight above the keypad, once it's up.
+            setTimeout(() => (field.current as unknown as { scrollIntoView?: (o: object) => void } | null)?.scrollIntoView?.({ block: 'center', behavior: 'smooth' }), 150);
+          }}
+          onBlur={() => {
+            // Left, unless it has the focus again straight away (the switch to the phone's keyboard).
+            setTimeout(() => {
+              if (!field.current?.isFocused()) {
+                setWriting(false);
+                setKeyboard(false);
+              }
+            }, 120);
+          }}
+          inputMode={withKeys ? 'none' : 'text'}
+          showSoftInputOnFocus={!withKeys}
           multiline
           autoCapitalize="none"
           autoCorrect={false}

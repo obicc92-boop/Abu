@@ -2,7 +2,7 @@
  * A scanned line's text as rows to edit one by one: each part's row of notes
  * and the rows of words, in order, and back to text.
  */
-import { parseNote, partName } from '@/solfa';
+import { parseNote, partName, splitWords } from '@/solfa';
 
 export interface LineRow {
   /** S, A, T, B, Solo... or null for a row of words. */
@@ -100,6 +100,47 @@ export function wordsOf(text: string): LineWords[] {
     else if (r.text.trim()) out.push({ after: Math.max(0, seen - 1), text: r.text.trim() });
   }
   return out;
+}
+
+/** The character columns where a row's notes are written, left to right (not its holds or rests). */
+export function noteColumns(text: string): number[] {
+  const out: number[] = [];
+  for (const m of text.matchAll(/[^\s:|/.,]+/g)) {
+    const t = m[0];
+    if (t.includes('=') || parseNote(t)) out.push(m.index ?? 0);
+  }
+  return out;
+}
+
+/**
+ * A row of words set under its part's notes, as on a sheet: each syllable (`splitWords`) at the column of
+ * the note it's sung on, in order, as the checker pairs them; a lone "-" or "_" carries the syllable before
+ * over a note. A syllable that would run into the one before is moved along, and syllables past the last
+ * note follow on. `width` is how many note columns one character of the words takes.
+ */
+export function wordsUnderNotes(words: string, notes: string, width = 1): { text: string; at: number }[] {
+  const columns = noteColumns(notes);
+  const out: { text: string; at: number }[] = [];
+  let free = 0;
+  splitWords(words).forEach((w, k) => {
+    if (w === '-' || w === '_') return;
+    const at = Math.max(k < columns.length ? columns[k] : free, free);
+    out.push({ text: w, at });
+    free = at + Math.ceil(w.length * width) + 1;
+  });
+  return out;
+}
+
+/**
+ * Whether a row read as words is only sol-fa's names ("fa - mi - re - doh"): a reader asked for the words
+ * sometimes names the notes instead. Not words to keep.
+ */
+export function namesNotWords(words: string): boolean {
+  const pieces = words
+    .toLowerCase()
+    .split(/[\s\-–,.;:!?'"()]+/)
+    .filter(Boolean);
+  return pieces.length >= 3 && pieces.every((p) => /^(doh?|re|ray|mi|me|fah?|soh?|sol|lah?|ti|te|si|do')$/.test(p));
 }
 
 /**

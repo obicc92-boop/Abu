@@ -31,18 +31,20 @@ import { useQuery } from '@tanstack/react-query';
 import * as DocumentPicker from 'expo-document-picker';
 import { Redirect, router } from 'expo-router';
 import { useMemo, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, Text, TextInput, View, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollViewInstance } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, Text, TextInput, View, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollViewInstance, type TextInputInstance } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { api, ApiError, type PickedFile, type ScanLineReading } from '@/api/client';
 import { useSongPlayer } from '@/audio/use-song-player';
 import { AgainIcon, CameraIcon, CheckIcon, CloseIcon, FileIcon, PlusIcon, ScanIcon, ZoomIcon } from '@/components/icons';
 import { PlayButton } from '@/components/player-controls';
+import { SolfaKeypad } from '@/components/solfa-keypad';
 import { Body, Button, Card, Chip, ErrorText, Kicker, MAX_WIDTH, Page, TopBar } from '@/components/ui';
 import { barNumbers, checkRows } from '@/scan/bar-check';
 import { setScanDraft } from '@/scan/draft';
 import { joinLines, timeFor } from '@/scan/join';
-import { alignedRows, barColumns, bestFree, changedShare, joinLine, keepsParts, problemsByPart, splitLine, tidyNotes, tidyTitle, withBarsInStep, withWords, wordsOf, type LineRow, type LineWords } from '@/scan/line-text';
+import { alignedRows, barColumns, bestFree, changedShare, joinLine, keepsParts, namesNotWords, problemsByPart, splitLine, tidyNotes, tidyTitle, withBarsInStep, withWords, wordsOf, wordsUnderNotes, type LineRow, type LineWords } from '@/scan/line-text';
+import { applyKey, type Key, type Selection } from '@/lib/solfa-keys';
 import { findLinesOwn, readLineOwn } from '@/scan/own-reader';
 import { cutLine, cutPieces, loadPages, MAX_PAGES, pageForFinding, scanningHere, takePhoto } from '@/scan/pages';
 import { readTypedSheet, type PageText } from '@/scan/pdf-text';
@@ -82,6 +84,10 @@ interface Readers {
 /** Width of a character in the rows' monospace type (0.6 of its size), until it's measured on the screen. */
 const CHAR = 8.7;
 const ROW_HEIGHT = 42;
+/** One character of the words, in note columns (the words' type is narrower than the notes'). */
+const WORDS_CHAR = 0.8;
+/** Room under the rows for the sol-fa keypad, so the row being fixed can be scrolled above it. */
+const KEYPAD_ROOM = 330;
 /** Space before a row's first character. */
 const ROW_PAD = 12;
 /** How thick the bar lines drawn through the rows are: enough to cover the typed "|" beneath. */
@@ -381,7 +387,9 @@ function Scanner() {
             try {
               const cut = w.pieces ? await cutPieces(pages[l.pageIndex], w.pieces) : await cutLine(pages[l.pageIndex], w.box);
               URL.revokeObjectURL(cut.url);
-              l.wordTexts[k] = { after: w.after, text: (await api.scanWords(cut.blob)).words };
+              const words = (await api.scanWords(cut.blob)).words;
+              // A reader asked for the words sometimes names the notes instead ("fa - mi - re - doh").
+              l.wordTexts[k] = { after: w.after, text: namesNotWords(words) ? '' : words };
             } catch {
               // No words for this row: the person can type them.
             }
@@ -700,6 +708,43 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
   const shown = useMemo(() => alignedRows(rows), [rows]);
   const [editing, setEditing] = useState<{ id: string; row: number; value: string } | null>(null);
   const valueOf = (i: number) => (editing && editing.id === line.id && editing.row === i ? editing.value : shown[i]);
+  // A row of notes is fixed with the sol-fa keypad, which keeps the field's cursor; "ABC" swaps in the phone's
+  // keyboard until the row is left. Rows of words use the phone's keyboard.
+  const inputs = useRef<(TextInputInstance | null)[]>([]);
+  const [sel, setSel] = useState<Selection>({ start: 0, end: 0 });
+  const [keyboard, setKeyboard] = useState(false);
+  const editingRow = editing && editing.id === line.id ? editing.row : -1;
+  const keypad = editingRow >= 0 && !!rows[editingRow]?.part && !keyboard;
+  const pressKey = (key: Key) => {
+    if (!editing || editingRow < 0) return;
+    const next = applyKey(editing.value, sel, key);
+    setEditing({ ...editing, value: next.text });
+    setRow(editingRow, next.text);
+    setSel(next.sel);
+    const field = inputs.current[editingRow];
+    if (field && !field.isFocused()) field.focus();
+    // The cursor after the key, once the row shows its new text.
+    requestAnimationFrame(() => placeCursor(field, next.sel));
+  };
+  const leaveRow = () => {
+    inputs.current[editingRow]?.blur();
+    setEditing(null);
+    setKeyboard(false);
+  };
+  const useKeyboard = () => {
+    // The phone's keyboard comes up as the field is focused again.
+    const field = inputs.current[editingRow];
+    setKeyboard(true);
+    field?.blur();
+    setTimeout(() => field?.focus(), 50);
+  };
+  // Each row of words set under its part's notes, as on the sheet (the row being typed in shows what's typed).
+  const wordsLaid = rows.map((r, i) => {
+    if (r.part || editingRow === i) return null;
+    let j = i - 1;
+    while (j >= 0 && !rows[j].part) j--;
+    return j >= 0 ? wordsUnderNotes(valueOf(i), valueOf(j), WORDS_CHAR) : null;
+  });
   // The key where this line starts: the song's, moved by any bridge notes in the lines before it.
   const before = useMemo(() => lines.slice(0, current).map((l) => l.text), [lines, current]);
   const lineDoh = useMemo(() => {
@@ -736,7 +781,11 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
   // The picture: tall enough to read (scroll sideways), or the whole line at once.
   const imgHeight = zoom ? 170 : Math.max(48, ((width || 1) * line.height) / line.width);
   const imgWidth = zoom ? (imgHeight * line.width) / line.height : width;
-  const textWidth = Math.max(width - 44, ...rows.map((_, i) => valueOf(i).length * charWidth + 2 * ROW_PAD + 4));
+  const textWidth = Math.max(
+    width - 44,
+    ...rows.map((_, i) => valueOf(i).length * charWidth + 2 * ROW_PAD + 4),
+    ...wordsLaid.flatMap((w) => (w ?? []).map((s) => (s.at + s.text.length * WORDS_CHAR) * charWidth + 2 * ROW_PAD + 4)),
+  );
 
   // The picture and the rows scroll sideways together, so bars stay roughly lined up.
   const picture = useRef<ScrollViewInstance>(null);
@@ -771,7 +820,7 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right', 'bottom']}>
-      <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={[styles.body, keypad && { paddingBottom: KEYPAD_ROOM }]} keyboardShouldPersistTaps="handled">
         <TopBar
           title="Check the reading"
           subtitle={`Line ${current + 1} of ${lines.length} · page ${line.page}`}
@@ -919,23 +968,53 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
                         }),
                     ])}
                   </View>
-                  {rows.map((r, i) => (
-                    <TextInput
-                      key={i}
-                      value={valueOf(i)}
-                      onFocus={() => setEditing({ id: line.id, row: i, value: shown[i] })}
-                      onChangeText={(t) => {
-                        setEditing({ id: line.id, row: i, value: t });
-                        setRow(i, t);
-                      }}
-                      onBlur={() => setEditing(null)}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      spellCheck={false}
-                      style={[styles.rowInput, !r.part && styles.wordsInput]}
-                      accessibilityLabel={`${r.part ? partName(r.part) : 'Words'}, line ${current + 1}`}
-                    />
-                  ))}
+                  {rows.map((r, i) => {
+                    const withKeys = !!r.part && !keyboard;
+                    return (
+                      <TextInput
+                        key={i}
+                        ref={(field) => {
+                          inputs.current[i] = field;
+                        }}
+                        value={valueOf(i)}
+                        onFocus={() => {
+                          if (editingRow !== i) {
+                            setEditing({ id: line.id, row: i, value: shown[i] });
+                            setKeyboard(false);
+                          }
+                          // In sight above the keypad, once it's up.
+                          if (r.part) setTimeout(() => (inputs.current[i] as unknown as { scrollIntoView?: (o: object) => void } | null)?.scrollIntoView?.({ block: 'center', behavior: 'smooth' }), 150);
+                        }}
+                        onChangeText={(t) => {
+                          setEditing({ id: line.id, row: i, value: t });
+                          setRow(i, t);
+                        }}
+                        onSelectionChange={(e) => setSel(e.nativeEvent.selection)}
+                        onBlur={() => {
+                          // The row is left unless it has the focus again straight away (the switch to the phone's
+                          // keyboard, or a key that took the focus for a moment).
+                          setTimeout(() => !inputs.current[i]?.isFocused() && setEditing((e) => (e && e.row === i ? null : e)), 120);
+                        }}
+                        inputMode={withKeys ? 'none' : 'text'}
+                        showSoftInputOnFocus={!withKeys}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        spellCheck={false}
+                        style={[styles.rowInput, !r.part && styles.wordsInput, wordsLaid[i] && styles.laidOut]}
+                        accessibilityLabel={`${r.part ? partName(r.part) : 'Words'}, line ${current + 1}`}
+                      />
+                    );
+                  })}
+                  {/* Each row of words, set under its part's notes; tap it to type (it then shows as typed). */}
+                  <View style={styles.overlay} aria-hidden importantForAccessibility="no-hide-descendants">
+                    {wordsLaid.flatMap((w, i) =>
+                      (w ?? []).map((s, k) => (
+                        <Text key={`${i}-${k}`} numberOfLines={1} style={[styles.syllable, { top: i * ROW_HEIGHT, left: ROW_PAD + s.at * charWidth }]}>
+                          {s.text}
+                        </Text>
+                      )),
+                    )}
+                  </View>
                   {/* Each bar line drawn through the parts' rows, as on the sheet, over the typed "|". It's left out
                       where it crosses a row of words, and a row being typed in shows its own. Placed by a transform,
                       which browsers don't round to whole pixels as they do a position: the line then covers the "|". */}
@@ -1004,14 +1083,25 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
         </Card>
       </ScrollView>
 
-      <View style={styles.footer}>
-        <View style={styles.footerInner}>
-          <Button kind="ghost" label="Back" onPress={() => go(current - 1)} disabled={current === 0} style={{ minWidth: 92 }} />
-          <Button label={line.skipped ? 'Next line' : 'Looks right'} onPress={line.skipped ? () => (current === lines.length - 1 ? onFinish() : go(current + 1)) : looksRight} style={{ flex: 1 }} />
-        </View>
+      <View style={[styles.footer, keypad && styles.footerSolid]}>
+        {keypad ? (
+          <SolfaKeypad onKey={pressKey} onDone={leaveRow} onKeyboard={useKeyboard} />
+        ) : (
+          <View style={styles.footerInner}>
+            <Button kind="ghost" label="Back" onPress={() => go(current - 1)} disabled={current === 0} style={{ minWidth: 92 }} />
+            <Button label={line.skipped ? 'Next line' : 'Looks right'} onPress={line.skipped ? () => (current === lines.length - 1 ? onFinish() : go(current + 1)) : looksRight} style={{ flex: 1 }} />
+          </View>
+        )}
       </View>
     </SafeAreaView>
   );
+}
+
+/** Puts a field's cursor at `sel`: in a browser on the field itself, on a phone through React Native. */
+function placeCursor(field: TextInputInstance | null | undefined, sel: Selection) {
+  const f = field as unknown as { setSelectionRange?: (a: number, b: number) => void; setSelection?: (a: number, b: number) => void } | null;
+  if (f?.setSelectionRange) f.setSelectionRange(sel.start, sel.end);
+  else f?.setSelection?.(sel.start, sel.end);
 }
 
 /* ---------- 4. Finish ---------- */
@@ -1156,6 +1246,9 @@ const useStyles = makeStyles((colors) => ({
   measureWide: { width: 4000, alignItems: 'flex-start' },
   measureText: { fontFamily: fonts.mono, fontSize: 14.5 },
   wordsInput: { fontFamily: fonts.body, fontStyle: 'italic', fontSize: 14, color: colors.muted },
+  // A row of words shown set under its notes: its own text hidden behind the syllables, until it's typed in.
+  laidOut: { color: 'transparent' },
+  syllable: { position: 'absolute', height: ROW_HEIGHT, lineHeight: ROW_HEIGHT, fontFamily: fonts.body, fontStyle: 'italic', fontSize: 14, color: colors.muted },
   problem: { fontFamily: fonts.body, fontSize: 13.5, lineHeight: 19, color: colors.redDeep },
   doubt: { borderRadius: 999, backgroundColor: colors.warnTint, paddingHorizontal: 10, paddingVertical: 4 },
   doubtText: { fontFamily: fonts.bold, fontSize: 12.5, color: colors.warn },
@@ -1165,6 +1258,7 @@ const useStyles = makeStyles((colors) => ({
   tool: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 10, borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.card, paddingHorizontal: 12, paddingVertical: 8 },
   toolText: { fontFamily: fonts.bold, fontSize: 13, color: colors.ink },
   footer: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.glass, borderTopWidth: 1, borderColor: colors.line },
+  footerSolid: { backgroundColor: colors.sand },
   footerInner: { flexDirection: 'row', gap: 10, padding: 12, paddingBottom: 16, width: '100%', maxWidth: MAX_WIDTH, alignSelf: 'center' },
   summary: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 6 },
   summaryCell: { alignItems: 'center', gap: 2 },

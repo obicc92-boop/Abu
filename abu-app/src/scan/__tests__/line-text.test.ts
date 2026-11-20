@@ -7,6 +7,8 @@ import {
   freeRepair,
   joinLine,
   keepsParts,
+  namesNotWords,
+  noteColumns,
   problemsByPart,
   splitLine,
   tidyNotes,
@@ -22,6 +24,7 @@ import {
   withSpacedBeats,
   withWords,
   wordsOf,
+  wordsUnderNotes,
 } from '../line-text';
 import { parseSolfa } from '@/solfa';
 
@@ -328,5 +331,41 @@ describe('how much a correction changed', () => {
     // A rewrite changes most of it.
     expect(changedShare('S  m :f /s :l | t :d\' /r\' :m\' |\nA  s :l /t :d\' | r\' :- /- :- |', draft)).toBeGreaterThan(0.2);
     expect(changedShare('S  d :r |', '')).toBe(1);
+  });
+});
+
+describe('words under their notes', () => {
+  it('finds where each note is written, not its holds or rests', () => {
+    expect(noteColumns("m'.m' :-.t /d' :s |")).toEqual([0, 3, 9, 12, 16]);
+    expect(noteColumns('d :- /x :s=d |')).toEqual([0, 9]);
+  });
+
+  it('sets each syllable under the note it is sung on, as the checker pairs them', () => {
+    // The owner's soprano: "Ke-re-si-me-sie" over m'.m' :-.t /d' :s.
+    expect(wordsUnderNotes('Ke-re-si-me-sie', "m'.m' :-.t /d' :s |")).toEqual([
+      { text: 'Ke-', at: 0 },
+      { text: 're-', at: 4 },
+      { text: 'si-', at: 9 },
+      { text: 'me-', at: 13 },
+      { text: 'sie', at: 17 },
+    ]);
+  });
+
+  it('carries a syllable over a note for a lone "-", and lets syllables past the notes follow on', () => {
+    expect(wordsUnderNotes('Glo - ry to', 'd :r :m |')).toEqual([
+      { text: 'Glo', at: 0 },
+      { text: 'ry', at: 6 },
+      { text: 'to', at: 9 },
+    ]);
+  });
+});
+
+describe('note names read as words', () => {
+  it('spots a row of sol-fa names, not a row of words', () => {
+    expect(namesNotWords('fa - mi - fa - mi - re - doh')).toBe(true);
+    expect(namesNotWords('doo - sol - mi - fa - sol - la')).toBe(false);
+    expect(namesNotWords('Ke-re-si-me-sie lu te go')).toBe(false);
+    expect(namesNotWords('Do re mi')).toBe(true);
+    expect(namesNotWords('la la')).toBe(false);
   });
 });

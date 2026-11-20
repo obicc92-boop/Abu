@@ -17,14 +17,16 @@ import { BackIcon } from './icons';
 export const MAX_WIDTH = 560;
 
 /** A scrolling page, centred and no wider than a phone on big screens. */
-export function Page({ children, background, edges }: { children: ReactNode; background?: string; edges?: ('top' | 'bottom' | 'left' | 'right')[] }) {
+/** A screen's page, scrolling; `footer` stays at the bottom under it (the sol-fa keypad while it's in use). */
+export function Page({ children, background, edges, footer }: { children: ReactNode; background?: string; edges?: ('top' | 'bottom' | 'left' | 'right')[]; footer?: ReactNode }) {
   const colors = useColors();
   const styles = useStyles();
   return (
     <SafeAreaView style={[styles.page, { backgroundColor: background ?? colors.sand }]} edges={edges ?? ['top', 'left', 'right']}>
-      <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+      <ScrollView style={styles.page} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         {children}
       </ScrollView>
+      {footer ? <View style={styles.footer}>{footer}</View> : null}
     </SafeAreaView>
   );
 }
@@ -229,6 +231,7 @@ export function PartTag({ part }: { part: string | null }) {
 
 const useStyles = makeStyles((colors) => ({
   page: { flex: 1 },
+  footer: { backgroundColor: colors.sand, borderTopWidth: 1, borderColor: colors.line },
   body: { padding: 16, paddingBottom: 32, gap: 14, width: '100%', maxWidth: MAX_WIDTH, alignSelf: 'center' },
   topbar: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 2 },
   back: { width: 38, height: 38, borderRadius: 10, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' },
