@@ -1,6 +1,6 @@
 # The player's instrument sounds
 
-`public/sounds/` holds the recordings the player uses when someone picks Piano, Strings, Choir or Choir (old) under Me → Settings → Sound (the synth needs none). Choir (old) is the first choir, kept as a choice for anyone who prefers it (owner's decision, 21 November 2026). They download only when chosen, once, and the service worker keeps them on the phone. These scripts rebuild them.
+`public/sounds/` holds the recordings the player uses when someone picks Piano, Strings, Choir or Choir 2 under Me → Settings → Sound (the synth needs none). Choir 2 is the first choir, kept as a choice for anyone who prefers it (owner's decision, 21 November 2026). They download only when chosen, once, and the service worker keeps them on the phone. These scripts rebuild them.
 
 ## Sources
 
@@ -11,7 +11,7 @@ Put them in one folder (`<sources>` below), laid out as shown.
 | Piano | Salamander Grand Piano V3 by Alexander Holm (https://archive.org/details/SalamanderGrandPianoV3), as the MP3s Tone.js hosts at https://tonejs.github.io/audio/salamander/: `Ds2 Fs2 A2 C3 Ds3 Fs3 A3 C4 Ds4 Fs4 A4 C5 Ds5 Fs5 A5 C6` `.mp3` | CC BY 3.0: credit needed (Me's footer and `public/sounds/LICENSES.txt`) | `salamander_tonejs/Ds2.mp3` … |
 | Strings | VSCO 2 Community Edition, https://github.com/sgossner/VSCO-2-CE (tree `440300901dfe9275fd84e0b7763af1f8443ae62e`), the section sustains with vibrato. VSCO names notes an octave low; rename each to the pitch it sounds and its section (table below) | CC0: no credit needed. The app shows no company names, so the studio isn't named in it | `src_strings/E2_cello.wav` … |
 | Choir | epic-choir v1.0 by thepok, https://github.com/thepok/epic-choir (tag `v1.0`, commit `38df98f5dbb1`), the release zips `epic-choir-v1.0-A.zip`, `-S.zip`, `-B.zip` and `-T.zip` (about 170 MB each; only the 12 files below are used). Made from VocalSet 1.2 (Wilkins, Seetharaman, Wahl, Pardo 2018), https://doi.org/10.5281/zenodo.1442513 | CC BY 4.0, VocalSet's and epic-choir's: credit needed, with a note of what was changed (`public/sounds/LICENSES.txt`, Me's footer) | `epic_choir/samples/A/A_ah_mf_As3.wav` … (the zips unpacked into one folder: they share the `samples/` tree) |
-| Choir (old) | Preset 52, "Choir Aahs", of FluidR3_GM.sf2 by Frank Wen (for example Debian's or Ubuntu's `fluid-soundfont-gm` package, `/usr/share/sounds/sf2/FluidR3_GM.sf2`), pulled with `sf2pull.mjs` | MIT: the notice must go with the samples (`public/sounds/LICENSES.txt`) and the credit is in Me's footer | `fluid_sf2/52/` |
+| Choir 2 | Preset 52, "Choir Aahs", of FluidR3_GM.sf2 by Frank Wen (for example Debian's or Ubuntu's `fluid-soundfont-gm` package, `/usr/share/sounds/sf2/FluidR3_GM.sf2`), pulled with `sf2pull.mjs` | MIT: the notice must go with the samples (`public/sounds/LICENSES.txt`) and the credit is in Me's footer | `fluid_sf2/52/` |
 
 The strings, from the repository's `Strings/` folder:
 
@@ -71,7 +71,7 @@ The build is deterministic: rebuilt on 21 November 2026 with the new choir added
   - Is **resampled** to 32 kHz. The loop points stay in the source's own seconds: a loop of 44.1 kHz samples isn't a whole number of 32 kHz ones, and rounding each end to a whole sample (as the old choir's build did; harmless there, as FluidR3's samples are already 32 kHz) made bright notes tick.
   - Is **encoded at 48 kbps and checked through the codec**: decoded again, the last 60 ms before the loop's end joined to the loop's start as the player plays it, and the join's spikiest 2 ms compared with the file's own continuation (`wrapTest`). Whether a loop ticks depends on how the encoder codes the two places it joins, so it can't be told before encoding. If it ticks, the next place to loop is tried, and if every one does, 64 kbps (written as the note's `kbps`). The build stops if a note still ticks, and checks that a 64 kbps file's decoder delay is the 48 kbps click's.
   - Its **level** is set and its tuning measured, as below.
-- **Choir (old):** 15 notes, E♭2 to A5, in `choir-old/`. Left and right are mixed to mono, and the SoundFont's own loop points are kept. Each file is the attack, one loop, then 0.15 s of the loop again, at 32 kHz and 48 kbps.
+- **Choir 2:** 15 notes, E♭2 to A5, in `choir-old/`. Left and right are mixed to mono, and the SoundFont's own loop points are kept. Each file is the attack, one loop, then 0.15 s of the loop again, at 32 kHz and 48 kbps.
 - **Level:** each instrument is scaled to peak at −1 dBFS.
 - **The manifest** (`manifest.json`) lists each note with these fields:
   - its root (`midi`) and its loop in seconds of the file as encoded (to 0.1 µs: the player takes fractional loop points, and 5 decimals, up to 5 µs off, can tick on a bright note);

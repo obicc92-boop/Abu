@@ -1,7 +1,7 @@
 SolfaScores instrument sounds
 =============================
 
-These recordings play the songs when "Piano", "Strings", "Choir" or "Choir (old)"
+These recordings play the songs when "Piano", "Strings", "Choir" or "Choir 2"
 is chosen under Me > Settings > Sound. How they were made:
 abu-app/scripts/sounds/README.md.
 
@@ -48,8 +48,8 @@ re-pitches each note for the notes between. No endorsement by the VocalSet
 authors or by thepok is implied.
 
 
-Choir (old) (choir-old/)
-------------------------
+Choir 2 (choir-old/)
+--------------------
 
 Choir: Fluid (R3) SoundFont, Copyright (c) 2000-2002, 2008 Frank Wen, MIT
 licence. The "Ahh Choir" samples, mixed to mono, resampled and re-encoded.

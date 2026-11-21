@@ -689,7 +689,7 @@ function LookPreview({ sides }: { sides: Palette[] }) {
 
 /**
  * The player's sound (owner's request, 21 November 2026): the synth, or a recorded piano, strings or choir, each
- * downloaded once when chosen and kept on the phone (and the first choir, kept as "Choir (old)" for anyone who
+ * downloaded once when chosen and kept on the phone (and the first choir, kept as "Choir 2" for anyone who
  * prefers it). Every player follows it from its next note.
  */
 function SoundChoices({ chosen }: { chosen: Instrument }) {
@@ -750,7 +750,7 @@ function About() {
         https://archive.org/details/SalamanderGrandPianoV3. Trimmed, converted to mono and re-encoded. Choir: VocalSet (J.
         Wilkins, P. Seetharaman, A. Wahl, B. Pardo), via epic-choir by thepok, CC BY 4.0
         (https://creativecommons.org/licenses/by/4.0/), https://doi.org/10.5281/zenodo.1442513. Trimmed, looped, converted
-        to mono and re-encoded. Choir (old): Fluid (R3) SoundFont, Copyright (c) 2000-2002, 2008 Frank Wen, MIT licence.
+        to mono and re-encoded. Choir 2: Fluid (R3) SoundFont, Copyright (c) 2000-2002, 2008 Frank Wen, MIT licence.
         Strings: public domain recordings. The licences in full: solfascores.com/sounds/LICENSES.txt
       </Text>
     </View>

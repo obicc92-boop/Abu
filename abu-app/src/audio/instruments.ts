@@ -29,7 +29,7 @@ export interface InstrumentInfo {
 }
 
 /**
- * In the order Me shows them. The sizes are checked against public/sounds by a test. "Choir (old)" is the first
+ * In the order Me shows them. The sizes are checked against public/sounds by a test. "Choir 2" is the first
  * choir (FluidR3's), kept as a choice for anyone who prefers it (owner's decision, 21 November 2026).
  */
 export const INSTRUMENTS: readonly InstrumentInfo[] = [
@@ -37,7 +37,7 @@ export const INSTRUMENTS: readonly InstrumentInfo[] = [
   { name: 'piano', label: 'Piano', bytes: 455_616 + 7_308 + MANIFEST_BYTES },
   { name: 'strings', label: 'Strings', bytes: 352_800 + 7_308 + MANIFEST_BYTES },
   { name: 'choir', label: 'Choir', bytes: 204_336 + 6_264 + MANIFEST_BYTES },
-  { name: 'choir-old', label: 'Choir (old)', bytes: 241_056 + 6_264 + MANIFEST_BYTES },
+  { name: 'choir-old', label: 'Choir 2', bytes: 241_056 + 6_264 + MANIFEST_BYTES },
 ];
 
 /**

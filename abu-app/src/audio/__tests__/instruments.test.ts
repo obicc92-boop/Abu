@@ -137,7 +137,7 @@ describe('the sounds in public/sounds', () => {
       'Piano 470 KB',
       'Strings 370 KB',
       'Choir 220 KB',
-      'Choir (old) 260 KB',
+      'Choir 2 260 KB',
     ]);
   });
 
