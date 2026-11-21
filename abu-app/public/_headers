@@ -13,3 +13,8 @@
 
 /manifest.json
   Cache-Control: no-cache
+
+# Instrument sounds (Me → Settings → Sound): their addresses carry the set's version (?v=), bumped when it's
+# rebuilt, so phones can keep them.
+/sounds/*
+  Cache-Control: public, max-age=31536000, immutable

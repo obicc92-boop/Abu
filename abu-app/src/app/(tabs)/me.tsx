@@ -3,8 +3,8 @@
  * your picture (a photo of your own, or your initials), your name with a pencil to change it, email, part and group; your practice (private to you) as a row of numbers
  * and the songs you're learning; then lists of rows, each with an icon, what it's set to and a chevron, that open
  * in place: your groups (tap to show one, the part pill to change your part there, join or start one), settings
- * (appearance, Perform's background, saved for offline, installing the app) and your account (email, password,
- * signing out). The version and the privacy note close it.
+ * (appearance, the player's sound, Perform's background, saved for offline, installing the app) and your account
+ * (email, password, signing out). The version, the privacy note and the sounds' credits close it.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Constants from 'expo-constants';
@@ -13,6 +13,8 @@ import { useState, type ReactNode } from 'react';
 import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
 
 import { api, type MyGroup } from '@/api/client';
+import { INSTRUMENTS, sizeText, type Instrument } from '@/audio/instruments';
+import { chooseSound, useChosenSound, useSoundState } from '@/audio/sound-setting';
 import { authClient } from '@/auth/client';
 import { BottomSheet, SheetRow } from '@/components/bottom-sheet';
 import { MainFill } from '@/components/brand';
@@ -31,6 +33,7 @@ import {
   PhoneIcon,
   PlusIcon,
   SignOutIcon,
+  SongsIcon,
   StageIcon,
 } from '@/components/icons';
 import { SongRow } from '@/components/song-row';
@@ -68,6 +71,7 @@ export default function Me() {
   const [open, setOpen] = useState<string | null>(null);
   const toggle = (key: string) => setOpen(open === key ? null : key);
   const [performLight, setPerformLight] = useState(() => readSetting(PERFORM_THEME) === 'light');
+  const sound = useChosenSound();
   const signedIn = s.status === 'signedIn';
 
   if (signedIn && (s.loadingMe || !s.profile)) return <Loading />;
@@ -77,6 +81,9 @@ export default function Me() {
     <Section title="Settings">
       <Row icon={<MoonIcon color={colors.ink} />} label="Appearance" value={LOOK_CHOICES.find((c) => c.value === choice)?.label} open={open === 'look'} onPress={() => toggle('look')}>
         <Appearance />
+      </Row>
+      <Row icon={<SongsIcon color={colors.ink} size={20} />} label="Sound" value={INSTRUMENTS.find((i) => i.name === sound)?.label} open={open === 'sound'} onPress={() => toggle('sound')}>
+        <SoundChoices chosen={sound} />
       </Row>
       <Row icon={<StageIcon color={colors.ink} />} label="Perform background" value={performLight ? 'Light' : 'Dark'} open={open === 'perform'} onPress={() => toggle('perform')}>
         <Text style={styles.help}>The background for reading sol-fa at Mass or on stage. Dark is easier in a dim church; light is clearer in daylight.</Text>
@@ -680,6 +687,54 @@ function LookPreview({ sides }: { sides: Palette[] }) {
   );
 }
 
+/**
+ * The player's sound (owner's request, 21 November 2026): the synth, or a recorded piano, strings or choir, each
+ * downloaded once when chosen and kept on the phone. Every player follows it from its next note.
+ */
+function SoundChoices({ chosen }: { chosen: Instrument }) {
+  const styles = useStyles();
+  const state = useSoundState(chosen);
+  const name = INSTRUMENTS.find((i) => i.name === chosen)?.label.toLowerCase();
+  const status =
+    chosen === 'synth'
+      ? null
+      : state === 'loading'
+        ? `Downloading the ${name}…`
+        : state === 'ready'
+          ? `The ${name} is kept on this phone, so it plays without data.`
+          : state === 'failed'
+            ? `The ${name} couldn’t download. Songs play with the synth until it can.`
+            : `The ${name} downloads when a song plays, then stays on this phone.`;
+  return (
+    <>
+      <Text style={styles.help}>What the songs play with. A recorded sound downloads once and is kept on this phone.</Text>
+      <View style={styles.sounds} accessibilityRole="radiogroup">
+        {INSTRUMENTS.map((i) => {
+          const on = chosen === i.name;
+          const note = i.bytes ? `${sizeText(i.bytes)}, downloads once` : 'Built in, no download';
+          return (
+            <Pressable
+              key={i.name}
+              onPress={() => chooseSound(i.name)}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: on }}
+              accessibilityLabel={`${i.label}, ${note}`}
+              style={({ pressed }) => [styles.sound, on && styles.soundOn, pressed && styles.rowPressed]}
+            >
+              <View style={[styles.radio, on && styles.radioOn]}>{on ? <View style={styles.radioDot} /> : null}</View>
+              <Text style={[styles.soundName, on && styles.soundNameOn]}>{i.label}</Text>
+              <Text style={styles.soundNote} numberOfLines={1}>
+                {note}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      {status ? <Text style={styles.help}>{status}</Text> : null}
+    </>
+  );
+}
+
 function About() {
   const styles = useStyles();
   const version = Constants.expoConfig?.version;
@@ -688,6 +743,13 @@ function About() {
       <Text style={styles.aboutName}>SolfaScores{version ? ` · Version ${version}` : ''}</Text>
       <Text style={styles.aboutText}>Learn your part in tonic sol-fa, and keep your choir together.</Text>
       <Text style={styles.aboutText}>Your practice is private to you. Leaders see only totals for each part.</Text>
+      {/* The recorded sounds' credits, as their licences ask (public/sounds/LICENSES.txt has them in full). */}
+      <Text style={styles.aboutText}>
+        Sounds: Piano: Salamander Grand Piano V3 by Alexander Holm, CC BY 3.0 (https://creativecommons.org/licenses/by/3.0/),
+        https://archive.org/details/SalamanderGrandPianoV3. Trimmed, converted to mono and re-encoded. Choir: Fluid (R3)
+        SoundFont, Copyright (c) 2000-2002, 2008 Frank Wen, MIT licence. Strings: public domain recordings. The licences
+        in full: solfascores.com/sounds/LICENSES.txt
+      </Text>
     </View>
   );
 }
@@ -766,6 +828,17 @@ const useStyles = makeStyles((colors) => ({
   previewCard: { flex: 1, borderRadius: 5, borderWidth: 1, padding: 5, gap: 4 },
   previewLine: { height: 4, borderRadius: 2 },
   previewButton: { height: 8, borderRadius: 3, width: '60%' },
+
+  // The sound's choices: a radio button, the name and what it downloads, a row each.
+  sounds: { gap: 6 },
+  sound: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 12, borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.card, paddingHorizontal: 12, paddingVertical: 10 },
+  soundOn: { borderColor: colors.ink, borderWidth: 2, paddingHorizontal: 11.5, paddingVertical: 9.5 },
+  radio: { width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: colors.faint, alignItems: 'center', justifyContent: 'center' },
+  radioOn: { borderColor: colors.ink },
+  radioDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.ink },
+  soundName: { fontFamily: fonts.bold, fontSize: 14.5, color: colors.ink },
+  soundNameOn: { fontFamily: fonts.heavy },
+  soundNote: { flex: 1, minWidth: 0, fontFamily: fonts.body, fontSize: 13, color: colors.muted, textAlign: 'right' },
 
   about: { alignItems: 'center', gap: 4, paddingVertical: 14 },
   aboutName: { fontFamily: fonts.heavy, fontSize: 13, color: colors.muted },

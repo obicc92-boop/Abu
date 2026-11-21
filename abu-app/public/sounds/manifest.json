@@ -1,0 +1,458 @@
+{
+ "piano": {
+  "sampleRate": 44100,
+  "kbps": 56,
+  "click": "click-44100.mp3",
+  "notes": [
+   {
+    "note": "Eb2",
+    "midi": 39,
+    "file": "piano/Eb2.mp3",
+    "bytes": 28476,
+    "seconds": 4,
+    "gain": 1.4
+   },
+   {
+    "note": "Gb2",
+    "midi": 42,
+    "file": "piano/Gb2.mp3",
+    "bytes": 28476,
+    "seconds": 4,
+    "gain": 1.1
+   },
+   {
+    "note": "A2",
+    "midi": 45,
+    "file": "piano/A2.mp3",
+    "bytes": 28476,
+    "seconds": 4,
+    "gain": 1.66
+   },
+   {
+    "note": "C3",
+    "midi": 48,
+    "file": "piano/C3.mp3",
+    "bytes": 28476,
+    "seconds": 4,
+    "gain": 1.43
+   },
+   {
+    "note": "Eb3",
+    "midi": 51,
+    "file": "piano/Eb3.mp3",
+    "bytes": 28476,
+    "seconds": 4,
+    "gain": 2.3
+   },
+   {
+    "note": "Gb3",
+    "midi": 54,
+    "file": "piano/Gb3.mp3",
+    "bytes": 28476,
+    "seconds": 4,
+    "gain": 1.87
+   },
+   {
+    "note": "A3",
+    "midi": 57,
+    "file": "piano/A3.mp3",
+    "bytes": 28476,
+    "seconds": 4,
+    "gain": 2.65
+   },
+   {
+    "note": "C4",
+    "midi": 60,
+    "file": "piano/C4.mp3",
+    "bytes": 28476,
+    "seconds": 4,
+    "gain": 2.66
+   },
+   {
+    "note": "Eb4",
+    "midi": 63,
+    "file": "piano/Eb4.mp3",
+    "bytes": 28476,
+    "seconds": 4,
+    "gain": 2.83
+   },
+   {
+    "note": "Gb4",
+    "midi": 66,
+    "file": "piano/Gb4.mp3",
+    "bytes": 28476,
+    "seconds": 4,
+    "gain": 2.43
+   },
+   {
+    "note": "A4",
+    "midi": 69,
+    "file": "piano/A4.mp3",
+    "bytes": 28476,
+    "seconds": 4,
+    "gain": 4.18
+   },
+   {
+    "note": "C5",
+    "midi": 72,
+    "file": "piano/C5.mp3",
+    "bytes": 28476,
+    "seconds": 4,
+    "gain": 3.58
+   },
+   {
+    "note": "Eb5",
+    "midi": 75,
+    "file": "piano/Eb5.mp3",
+    "bytes": 28476,
+    "seconds": 4,
+    "gain": 8.23
+   },
+   {
+    "note": "Gb5",
+    "midi": 78,
+    "file": "piano/Gb5.mp3",
+    "bytes": 28476,
+    "seconds": 4,
+    "gain": 3.3
+   },
+   {
+    "note": "A5",
+    "midi": 81,
+    "file": "piano/A5.mp3",
+    "bytes": 28476,
+    "seconds": 4,
+    "gain": 5.57
+   },
+   {
+    "note": "C6",
+    "midi": 84,
+    "file": "piano/C6.mp3",
+    "bytes": 28476,
+    "seconds": 4,
+    "gain": 3.95
+   }
+  ],
+  "totalBytes": 455616
+ },
+ "strings": {
+  "sampleRate": 44100,
+  "kbps": 56,
+  "click": "click-44100.mp3",
+  "notes": [
+   {
+    "note": "E2",
+    "midi": 40,
+    "file": "strings/E2.mp3",
+    "bytes": 24948,
+    "seconds": 3.52,
+    "gain": 2.09,
+    "loopStart": 1.4,
+    "loopEnd": 3.37005
+   },
+   {
+    "note": "G2",
+    "midi": 43,
+    "file": "strings/G2.mp3",
+    "bytes": 25704,
+    "seconds": 3.602,
+    "gain": 1.21,
+    "loopStart": 1.4,
+    "loopEnd": 3.45231
+   },
+   {
+    "note": "B2",
+    "midi": 47,
+    "file": "strings/B2.mp3",
+    "bytes": 24696,
+    "seconds": 3.474,
+    "gain": 0.99,
+    "loopStart": 1.4,
+    "loopEnd": 3.32401
+   },
+   {
+    "note": "D3",
+    "midi": 50,
+    "file": "strings/D3.mp3",
+    "bytes": 24696,
+    "seconds": 3.473,
+    "gain": 1.4,
+    "loopStart": 1.4,
+    "loopEnd": 3.32327
+   },
+   {
+    "note": "F3",
+    "midi": 53,
+    "file": "strings/F3.mp3",
+    "bytes": 24948,
+    "seconds": 3.502,
+    "gain": 2.6,
+    "loopStart": 1.4,
+    "loopEnd": 3.35179
+   },
+   {
+    "note": "G3",
+    "midi": 55,
+    "file": "strings/G3.mp3",
+    "bytes": 25200,
+    "seconds": 3.532,
+    "gain": 1.88,
+    "loopStart": 1.4,
+    "loopEnd": 3.38181
+   },
+   {
+    "note": "B3",
+    "midi": 59,
+    "file": "strings/B3.mp3",
+    "bytes": 25704,
+    "seconds": 3.626,
+    "gain": 1.59,
+    "loopStart": 1.4,
+    "loopEnd": 3.47633
+   },
+   {
+    "note": "D4",
+    "midi": 62,
+    "file": "strings/D4.mp3",
+    "bytes": 24696,
+    "seconds": 3.484,
+    "gain": 2.13,
+    "loopStart": 1.4,
+    "loopEnd": 3.33374
+   },
+   {
+    "note": "F4",
+    "midi": 65,
+    "file": "strings/F4.mp3",
+    "bytes": 25200,
+    "seconds": 3.548,
+    "gain": 2.06,
+    "loopStart": 1.4,
+    "loopEnd": 3.39848
+   },
+   {
+    "note": "A4",
+    "midi": 69,
+    "file": "strings/A4.mp3",
+    "bytes": 24696,
+    "seconds": 3.483,
+    "gain": 1.24,
+    "loopStart": 1.4,
+    "loopEnd": 3.33293
+   },
+   {
+    "note": "C5",
+    "midi": 72,
+    "file": "strings/C5.mp3",
+    "bytes": 25200,
+    "seconds": 3.532,
+    "gain": 3.53,
+    "loopStart": 1.4,
+    "loopEnd": 3.38202
+   },
+   {
+    "note": "E5",
+    "midi": 76,
+    "file": "strings/E5.mp3",
+    "bytes": 25704,
+    "seconds": 3.601,
+    "gain": 6.86,
+    "loopStart": 1.4,
+    "loopEnd": 3.45079
+   },
+   {
+    "note": "G5",
+    "midi": 79,
+    "file": "strings/G5.mp3",
+    "bytes": 25704,
+    "seconds": 3.626,
+    "gain": 5.29,
+    "loopStart": 1.4,
+    "loopEnd": 3.47601
+   },
+   {
+    "note": "B5",
+    "midi": 83,
+    "file": "strings/B5.mp3",
+    "bytes": 25704,
+    "seconds": 3.607,
+    "gain": 5.69,
+    "loopStart": 1.4,
+    "loopEnd": 3.45746
+   }
+  ],
+  "totalBytes": 352800
+ },
+ "choir": {
+  "sampleRate": 32000,
+  "kbps": 48,
+  "click": "click-32000.mp3",
+  "notes": [
+   {
+    "note": "Eb2",
+    "midi": 39,
+    "file": "choir/Eb2.mp3",
+    "bytes": 13608,
+    "seconds": 2.211,
+    "gain": 1.86,
+    "loopStart": 1.20975,
+    "loopEnd": 2.06119,
+    "cents": 45
+   },
+   {
+    "note": "Gb2",
+    "midi": 42,
+    "file": "choir/Gb2.mp3",
+    "bytes": 14904,
+    "seconds": 2.433,
+    "gain": 2.1,
+    "loopStart": 0.67253,
+    "loopEnd": 2.28291,
+    "cents": 19
+   },
+   {
+    "note": "A2",
+    "midi": 45,
+    "file": "choir/A2.mp3",
+    "bytes": 17928,
+    "seconds": 2.933,
+    "gain": 1.75,
+    "loopStart": 0.906,
+    "loopEnd": 2.78284,
+    "cents": 17
+   },
+   {
+    "note": "C3",
+    "midi": 48,
+    "file": "choir/C3.mp3",
+    "bytes": 19224,
+    "seconds": 3.165,
+    "gain": 1.5,
+    "loopStart": 1.424,
+    "loopEnd": 3.01503,
+    "cents": 17
+   },
+   {
+    "note": "Eb3",
+    "midi": 51,
+    "file": "choir/Eb3.mp3",
+    "bytes": 20088,
+    "seconds": 3.296,
+    "gain": 1.78,
+    "loopStart": 1.37741,
+    "loopEnd": 3.14603,
+    "cents": 39
+   },
+   {
+    "note": "Gb3",
+    "midi": 54,
+    "file": "choir/Gb3.mp3",
+    "bytes": 19440,
+    "seconds": 3.184,
+    "gain": 1.53,
+    "loopStart": 1.06869,
+    "loopEnd": 3.03441,
+    "cents": 28
+   },
+   {
+    "note": "A3",
+    "midi": 57,
+    "file": "choir/A3.mp3",
+    "bytes": 16848,
+    "seconds": 2.759,
+    "gain": 2.32,
+    "loopStart": 0.91431,
+    "loopEnd": 2.60891,
+    "cents": 33
+   },
+   {
+    "note": "C4",
+    "midi": 60,
+    "file": "choir/C4.mp3",
+    "bytes": 16632,
+    "seconds": 2.708,
+    "gain": 1.6,
+    "loopStart": 1.30169,
+    "loopEnd": 2.55775,
+    "cents": 11
+   },
+   {
+    "note": "Eb4",
+    "midi": 63,
+    "file": "choir/Eb4.mp3",
+    "bytes": 15984,
+    "seconds": 2.611,
+    "gain": 2.42,
+    "loopStart": 1.052,
+    "loopEnd": 2.4605,
+    "cents": 20
+   },
+   {
+    "note": "Gb4",
+    "midi": 66,
+    "file": "choir/Gb4.mp3",
+    "bytes": 17712,
+    "seconds": 2.901,
+    "gain": 1.62,
+    "loopStart": 0.56097,
+    "loopEnd": 2.75091,
+    "cents": 12
+   },
+   {
+    "note": "A4",
+    "midi": 69,
+    "file": "choir/A4.mp3",
+    "bytes": 15768,
+    "seconds": 2.575,
+    "gain": 1.68,
+    "loopStart": 0.65697,
+    "loopEnd": 2.42462,
+    "cents": -11
+   },
+   {
+    "note": "C5",
+    "midi": 72,
+    "file": "choir/C5.mp3",
+    "bytes": 11232,
+    "seconds": 1.81,
+    "gain": 1.31,
+    "loopStart": 0.56225,
+    "loopEnd": 1.66022
+   },
+   {
+    "note": "Eb5",
+    "midi": 75,
+    "file": "choir/Eb5.mp3",
+    "bytes": 14904,
+    "seconds": 2.444,
+    "gain": 1.36,
+    "loopStart": 0.734,
+    "loopEnd": 2.29363,
+    "cents": 26
+   },
+   {
+    "note": "Gb5",
+    "midi": 78,
+    "file": "choir/Gb5.mp3",
+    "bytes": 11664,
+    "seconds": 1.875,
+    "gain": 1.52,
+    "loopStart": 0.46881,
+    "loopEnd": 1.72531,
+    "cents": 6
+   },
+   {
+    "note": "A5",
+    "midi": 81,
+    "file": "choir/A5.mp3",
+    "bytes": 15120,
+    "seconds": 2.471,
+    "gain": 1.27,
+    "loopStart": 0.83147,
+    "loopEnd": 2.32081,
+    "cents": 12
+   }
+  ],
+  "totalBytes": 241056
+ }
+}

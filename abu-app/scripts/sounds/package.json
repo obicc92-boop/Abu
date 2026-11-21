@@ -1,0 +1,9 @@
+{
+  "name": "solfascores-sounds",
+  "private": true,
+  "description": "Builds public/sounds: see README.md",
+  "type": "module",
+  "dependencies": {
+    "@breezystack/lamejs": "1.2.7"
+  }
+}

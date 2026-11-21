@@ -1,6 +1,7 @@
 /**
- * Plays a parsed song with a small synth: every part at once, with per-part
- * mute, solo and "focus my part", tempo and key changes while playing, and loop.
+ * Plays a parsed song with a small synth, or recordings of a piano, strings or a
+ * choir (instruments.ts): every part at once, with per-part mute, solo and
+ * "focus my part", tempo and key changes while playing, and loop.
  * Ported from the audio engine in prototype/index.html (voice, tick, startPlay).
  * It follows the song's musical markings too (expression-curve.ts): louder and
  * softer for the dynamics, faster and slower for the tempo marks, and notes
@@ -20,7 +21,8 @@ import {
   type LoudnessCurve,
   type TempoCurve,
 } from './expression-curve';
-import type { AudioContextLike, GainNodeLike, OscillatorNodeLike } from './types';
+import { NOTE_SHAPES, nearestSample, sounds, type Instrument, type LoadedInstrument, type SoundLibrary } from './instruments';
+import type { AudioContextLike, GainNodeLike } from './types';
 
 /** How often the scheduler runs. */
 export const TICK_MS = 25;
@@ -91,7 +93,8 @@ export class SongPlayer {
   private ctx: AudioContextLike | null = null;
   private master: GainNodeLike | null = null;
   private readonly gains = new Map<string, GainNodeLike>();
-  private readonly live = new Set<OscillatorNodeLike>();
+  /** Every oscillator and recording sounding or waiting to, to stop them all at once. */
+  private readonly live = new Set<{ stop(when?: number): void }>();
   private timer: ReturnType<typeof setInterval> | null = null;
   private song: ParsedSong | null = null;
   /** Where doh sits through the song, for each part (parts can change key at their own bridge notes). */
@@ -114,10 +117,14 @@ export class SongPlayer {
   transpose = 0;
   loop = false;
   mix: MixSettings = { muted: {}, solo: null, mine: null, focus: false };
+  /** The sound chosen (Me → Settings → Sound). A recorded one plays once it's loaded; the synth until then. */
+  instrument: Instrument = 'synth';
 
+  /** `library` loads the recorded instruments: the app's shared one, unless a test gives its own. */
   constructor(
     private readonly getContext: () => AudioContextLike | null,
     private readonly callbacks: PlayerCallbacks = {},
+    private readonly library: SoundLibrary = sounds,
   ) {}
 
   /** `fallbackKey` is the song record's doh (semitones above C), used when the sol-fa has no key line. */
@@ -147,6 +154,12 @@ export class SongPlayer {
 
   setLoop(on: boolean): void {
     this.loop = on;
+  }
+
+  /** From the next note. A recorded instrument starts loading now if it can (else when the song next plays). */
+  setInstrument(name: Instrument): void {
+    this.instrument = name;
+    if (this.ctx) void this.library.load(this.ctx, name);
   }
 
   setMix(mix: MixSettings): void {
@@ -193,6 +206,8 @@ export class SongPlayer {
     this.clearTimer();
     this.stopVoices();
     const ctx = this.ctx;
+    // Not waited for: the synth plays until the recordings are ready.
+    void this.library.load(ctx, this.instrument);
     this.playing = true;
     this.anchorTime = ctx.currentTime + START_DELAY_S;
     this.anchorBeat = fromBeat;
@@ -227,6 +242,7 @@ export class SongPlayer {
     const spb = 60 / this.tempo;
     const now = this.beatNow();
     const horizon = this.pace.beatAfter(now, LOOKAHEAD_S / spb);
+    const recorded = this.library.loaded(ctx, this.instrument);
 
     for (const part of song.parts) {
       const events = song.events[part];
@@ -242,12 +258,14 @@ export class SongPlayer {
           const into = slurredOn(events, i) ? Math.min(LEGATO_S, seconds(events[i + 1]) / 2) : 0;
           const from = slurredOn(events, i - 1) ? Math.min(LEGATO_S, seconds(e) / 2) : 0;
           const len = into ? Math.max(0.08, seconds(e)) + into : Math.max(0.08, seconds(e) * 0.95);
-          this.voice(part, midi, Math.max(t, ctx.currentTime), len, {
+          const shape: NoteShape = {
             peak: this.loud.at(part, e.start),
             end: this.loud.heldTo(part, e.start, e.dur),
             ...(from ? { attack: from } : {}),
             ...(into ? { release: into } : {}),
-          });
+          };
+          if (recorded) this.recording(part, recorded, midi, Math.max(t, ctx.currentTime), len, shape);
+          else this.voice(part, midi, Math.max(t, ctx.currentTime), len, shape);
         }
         i++;
       }
@@ -326,6 +344,50 @@ export class SongPlayer {
     }
   }
 
+  /**
+   * One note from a recording: the nearest recorded note, played faster or slower for its pitch (and in tune), from
+   * after the decoder's silence, through an envelope into the part's gain, so the mix, the dynamics, the tempo's
+   * lengths and transposing work as for the synth. A held note of the strings or choir repeats the recording's loop.
+   * `len` and `shape` are as for `voice`: given an `attack`, it's slurred from the note before, so it comes in
+   * gently (strings and choir from their held sound, with no fresh bow or breath); given a `release`, it fades into
+   * the slurred note after it. Otherwise the fade starts where the synth's does and runs on for the instrument's
+   * own release.
+   */
+  private recording(part: string, inst: LoadedInstrument, midi: number, t: number, len: number, shape: NoteShape): void {
+    const c = this.ctx!;
+    const s = nearestSample(inst.samples, midi);
+    const own = NOTE_SHAPES[inst.name];
+    const { peak = 1, end = peak } = shape;
+    const attack = shape.attack ?? own.attack;
+    const hold = t + Math.max(0.06, attack, len - (shape.release ?? RELEASE_S));
+    const silent = shape.release !== undefined ? t + len : hold + own.release;
+
+    const src = c.createBufferSource!();
+    src.buffer = s.buffer;
+    src.playbackRate.value = 2 ** ((midi - s.midi + s.tune) / 12);
+    if (s.loop) {
+      src.loop = true;
+      src.loopStart = s.loop.start;
+      src.loopEnd = s.loop.end;
+    }
+    const env = c.createGain();
+    env.gain.setValueAtTime(0, t);
+    env.gain.linearRampToValueAtTime(peak * s.gain, t + attack);
+    if (end === peak) env.gain.setValueAtTime(peak * s.gain, hold);
+    else env.gain.linearRampToValueAtTime(end * s.gain, hold);
+    env.gain.linearRampToValueAtTime(0, silent);
+    src.connect(env);
+    env.connect(this.gainFor(part));
+    src.onended = () => {
+      this.live.delete(src);
+      src.disconnect();
+      env.disconnect();
+    };
+    src.start(t, shape.attack !== undefined && s.loop ? s.loop.start : s.offset);
+    src.stop(silent + 0.05);
+    this.live.add(src);
+  }
+
   private gainFor(part: string): GainNodeLike {
     let g = this.gains.get(part);
     if (!g) {
@@ -375,7 +437,7 @@ export class SongPlayer {
   }
 }
 
-/** How a note sounds: see `voice`. */
+/** How a note sounds: see `voice` and `recording`. */
 interface NoteShape {
   peak?: number;
   end?: number;

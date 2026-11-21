@@ -3,7 +3,8 @@
  * recommendation) writes dist/sw.js, a service worker that keeps every file
  * of this build on the phone, versioned, so SolfaScores opens offline and each deploy
  * replaces the old files cleanly. Original sheets are kept too: the network
- * first, the saved copy when there's no connection.
+ * first, the saved copy when there's no connection. The player's recorded
+ * instruments (public/sounds) are kept once someone chooses one.
  *
  * Updates wait (no skipWaiting): the app shows "New version ready" and only
  * reloads when someone taps Update, never in the middle of Perform.
@@ -35,8 +36,9 @@ if (!page.includes('interactive-widget')) {
 const { count, size, warnings } = await generateSW({
   globDirectory: 'dist',
   globPatterns: ['**/*.{html,js,css,json,png,ico,svg,ttf,otf,woff,woff2}'],
-  // pdf.js is only for scanning PDFs, which needs a connection anyway: not worth the space on every phone.
-  globIgnores: ['metadata.json', 'sw.js', 'workbox-*.js', 'pdfjs/**', 'ort/**', 'reader/**'],
+  // pdf.js is only for scanning PDFs, which needs a connection anyway: not worth the space on every phone. The
+  // recorded instruments are only for those who choose one (below).
+  globIgnores: ['metadata.json', 'sw.js', 'workbox-*.js', 'pdfjs/**', 'ort/**', 'reader/**', 'sounds/**'],
   swDest: 'dist/sw.js',
   mode: 'production',
   sourcemap: false,
@@ -58,6 +60,17 @@ const { count, size, warnings } = await generateSW({
         cacheName: 'abu-sheets',
         networkTimeoutSeconds: 6,
         expiration: { maxEntries: 300, maxAgeSeconds: 60 * 60 * 24 * 120 },
+        cacheableResponse: { statuses: [200] },
+      },
+    },
+    {
+      // A recorded instrument (src/audio/instruments.ts), kept the first time it's fetched, so it plays without data.
+      // The files never change under the same ?v= (SOUNDS_VERSION), so the saved copy is used first.
+      urlPattern: /\/sounds\/.+\.(?:mp3|json)(?:\?.*)?$/,
+      handler: 'CacheFirst',
+      options: {
+        cacheName: 'abu-sounds',
+        expiration: { maxEntries: 150, maxAgeSeconds: 60 * 60 * 24 * 365, purgeOnQuotaError: true },
         cacheableResponse: { statuses: [200] },
       },
     },

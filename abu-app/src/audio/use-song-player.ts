@@ -4,6 +4,7 @@ import type { ParsedSong } from '@/solfa';
 
 import { getAudioContext, NO_AUDIO_MESSAGE } from './context';
 import { defaultTempo, MAX_TEMPO, MAX_TRANSPOSE, MIN_TEMPO, SongPlayer, type MixSettings } from './engine';
+import { useChosenSound } from './sound-setting';
 
 const TEMPO_STEP = 4;
 
@@ -81,6 +82,9 @@ export function useSongPlayer(song: ParsedSong | null, songKey: number, myPart: 
   useEffect(() => player.setTranspose(transpose), [player, transpose]);
   useEffect(() => player.setLoop(loop), [player, loop]);
   useEffect(() => player.setMix(mix), [player, mix]);
+  // The sound chosen in Me (synth, piano, strings or choir), from the next note.
+  const sound = useChosenSound();
+  useEffect(() => player.setInstrument(sound), [player, sound]);
 
   /** Play (carrying on from a pause), or stop. Call it straight from the tap, so browsers allow the sound. */
   const togglePlay = () => {
