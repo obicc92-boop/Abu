@@ -233,3 +233,41 @@ describe('barNumbers', () => {
     expect(barNumbers([{ part: null, text: 'Glo - ry' }])).toEqual([]);
   });
 });
+
+describe('musical markings in braces', () => {
+  it('aren’t beats or bar lines', () => {
+    expect(barSpans('{p}d :r /{f}m :f |')).toEqual([{ bar: 1, from: -1, to: 17, closed: true, first: 0, beats: 4 }]);
+    expect(barSpans('{M.70}d :- |').map((b) => b.beats)).toEqual([2]);
+    // Whatever is written in one: a "|" in a mark is no bar line, a ":" no beat.
+    expect(barSpans('{a|b}d :r | {♩: 70}m :f |').map((b) => [b.bar, b.from, b.to, b.beats])).toEqual([
+      [1, -1, 10, 2],
+      [2, 10, 24, 2],
+    ]);
+    // A mark alone after the last bar line is no bar, as for the checker.
+    expect(barSpans('d :r | m :f | {fine}').map((b) => b.bar)).toEqual([1, 2]);
+  });
+
+  it('leave the right bars marked in a line with marks in it', () => {
+    const line = ['S  {Andante M. 70}{p}d :r /{cresc}m :f | s :- /- | {rit}d :- /- :- |', 'A  {p}d :t1 /d :d | {mf}m :- /- | d :- /- :- |'].join('\n');
+    const { parsed, shown, marks } = check(line, '4/4');
+    expect(parsed.errors.map((e) => e.message)).toEqual(['Soprano, bar 2 has 3 beats; 4/4 needs 4.', 'Alto, bar 2 has 3 beats; 4/4 needs 4.']);
+    expect(bad(marks[0])).toEqual([{ bar: 2, beats: 3, wrongBeats: true }]);
+    expect(bad(marks[1])).toEqual([{ bar: 2, beats: 3, wrongBeats: true }]);
+    // The parts' bars span the same columns, marks and all.
+    expect(marks[0].bars[0].to).toBe(marks[1].bars[0].to);
+    expect(barNumbers(splitLine(line).map((r, i) => ({ part: r.part, text: shown[i] }))).map((n) => n.bar)).toEqual([1, 2, 3]);
+  });
+});
+
+describe('slurs in round brackets', () => {
+  it('aren’t beats or bar lines', () => {
+    expect(barSpans("(m'.d') :(d'.s) | (s :f |m) :- |").map((b) => [b.bar, b.beats])).toEqual([
+      [1, 2],
+      [2, 2],
+      [3, 2],
+    ]);
+    const { parsed, marks } = check(['S  (d :r /m) :f | (s :- /-) |', 'A  d :t1 /d :d | m :- /- :- |'].join('\n'), '4/4');
+    expect(parsed.errors.map((e) => e.message)).toEqual(['Alto has 8 beats but Soprano has 7.']);
+    expect(marks[0].bars.map((b) => b.beats)).toEqual([4, 3]);
+  });
+});

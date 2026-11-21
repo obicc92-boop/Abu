@@ -54,6 +54,14 @@ export function barSpans(text: string, firstBar = 1): BarSpan[] {
   const end = text.trimEnd().length;
   let from = -1;
   for (let k = 0; k <= text.length; k++) {
+    // A mark ({p}, {Andante M. 70}) is passed over whole: nothing in it is a bar line.
+    if (text[k] === '{') {
+      const close = text.indexOf('}', k);
+      if (close > k && !text.slice(k + 1, close).includes('{')) {
+        k = close;
+        continue;
+      }
+    }
     const atLine = k < text.length && BAR_LINE.test(text[k]);
     if (!atLine && k < text.length) continue;
     const piece = text.slice(from + 1, k);

@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ensureUser } from '../src/domain/groups';
 import { scanAllowance, useScan } from '../src/domain/scan';
-import { checkLine, cleanPage, fixLine, keyName, keyOf, lineText, readHeading, readLine, readLineWords, readPage, readWords, rowsAnswer, timeOf } from '../src/scan';
+import { CHECK_SYSTEM, checkLine, cleanPage, fixLine, keyName, keyOf, LINE_SCHEMA, LINE_SYSTEM, lineText, readHeading, readLine, readLineWords, readPage, readWords, rowsAnswer, tempoOf, tidyMarks, tidySlurs, timeOf } from '../src/scan';
 import { call, signUp } from './helpers';
 
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
@@ -119,13 +119,13 @@ describe('reading with Cloudflare’s reader', () => {
 
   it('reads a sheet’s heading: title, composer, key and time', async () => {
     const { env: withAi, run } = cloudflare('Title: Adam lay ybounen\nComposer: Boris Ord\nKey:\nTime: Allegretto 3/4');
-    expect(await readHeading(withAi, JPEG.buffer, 'image/jpeg')).toEqual({ title: 'Adam lay ybounen', composer: 'Boris Ord', key: '', time: '3/4' });
+    expect(await readHeading(withAi, JPEG.buffer, 'image/jpeg')).toEqual({ title: 'Adam lay ybounen', composer: 'Boris Ord', key: '', time: '3/4', tempo: 'Allegretto' });
     expect(JSON.stringify((run.mock.calls[0] as [string, { messages: { content: unknown }[] }])[1].messages[0].content)).toContain('time signature');
-    // The time and key are found wherever they were put.
+    // The time, key and tempo are found wherever they were put.
     const { env: again } = cloudflare('Title: EKELE MARIA\nComposer: Johnpaul Okwor\nKey: G 3/4 moderato\nTime:');
-    expect(await readHeading(again, JPEG.buffer, 'image/jpeg')).toEqual({ title: 'EKELE MARIA', composer: 'Johnpaul Okwor', key: 'G', time: '3/4' });
+    expect(await readHeading(again, JPEG.buffer, 'image/jpeg')).toEqual({ title: 'EKELE MARIA', composer: 'Johnpaul Okwor', key: 'G', time: '3/4', tempo: 'moderato' });
     const { env: none } = cloudflare('Title: Bless The Lord\nComposer: none\nKey:\nTime: Taize');
-    expect(await readHeading(none, JPEG.buffer, 'image/jpeg')).toEqual({ title: 'Bless The Lord', composer: '', key: '', time: '' });
+    expect(await readHeading(none, JPEG.buffer, 'image/jpeg')).toEqual({ title: 'Bless The Lord', composer: '', key: '', time: '', tempo: '' });
   });
 
   it('finds the key’s note and the time however they’re written', () => {
@@ -152,6 +152,91 @@ describe('reading with Cloudflare’s reader', () => {
   it('shapes an answer with stray text and long part names', () => {
     expect(rowsAnswer('Here is the line:\nSoprano: d :r |\nAlto  t1 :d |\nTenor m :f |', ['S', 'A'])).toBe('S  d :r |\nA  t1 :d |');
   });
+
+  it('is asked to copy the markings printed with a line, and keeps them in their rows', async () => {
+    const { env: withAi, run } = cloudflare('{Andante M. 70}\nS  {p}d :r /m :f | {cresc}s :- /- :- |\nA  d :t1 /d :d | m :- /- :- |');
+    const r = await fixLine(withAi, JPEG.buffer, 'image/jpeg', { parts: ['S', 'A'], time: '4/4', draft: 'S  d :r /m :f | s :- /- :- |\nA  d :t1 /d :d | m :- /- :- |' });
+    // A tempo given on a row of its own above the line goes before the top part's first note.
+    expect(r.text).toBe('S  {Andante M. 70}{p}d :r /m :f | {cresc}s :- /- :- |\nA  d :t1 /d :d | m :- /- :- |');
+    const system = (run.mock.calls[0] as [string, { messages: { role: string; content: string }[] }])[1].messages[0];
+    expect(system.role).toBe('system');
+    expect(system.content).toContain('in braces, just before the note');
+    expect(system.content).toContain('{Andante M. 70}');
+    expect(system.content).toContain('Copy only marks that are printed');
+    expect(system.content).toContain('add the ones printed');
+  });
+
+  it('reads the tempo printed in a heading, as printed', async () => {
+    const { env: withAi, run } = cloudflare('Title: Comfort ye\nComposer: Handel\nKey: Doh is E\nTime: 4/4\nTempo: Larghetto, M. 79');
+    expect(await readHeading(withAi, JPEG.buffer, 'image/jpeg')).toEqual({ title: 'Comfort ye', composer: 'Handel', key: 'E', time: '4/4', tempo: 'Larghetto, M. 79' });
+    expect(JSON.stringify((run.mock.calls[0] as [string, { messages: { content: unknown }[] }])[1].messages[0].content)).toContain('Tempo: the speed, as written');
+    // A reader's guess that isn't a tempo SolfaScores knows is left out; a ♩ read as a J is a ♩.
+    for (const [tempo, want] of [['none', ''], ['4/4', ''], ['Joyfully', ''], ['Andante. M. 70', 'Andante. M. 70'], ['J = 72', '♩ = 72'], ['(M.M. 60)', 'M.M. 60']]) {
+      const { env: again } = cloudflare(`Title: Psalm 23\nComposer:\nKey: F\nTime: 3/4\nTempo: ${tempo}`);
+      expect((await readHeading(again, JPEG.buffer, 'image/jpeg')).tempo).toBe(want);
+    }
+  });
+});
+
+describe('markings in a line, as a reader writes them', () => {
+  it('are told to every line reader, in the prompt and the schema', () => {
+    expect(LINE_SYSTEM).toContain('`{pp}` `{p}` `{mp}` `{mf}` `{f}` `{ff}`');
+    expect(LINE_SYSTEM).toContain('`{cresc}`, `{dim}`, `{rit}`');
+    expect(LINE_SYSTEM).toContain('Braces are not beats');
+    // Haiku and Cloudflare's reader check with the same rules.
+    expect(CHECK_SYSTEM.startsWith(LINE_SYSTEM)).toBe(true);
+    expect(LINE_SCHEMA.properties.rows.items.properties.notes.description).toContain('braces');
+  });
+
+  it('are tidied so nothing in one passes for a beat mark, a bar line or a bridge note', () => {
+    expect(tidyMarks('{p}d :r /{ f }m :f |')).toBe('{p}d :r /{f}m :f |');
+    expect(tidyMarks('{♩ = 70}d :- |')).toBe('{♩ 70}d :- |');
+    expect(tidyMarks('{M.M.=60}d :r | {a | tempo}m :- |')).toBe('{M.M. 60}d :r | {a tempo}m :- |');
+    expect(tidyMarks('{}d :r {p m :f |')).toBe(' d :r p m :f |');
+  });
+
+  it('come through from Claude in each part’s row', async () => {
+    claudeReplies({ rows: [{ part: 'S', notes: '{Andante M. 70}d :r /{mf}m :f | {rit}s :- /- :- |', words: '' }, { part: 'A', notes: '{mf}d :t1 /d :d | m :- /- :- |', words: '' }], doubts: [], key: '' });
+    const line = await readLine(withKey, JPEG.buffer, 'image/jpeg', { parts: ['S', 'A'], time: '4/4' });
+    expect(line.text).toBe('S  {Andante M. 70}d :r /{mf}m :f | {rit}s :- /- :- |\nA  {mf}d :t1 /d :d | m :- /- :- |');
+    // One copied into the words isn't sung.
+    expect(lineText({ rows: [{ part: 'S', notes: 'd :r |', words: '{p} Glo-ry' }] }, ['S'])).toBe('S  d :r |\nW  Glo-ry');
+  });
+
+  it('slurs: every line reader is told to copy them, in round brackets', () => {
+    expect(LINE_SYSTEM).toContain("A slur (notes underlined, or joined by a curve: sung to one syllable) goes in round brackets from its first note to its last: `(m'.d')`, `(s :f |m)`");
+    expect(LINE_SYSTEM).toContain('Copy only slurs that are printed. Brackets are not beats either.');
+    expect(CHECK_SYSTEM).toContain('It usually leaves markings and slurs out: add the ones printed.');
+    expect(LINE_SCHEMA.properties.rows.items.properties.notes.description).toContain('slurs in round brackets');
+  });
+
+  it('slurs: kept whole in each row, a stray bracket dropped so the row still reads', () => {
+    expect(tidySlurs("(m'.d') :(d'.s) |")).toBe("(m'.d') :(d'.s) |");
+    expect(tidySlurs('(s :f |m) :r |')).toBe('(s :f |m) :r |');
+    // One closing none, one left open, one inside another, and a pair around no note.
+    expect(tidySlurs('d :r) |')).toBe('d :r |');
+    expect(tidySlurs('d :(r |')).toBe('d :r |');
+    expect(tidySlurs('((d.r)) :m |')).toBe('(d.r) :m |');
+    expect(tidySlurs('d :( - ) |')).toBe('d : -  |');
+    // A mark's own brackets aren't a slur, and go with tidyMarks.
+    expect(tidySlurs('{Moderato (M. 84)}(d.r) :m |')).toBe('{Moderato (M. 84)}(d.r) :m |');
+    expect(lineText({ rows: [{ part: 'S', notes: '{Moderato (M. 84)}(d.r) :m) |', words: '(Glo-ry) be' }] }, ['S'])).toBe('S  {Moderato M. 84}(d.r) :m |\nW  Glo-ry be');
+  });
+
+  it('slurs: come through from Claude in each part’s row', async () => {
+    claudeReplies({ rows: [{ part: 'S', notes: "(m'.d') :(d'.s) | (s :f | m) :- |", words: 'Glo- ry be' }], doubts: [], key: '' });
+    const line = await readLine(withKey, JPEG.buffer, 'image/jpeg', { parts: ['S'], time: '2/4' });
+    expect(line.text).toBe("S  (m'.d') :(d'.s) | (s :f | m) :- |\nW  Glo- ry be");
+  });
+
+  it('find a tempo in what was read', () => {
+    expect(tempoOf('Andante. M. 70')).toBe('Andante. M. 70');
+    expect(tempoOf('', 'Key: Bb 4 (Moderato)')).toBe('Moderato');
+    expect(tempoOf('Allegro moderato ♩=120')).toBe('Allegro moderato ♩=120');
+    expect(tempoOf('Andante (M. 70)')).toBe('Andante (M. 70)');
+    expect(tempoOf('Key: F 4 J=72')).toBe('♩=72');
+    expect(tempoOf('Slowly', 'Doh is G', '4/4', 'Matthew 70')).toBe('');
+  });
 });
 
 describe('reading with Claude', () => {
@@ -161,6 +246,7 @@ describe('reading with Claude', () => {
       composer: 'K. W. B. Mensah',
       key: 'F',
       time: '2/4',
+      tempo: 'Andante. M. 70',
       lines: [
         { top: 600, bottom: 900, left: 10, right: 790, parts: ['Soprano', 'Alto', 'Tenor', 'Bass'], words_rows: 1 },
         { top: 100, bottom: 400, left: -5, right: 1200, parts: ['S', 'A', 'T', 'B'], words_rows: 1 },
@@ -173,6 +259,7 @@ describe('reading with Claude', () => {
       composer: 'K. W. B. Mensah',
       key: 'F',
       time: '2/4',
+      tempo: 'Andante. M. 70',
       lines: [
         { top: 100, bottom: 400, left: 0, right: 800, parts: ['S', 'A', 'T', 'B'], words: 1 },
         { top: 600, bottom: 900, left: 10, right: 790, parts: ['S', 'A', 'T', 'B'], words: 1 },
@@ -182,6 +269,7 @@ describe('reading with Claude', () => {
     // Haiku finds the lines; Opus is kept for reading lines from scratch.
     expect(request.model).toBe('claude-haiku-5-5');
     expect(request.output_config.format.type).toBe('json_schema');
+    expect(request.output_config.format.schema.required).toContain('tempo');
     expect(request.messages[0].content[0].source).toMatchObject({ type: 'base64', media_type: 'image/jpeg' });
   });
 

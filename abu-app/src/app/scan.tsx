@@ -46,7 +46,7 @@ import { Body, Button, Card, Chip, ErrorText, Kicker, MAX_WIDTH, Page, TopBar } 
 import { setScanDraft } from '@/scan/draft';
 import { forgetScan, listScans, openScan, saveScan, type SavedScan } from '@/scan/saved';
 import { ago, titleFromFile } from '@/scan/unfinished';
-import { joinLines, linesKeys, timeFor } from '@/scan/join';
+import { joinLines, linesKeys, timeFor, withTempo } from '@/scan/join';
 import { bestFree, changedShare, joinLine, keepsParts, namesNotWords, problemsByPart, splitLine, tidyNotes, tidyTitle, withBarsInStep, withWords, wordsOf, wordsPreferring, type LineRow, type LineWords } from '@/scan/line-text';
 import { placeCursor } from '@/lib/field-cursor';
 import { applyKey, type Key, type Selection } from '@/lib/solfa-keys';
@@ -142,6 +142,11 @@ interface Heading {
   composer: string;
   key: string;
   time: string;
+  /**
+   * The tempo as printed in the heading ("Larghetto, M. 79", "Andante. M. 70"), or "": the saved song's text
+   * starts with it, as `tempo: …`. (Not in scans left unfinished before it was read.)
+   */
+  tempo?: string;
 }
 
 /** A chosen file, with a picture of it for the tray (photos only). */
@@ -174,7 +179,7 @@ function Scanner() {
   const [stage, setStage] = useState<Stage>('finding');
   const [done, setDone] = useState({ n: 0, of: 1 });
   const [note, setNote] = useState<string | null>(null);
-  const [heading, setHeading] = useState<Heading>({ title: '', composer: '', key: '', time: '' });
+  const [heading, setHeading] = useState<Heading>({ title: '', composer: '', key: '', time: '', tempo: '' });
   const [lines, setLines] = useState<Line[]>([]);
   const [current, setCurrent] = useState(0);
   const [time, setTime] = useState('4/4');
@@ -399,7 +404,7 @@ function Scanner() {
       const { pages, more } = await loadPages(blobs);
       if (more) setNote(`Only the first ${MAX_PAGES} pages are read at a time.`);
       const found: Line[] = [];
-      let head: Heading = { title: '', composer: '', key: '', time: '' };
+      let head: Heading = { title: '', composer: '', key: '', time: '', tempo: '' };
       const add = async (p: number, box: Box, l: { parts: string[]; words: number; wordRows?: FoundLine['wordRows']; text?: string; lined?: string; draft?: string; key?: string }) => {
         const cut = await cutLine(pages[p], box);
         const text = l.text ?? '';
@@ -432,7 +437,7 @@ function Scanner() {
       const texts = pages.map((p) => (written !== 'hand' && p.text && p.text.pictured <= 0.5 ? p.text : null));
       const typed = texts.some(Boolean) ? readTypedSheet(texts.map((t) => t ?? BLANK_PAGE)) : null;
       const typedLines = typed && !typed.staff ? typed.lines : [];
-      if (typed && typedLines.length) head = { title: typed.title, composer: '', key: typed.key, time: typed.time };
+      if (typed && typedLines.length) head = { title: typed.title, composer: '', key: typed.key, time: typed.time, tempo: typed.tempo };
       setDone({ n: 0, of: pages.length });
       for (let p = 0; p < pages.length; p++) {
         const onPage = typedLines.filter((l) => l.page === p);
@@ -454,13 +459,13 @@ function Scanner() {
             // 3. The last resort: Claude finds the lines.
             const small = await pageForFinding(pages[p]);
             const page = await api.scanPage(small.blob, small.width, small.height);
-            head = { title: head.title || page.title, composer: head.composer || page.composer, key: head.key || page.key, time: head.time || page.time };
+            head = { title: head.title || page.title, composer: head.composer || page.composer, key: head.key || page.key, time: head.time || page.time, tempo: head.tempo || page.tempo || '' };
             onPicture = page.lines.map((l) => ({ box: { top: l.top * small.scale, bottom: l.bottom * small.scale, left: l.left * small.scale, right: l.right * small.scale }, parts: l.parts, words: l.words, wordRows: [] }));
           }
           for (const l of onPicture) await add(p, l.box, l);
-          // The heading above the first page's music (title, composer, key, time), read by Cloudflare's reader:
-          // SolfaScores' model reads only notes. On 51 handwritten pages it found the time on 28, all right, and the key
-          // on 36 of 50, one wrong.
+          // The heading above the first page's music (title, composer, key, time, and the tempo as printed), read by
+          // Cloudflare's reader: SolfaScores' model reads only notes. On 51 handwritten pages it found the time on 28,
+          // all right, and the key on 36 of 50, one wrong. (Not asked for a tempo alone: most sheets print none.)
           if (p === 0 && ai.cloudflare && onPicture.length && (!head.title || !head.key || !head.time)) {
             const h = pages[p].height;
             const top = Math.min(...onPicture.map((l) => l.box.top));
@@ -468,7 +473,7 @@ function Scanner() {
               const cut = await cutLine(pages[p], { left: 0, top: 0, right: pages[p].width, bottom: Math.min(h, Math.max(top + 0.01 * h, 0.12 * h)) });
               URL.revokeObjectURL(cut.url);
               const read = await api.scanHeading(cut.blob);
-              head = { title: head.title || read.title, composer: head.composer || read.composer, key: head.key || read.key, time: head.time || read.time };
+              head = { title: head.title || read.title, composer: head.composer || read.composer, key: head.key || read.key, time: head.time || read.time, tempo: head.tempo || read.tempo || '' };
             } catch {
               // No heading read: the time comes from the bars, and the person can set the key.
             }
@@ -555,7 +560,8 @@ function Scanner() {
     const left = (l: Line) => l.skipped || !l.text.trim();
     const keys = linesKeys(lines.map((l) => ({ text: l.text, key: l.key, left: left(l) })), doh, time);
     const kept = lines.flatMap((l, i) => (left(l) ? [] : [{ text: l.text, key: keys[i].change }]));
-    const solfa = joinLines(kept.map((l) => l.text), time, kept.map((l) => l.key));
+    // The tempo printed in the heading starts the song's text (`tempo: Andante. M. 70`).
+    const solfa = withTempo(joinLines(kept.map((l) => l.text), time, kept.map((l) => l.key)), heading.tempo);
     setScanDraft({ title: tidyTitle(heading.title) || titleFromFile(chosen[0]?.name), composer: heading.composer, doh, time, solfa, sheet: chosen[0] ?? null, scanId: scanId ?? undefined });
     router.push({ pathname: '/song-editor', params: { from: 'scan' } });
   };
@@ -1232,6 +1238,7 @@ function FinishStep(props: { lines: Line[]; heading: Heading; time: string; setT
             <Chip key={t} label={t} on={time === t} onPress={() => props.setTime(t)} />
           ))}
         </View>
+        {heading.tempo ? <Text style={styles.small}>Tempo as printed: {heading.tempo}</Text> : null}
         {attached ? <Text style={styles.small}>The original sheet ({attached}) will be attached to the song.</Text> : null}
       </Card>
       {left ? <Button kind="ghost" label={`Check line ${firstLeft + 1}`} onPress={() => props.onOpen(firstLeft)} /> : null}

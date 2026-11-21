@@ -15,6 +15,7 @@
  */
 import Anthropic from '@anthropic-ai/sdk';
 
+import { TEMPO_WORDS } from '../../abu-app/src/solfa';
 import { AppError, badRequest } from './errors';
 
 /** The strong reader: reads a line from scratch, for lines the cheaper path can't get right. */
@@ -34,7 +35,7 @@ A line of music is one system: the rows of notes for all the parts sung together
 
 For each line of music, in reading order, give its box in pixels of this image: top (just above the first row of notes, including raised octave marks), bottom (just below its last row, including lowered octave marks and its last words row), left and right (including a first column with an upbeat and the table borders). Boxes of different lines must not overlap. Also give the parts of its rows of notes, top to bottom, as S, A, T, B or Solo, and how many rows of words it has.
 
-Also read the heading if there is one: title, composer or arranger, the key (from "Doh is ...", "Key ...") as a note name such as Ab or F#, and the time (such as 4/4) if printed. Use an empty string for anything not printed. Leave out headings, verses printed as text, footers and anything that isn't a line of sol-fa.`;
+Also read the heading if there is one: title, composer or arranger, the key (from "Doh is ...", "Key ...") as a note name such as Ab or F#, the time (such as 4/4) and the tempo as printed (such as "Andante. M. 70"), if printed. Use an empty string for anything not printed. Leave out headings, verses printed as text, footers and anything that isn't a line of sol-fa.`;
 
 const PAGE_SCHEMA = {
   type: 'object',
@@ -43,6 +44,7 @@ const PAGE_SCHEMA = {
     composer: { type: 'string' },
     key: { type: 'string' },
     time: { type: 'string' },
+    tempo: { type: 'string' },
     lines: {
       type: 'array',
       items: {
@@ -60,7 +62,7 @@ const PAGE_SCHEMA = {
       },
     },
   },
-  required: ['title', 'composer', 'key', 'time', 'lines'],
+  required: ['title', 'composer', 'key', 'time', 'tempo', 'lines'],
   additionalProperties: false,
 };
 
@@ -80,6 +82,8 @@ export interface PageReading {
   composer: string;
   key: string;
   time: string;
+  /** The tempo as printed ("Andante. M. 70"), or "". */
+  tempo: string;
   lines: FoundLine[];
 }
 
@@ -100,6 +104,8 @@ SolfaScores' format:
 - A new key written with this line, above it or at its start (\`Key F\`, \`Doh is F\`, \`(F)\`, a key in a box), is given as \`key\`: the note's letter with any sharp or flat (\`F\`, \`B♭\`, \`F♯\`). An empty string if none is written there (the key in the sheet's heading isn't one). Write the bridge notes as well, where there are any.
 - If the line begins with a column before its first bar line (an upbeat), write that column as the row's first bar: \`s | d :r /m :f |\`.
 - Every row has the same number of bars, lined up with the rows above and below. A bar with nothing in it for a part is written with its empty beats, e.g. \` : : : \` for 4 beats.
+- Markings printed over or under a part's row go in that row, in braces, just before the note they're printed over: dynamics \`{pp}\` \`{p}\` \`{mp}\` \`{mf}\` \`{f}\` \`{ff}\` \`{sfz}\`, and \`{cresc}\`, \`{dim}\`, \`{rit}\`, \`{rall}\`, \`{a tempo}\`, as in \`S  {p}d :r /m :f |\`. A tempo printed above the line goes before the top part's first note: \`{Andante M. 70}\`. Copy only marks that are printed. Braces are not beats: they change no beat marks or bar lines.
+- A slur (notes underlined, or joined by a curve: sung to one syllable) goes in round brackets from its first note to its last: \`(m'.d')\`, \`(s :f |m)\`. Copy only slurs that are printed. Brackets are not beats either.
 
 Example of one line of four parts in 4/4:
 S  s1 | d :-.r /m :d | f :m /r :- |
@@ -116,7 +122,11 @@ export const LINE_SCHEMA = {
       type: 'array',
       items: {
         type: 'object',
-        properties: { part: { type: 'string' }, notes: { type: 'string' }, words: { type: 'string' } },
+        properties: {
+          part: { type: 'string' },
+          notes: { type: 'string', description: "The row in SolfaScores sol-fa, with printed markings in braces before their notes ({p}, {Andante M. 70}) and slurs in round brackets ((m'.d'))" },
+          words: { type: 'string' },
+        },
         required: ['part', 'notes', 'words'],
         additionalProperties: false,
       },
@@ -138,7 +148,7 @@ export const LINE_SCHEMA = {
 
 export const CHECK_SYSTEM = `${LINE_SYSTEM}
 
-A small model has already read this line; its reading comes with the picture. It is usually close, but check it bar by bar against the picture and correct every mistake: wrong or missing notes, octave marks, holds, rests, beat marks and bar lines. Keep what it got right exactly as it is. List the bars you corrected or still can't read with confidence as doubts.`;
+A small model has already read this line; its reading comes with the picture. It is usually close, but check it bar by bar against the picture and correct every mistake: wrong or missing notes, octave marks, holds, rests, beat marks and bar lines. It usually leaves markings and slurs out: add the ones printed. Keep what it got right exactly as it is. List the bars you corrected or still can't read with confidence as doubts.`;
 
 export const WORDS_LINE_SYSTEM = `You copy the words (lyrics) of one line of music from a picture of a tonic sol-fa choir sheet (typed or handwritten). The line's notes have been read already and come with the picture, one row per part, top to bottom; the words are printed under the parts' rows of notes.
 
@@ -191,7 +201,7 @@ const PART_NAMES: Record<string, string> = { s: 'S', soprano: 'S', a: 'A', alto:
 export const partOf = (name: string): string | null => PART_NAMES[name.trim().toLowerCase()] ?? null;
 
 /** Keeps boxes inside the picture, drops empty ones and puts them in reading order. */
-export function cleanPage(raw: { title?: string; composer?: string; key?: string; time?: string; lines?: (Partial<FoundLine> & { words_rows?: number })[] }, width: number, height: number): PageReading {
+export function cleanPage(raw: { title?: string; composer?: string; key?: string; time?: string; tempo?: string; lines?: (Partial<FoundLine> & { words_rows?: number })[] }, width: number, height: number): PageReading {
   const clamp = (v: unknown, max: number) => Math.max(0, Math.min(max, Math.round(Number(v) || 0)));
   const lines = (raw.lines ?? [])
     .map((l) => {
@@ -207,7 +217,51 @@ export function cleanPage(raw: { title?: string; composer?: string; key?: string
     .sort((a, b) => a.top - b.top);
   const one = (s?: string) => (s ?? '').replace(/\s+/g, ' ').trim().slice(0, 200);
   const time = one(raw.time).match(/^(\d{1,2})\s*\/\s*(\d{1,2})$/);
-  return { title: one(raw.title), composer: one(raw.composer), key: one(raw.key).slice(0, 3), time: time ? `${time[1]}/${time[2]}` : '', lines };
+  return { title: one(raw.title), composer: one(raw.composer), key: one(raw.key).slice(0, 3), time: time ? `${time[1]}/${time[2]}` : '', tempo: tempoOf(one(raw.tempo)), lines };
+}
+
+/**
+ * A row's markings in braces (`{p}`, `{Andante M. 70}`) tidied, so nothing in one can pass for a beat mark, a bar
+ * line, a bridge note or a slur (`{♩ = 70}` is `{♩ 70}`, which still says 70 a minute); an empty one goes, and so
+ * does a brace left open or never opened.
+ */
+export function tidyMarks(notes: string): string {
+  return notes
+    .replace(/\{([^{}]*)\}/g, (_, inner: string) => {
+      const mark = inner.replace(/[|:/=¦()]/g, ' ').replace(/\s+/g, ' ').trim();
+      return mark ? `\u0000${mark}\u0001` : ' ';
+    })
+    .replace(/[{}]/g, '')
+    .replace(/\u0000/g, '{')
+    .replace(/\u0001/g, '}');
+}
+
+/**
+ * A row's slurs (round brackets around the notes sung to one syllable: `(m'.d')`, `(s :f |m)`) kept whole: a
+ * bracket closing none, one opened inside another, one left open at the row's end, and a pair around no note go,
+ * so the row still reads. (Brackets in a mark were taken out with `tidyMarks`.)
+ */
+export function tidySlurs(notes: string): string {
+  const drop = new Set<number>();
+  let open = -1;
+  for (let k = 0; k < notes.length; k++) {
+    const c = notes[k];
+    if (c === '{') {
+      const close = notes.indexOf('}', k);
+      if (close > k) k = close;
+    } else if (c === '(') {
+      if (open >= 0) drop.add(k);
+      else open = k;
+    } else if (c === ')') {
+      if (open < 0) drop.add(k);
+      else {
+        if (!/[a-z]/.test(notes.slice(open + 1, k).replace(/\{[^{}]*\}/g, '').replace(/x/g, ''))) drop.add(open).add(k);
+        open = -1;
+      }
+    }
+  }
+  if (open >= 0) drop.add(open);
+  return [...notes].map((c, k) => (drop.has(k) ? '' : c)).join('');
 }
 
 /** The reading as SolfaScores text: "S  d :r |", with the words under the first row. */
@@ -215,11 +269,12 @@ export function lineText(raw: { rows?: { part?: string; notes?: string; words?: 
   const out: string[] = [];
   (raw.rows ?? []).forEach((row, i) => {
     const part = partOf(row.part ?? '') ?? parts[i] ?? `P${i + 1}`;
-    let notes = (row.notes ?? '').replace(/\s+/g, ' ').trim().replace(/^\|\s*/, '');
+    let notes = tidySlurs(tidyMarks(row.notes ?? '')).replace(/\s+/g, ' ').trim().replace(/^\|\s*/, '');
     if (notes && !notes.endsWith('|')) notes += ' |';
     out.push(`${part.padEnd(2)} ${notes}`);
     // Each part's own words (Claude), or one row of words for the line under the first part (Cloudflare's reader).
-    const words = (row.words ?? (i === 0 ? raw.words : '') ?? '').replace(/\s+/g, ' ').trim();
+    // (A marking or a slur's bracket copied into the words belongs with the notes, not sung: it goes.)
+    const words = (row.words ?? (i === 0 ? raw.words : '') ?? '').replace(/\{[^{}]*\}/g, ' ').replace(/[()]/g, ' ').replace(/\s+/g, ' ').trim();
     if (words) out.push(`W  ${words}`);
   });
   return out.join('\n');
@@ -236,7 +291,7 @@ export function lineText(raw: { rows?: { part?: string; notes?: string; words?: 
  */
 const CLOUDFLARE = '@cf/mistralai/mistral-small-3.1-24b-instruct';
 
-const FIX_ANSWER = `Answer with only the corrected line: one row per part, in order, each as the part name, two spaces and the notes (for example \`S  s1 | d :-.r /m :d |\`), then a row \`W  \` and the words. No other text.`;
+const FIX_ANSWER = `Answer with only the corrected line: one row per part, in order, each as the part name, two spaces and the notes with their markings and slurs (for example \`S  s1 | d :-.r /m :d |\`), then a row \`W  \` and the words. No other text.`;
 const WORDS_PROMPT = `This picture is one row of words (the lyrics) from a tonic sol-fa choir sheet. Copy the words exactly as printed, left to right, keeping hyphens between syllables. Leave out a part's name printed at the left edge (S, A, T, B, Soprano...) and bar numbers. Answer with only those words, nothing else. If there are no words, answer with nothing.`;
 
 /** Whether each reader can be used: the app tries them in this order. */
@@ -269,14 +324,15 @@ async function askCloudflare(env: Env, image: ArrayBuffer, type: ImageType, prom
 export function rowsAnswer(answer: string, parts: string[]): string {
   const rows: { part: string; notes: string }[] = [];
   let words = '';
+  // A tempo given on a row of its own above the line ("{Andante M. 70}") goes before the top part's first note.
+  let above = '';
   for (const raw of answer.split('\n')) {
-    const m = raw
-      .trim()
-      .replace(/^`+|`+$/g, '')
-      .match(/^(Solo|Soprano|Alto|Tenor|Bass|S|A|T|B|W)\b[:.]?\s*(.*)$/i);
+    const line = raw.trim().replace(/^`+|`+$/g, '');
+    if (!rows.length && /^(?:\{[^{}]*\}\s*)+$/.test(line)) above += line;
+    const m = line.match(/^(Solo|Soprano|Alto|Tenor|Bass|S|A|T|B|W)\b[:.]?\s*(.*)$/i);
     if (!m) continue;
     if (m[1].toUpperCase() === 'W') words ||= m[2].trim();
-    else if (rows.length < parts.length) rows.push({ part: m[1], notes: m[2] });
+    else if (rows.length < parts.length) rows.push({ part: m[1], notes: rows.length ? m[2] : above + m[2] });
   }
   return lineText({ rows, words }, parts);
 }
@@ -311,11 +367,12 @@ export async function readWords(env: Env, image: ArrayBuffer, type: ImageType): 
     .slice(0, 400);
 }
 
-const HEADING_PROMPT = `This picture is the top of a tonic sol-fa choir sheet, above the music (the first row of the music may show at the bottom). Copy what is written there, in exactly these four lines:
+const HEADING_PROMPT = `This picture is the top of a tonic sol-fa choir sheet, above the music (the first row of the music may show at the bottom). Copy what is written there, in exactly these five lines:
 Title: the song's title
 Composer: who wrote or arranged it
 Key: the key, as written (for example "Doh is G" or "Key F")
 Time: the time signature, as written (for example 3/4, 4/4, 6/8, 2/4 or C)
+Tempo: the speed, as written (for example "Andante. M. 70", "Allegro" or "♩ = 72")
 Leave the rest of a line empty if that isn't written on the sheet. No other text.`;
 
 /** A sheet's heading as read: what's missing is "". */
@@ -326,6 +383,30 @@ export interface Heading {
   key: string;
   /** As "3/4". */
   time: string;
+  /** The tempo as printed: "Larghetto, M. 79", "Andante. M. 70", "Allegro". */
+  tempo: string;
+}
+
+/** A metronome mark: "M. 70", "M.M. 70", "MM = 70", "M = 70", "♩ = 70", and "J = 72" (a ♩ read as a J). */
+const METRONOME = String.raw`(?:\bM\.\s*M\.?|\bMM\b\.?|\bM\.|\bM(?=\s*=)|♩|𝅘𝅥|\bJ(?=\s*=))\s*=?\s*\d{2,3}(?!\d)`;
+/** A tempo word SolfaScores knows the speed of (src/solfa/expressions.ts), and a second one after it ("Allegro moderato"). */
+const TEMPO_WORD = `\\b(?:${Object.keys(TEMPO_WORDS).join('|')})\\b(?:\\s+(?:${Object.keys(TEMPO_WORDS).join('|')})\\b)?`;
+const TEMPO_PRINTED = new RegExp(`${TEMPO_WORD}(?:[\\s.,;:(–—-]{0,4}${METRONOME})?|${METRONOME}`, 'i');
+
+/**
+ * The tempo as printed, from the first of `texts` that has one: a tempo word ("Andante", "Allegro moderato"),
+ * a metronome mark ("M. 70", "♩ = 72"), or both ("Larghetto, M. 79"); "" if none. Only words SolfaScores
+ * knows the speed of, so a reader's guess ("Joyful", "4/4") isn't taken for one.
+ */
+export function tempoOf(...texts: string[]): string {
+  for (const text of texts) {
+    const m = (text ?? '').match(TEMPO_PRINTED);
+    if (!m) continue;
+    let t = m[0].replace(/[\s.,;:(–—-]+$/, '').replace(/\bJ(\s*=)/, '♩$1');
+    if (t.includes('(') && !t.includes(')')) t += ')';
+    return t.slice(0, 60);
+  }
+  return '';
 }
 
 /** "Key", "Doh is" and the like, then the key's note standing alone ("Key: by Jude" has none). */
@@ -347,7 +428,7 @@ export function timeOf(answer: string): string {
 }
 
 /**
- * A sheet's heading (title, composer, key, time) from a picture of the top
+ * A sheet's heading (title, composer, key, time, tempo) from a picture of the top
  * of its first page, with Cloudflare's reader. On 51 handwritten pages it
  * found the time on 28 (all right; the rest are written stacked or faint)
  * and the key on 37 of 50 (one wrong).
@@ -356,7 +437,8 @@ export async function readHeading(env: Env, image: ArrayBuffer, type: ImageType)
   const answer = await askCloudflare(env, image, type, HEADING_PROMPT, null, 200);
   const line = (name: string) => (answer.match(new RegExp(`^\\s*\\**${name}\\**\\s*:\\s*(.*)$`, 'im'))?.[1] ?? '').replace(/^["“'`*]+|["”'`*]+$/g, '').trim();
   const clean = (t: string) => (/^(?:none|n\/a|-|unknown|not (?:written|shown|given))\.?$/i.test(t) ? '' : t.slice(0, 120));
-  return { title: clean(line('Title')), composer: clean(line('Composer')), key: keyOf(answer, line('Key')), time: timeOf(answer) };
+  // The tempo on its own line, or put with the key or the time ("Key: G 3/4 moderato"); never from the title.
+  return { title: clean(line('Title')), composer: clean(line('Composer')), key: keyOf(answer, line('Key')), time: timeOf(answer), tempo: tempoOf(line('Tempo'), line('Key'), line('Time')) };
 }
 
 /* ---------- Asking Claude ---------- */

@@ -268,7 +268,7 @@ app.post('/scan/words', signedIn, async (c) => {
   return c.json({ words: await readWords(c.env, image, type) });
 });
 
-/** Reads a sheet's heading (title, composer, key, time) from a picture of the top of its first page, with Cloudflare's reader. */
+/** Reads a sheet's heading (title, composer, key, time, tempo) from a picture of the top of its first page, with Cloudflare's reader. */
 app.post('/scan/heading', signedIn, async (c) => {
   cloudflareReady(c.env);
   checkImage(contentType(c), Number(c.req.header('content-length') ?? 1) || 1);

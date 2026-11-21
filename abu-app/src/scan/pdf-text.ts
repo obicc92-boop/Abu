@@ -13,9 +13,18 @@
  * - Many sheets print a line's upbeat in the first column of the next line,
  *   leaving the last beat of the line before it empty. It goes back there.
  *
+ * - Musical markings (owner's request, 21 November 2026): a tempo printed in
+ *   the heading ("Andante. M. 70") is the song's; one printed over a later
+ *   line starts that line (`{Allegro}`); dynamics typed among the notes
+ *   ("mf", "p", "cresc.") are kept in braces before the note after them.
+ * - Notes underlined (a slur: sung to one syllable) are put in brackets,
+ *   `(m'.d')`, from a short line drawn just under them (`withSlurs`).
+ *
  * `pageText` takes what it needs from a pdf.js page; the rest is plain logic.
  * Positions are in PDF points, from the page's top left.
  */
+import { TEMPO_WORDS } from '@/solfa';
+
 
 /** A character on the page: its left and right edges, its baseline and type size, and any octave mark found for it. */
 export interface PdfChar {
@@ -40,6 +49,8 @@ export interface PageText {
   segs: Seg[];
   /** Long horizontal lines, which may separate one line of music from the next. */
   across: number[];
+  /** Short lines drawn across (left, right, and how far down): a slur's underline, perhaps. */
+  unders?: [number, number, number][];
   /** Characters in fonts that draw staff notation. */
   music: number;
   /**
@@ -62,6 +73,8 @@ export interface TypedSheet {
   title: string;
   key: string;
   time: string;
+  /** The tempo printed in the heading, as printed ("Andante. M. 70", "Larghetto, M. 79"), or "". */
+  tempo: string;
   /**
    * Each line as SolfaScores text (S, A, T, B rows with W rows of words), with its parts and where it's printed;
    * `lined` is the same with the parts' bar lines lined up by where they're printed, when that differs; `key`,
@@ -158,6 +171,7 @@ export async function pageText(page: PdfJsPage, OPS: PdfOps): Promise<PageText> 
   // Drawn lines: the table's bar lines and the rules between lines of music.
   const segs: Seg[] = [];
   const across: number[] = [];
+  const unders: [number, number, number][] = [];
   const long = 0.3 * vp.width;
   let pictured = 0;
   const chars: PdfChar[] = [];
@@ -299,6 +313,7 @@ export async function pageText(page: PdfJsPage, OPS: PdfOps): Promise<PageText> 
             const [p, q] = [pts[k - 1], pts[k]];
             if (Math.abs(p[0] - q[0]) < 1 && Math.abs(p[1] - q[1]) > 4) segs.push([(p[0] + q[0]) / 2, Math.min(p[1], q[1]), Math.max(p[1], q[1]), g.lineWidth * scale()]);
             else if (Math.abs(p[1] - q[1]) < 1 && Math.abs(p[0] - q[0]) > long) across.push((p[1] + q[1]) / 2);
+            else if (Math.abs(p[1] - q[1]) < 1 && Math.abs(p[0] - q[0]) > 2) unders.push([Math.min(p[0], q[0]), Math.max(p[0], q[0]), (p[1] + q[1]) / 2]);
           }
         }
         if (isFill) {
@@ -308,12 +323,13 @@ export async function pageText(page: PdfJsPage, OPS: PdfOps): Promise<PageText> 
           const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
           if (x1 - x0 < 2.5 && y1 - y0 > 4) segs.push([(x0 + x1) / 2, y0, y1, x1 - x0]);
           else if (y1 - y0 < 2.5 && x1 - x0 > long) across.push((y0 + y1) / 2);
+          else if (y1 - y0 < 2.5 && x1 - x0 > 2) unders.push([x0, x1, (y0 + y1) / 2]);
         }
       }
     }
   });
 
-  const result = { width: vp.width, height: vp.height, segs, across: across.sort((a, b) => a - b), pictured };
+  const result = { width: vp.width, height: vp.height, segs, across: across.sort((a, b) => a - b), unders, pictured };
   if (chars.some((c) => c.c !== ' ') || music) return { ...result, chars, music };
   return { ...result, ...(await textItems(page, at, fontOf)) };
 }
@@ -658,7 +674,18 @@ function withRests(texts: string[]): string[] {
 }
 
 const DASHES: Record<string, string> = { '–': '-', '—': '-', '−': '-', '‒': '-', '’': "'", 'ʼ': "'" };
-const DYNAMICS = /(^|[^a-z'])(?:mf|mp|pp|ff|fff|ppp|p|sfz|cresc\.?|dim\.?|rit\.?|rall\.?|accel\.?)(?![a-z])/g;
+const DYNAMICS = /(^|[^a-z'])(mf|mp|pp|ff|fff|ppp|p|sfz|cresc\.?|dim\.?|rit\.?|rall\.?|accel\.?)(?![a-z])/g;
+
+const DYNAMIC_ONLY = /^(?:p{1,3}|mp|mf|f{1,3}|sfz?|fz|fp|cresc\.?|dim\.?|decresc\.?|rit\.?|rall\.?|accel\.?)$/;
+/** Whether a row has nothing but dynamics in it ("mf", "p   cresc."), printed between the parts' rows: neither notes nor words. */
+export function dynamicsOnly(text: string): boolean {
+  const tokens = text.split(/\s+/).filter(Boolean);
+  // A lone "f" (or "f f") may be a fah: left as it was.
+  return tokens.length > 0 && tokens.every((t) => DYNAMIC_ONLY.test(t)) && tokens.some((t) => t !== 'f');
+}
+
+/** A marking in braces, with nothing in it that could pass for a beat mark, a bar line, a bridge note or a slur (`♩ = 70` is `♩ 70`). */
+const markOf = (text: string) => `{${text.replace(/[|:/=¦┆{}()]/g, ' ').replace(/\s+/g, ' ').trim()}}`;
 
 /** Labels printed among the notes ("CH", "Refrain", "Bars", a part's letter): never notes, which are small letters. */
 const LABELS = /(^|[\s|:/¦┆])(?:CHR?|CHORUS|Chorus|VERSE|Verse|REFRAIN|Refrain|Ref\.|SOLO|Tutti|TUTTI|ALL|Unison|UNISON|Bars|bars|Organ|organ|Interlude|interlude|Intro|INTRO|[SATB][12]?)(?:\.|:)?(?=[\s|:/¦┆]|$)/g;
@@ -675,9 +702,13 @@ export function toAbu(text: string, drawnBars: boolean): string {
   t = t.replace(/^\s*(?:¦\s*)?(?:Solo|Soprano|Sop|Alto|Tenor|Ten|Bass|[SATB][12]?)\b[.:]?\s*/, '');
   t = t.replace(/\|/g, drawnBars ? '/' : '|').replace(/¦/g, '|').replace(/┆/g, '/');
   t = t.replace(/\.{2,}/g, '.').replace(/,{2,}/g, ','); // a dot or comma printed several times over
+  // A slur closes after its last note's octave mark ("d)'" is d', "t)1" is t1).
+  t = t.replace(/\)(?:\s*(['’ʼ]+|,)|([12]))(?=[\s:./|)]|$)/g, (_, mark = '', low = '') => `${mark}${low})`);
   t = t.replace(/\s+'/g, "'"); // "d '" is d'
-  t = t.replace(/([a-z]),(?=[\s:./|]|$)/g, (_, n: string) => `${n}1`); // "t," (a comma after a note, not before one) is the low t1
-  t = t.replace(DYNAMICS, '$1 ');
+  t = t.replace(/([a-z]),(?=[\s:./|)]|$)/g, (_, n: string) => `${n}1`); // "t," (a comma after a note, not before one) is the low t1
+  // Dynamics typed among the notes are kept, in braces before the note after them ("mf r" is {mf}r); SolfaScores
+  // doesn't play "accel." yet, so it goes.
+  t = t.replace(DYNAMICS, (_, pre: string, dyn: string) => (dyn.startsWith('accel') ? `${pre} ` : `${pre} ${markOf(dyn.replace(/\.$/, ''))}`));
   t = t.replace(LABELS, '$1 '); // "CH", "Verse", a part's letter: never notes, which are small letters
   // Words printed among the notes ("4 bars for organ"): letters no sol-fa syllables make.
   t = t.replace(/(^|[\s|:/])([A-Za-z']{2,})(?=[\s|:/]|$)/g, (m, pre: string, w: string) => (NOTE_RUN.test(w) ? m : `${pre} `));
@@ -686,6 +717,8 @@ export function toAbu(text: string, drawnBars: boolean): string {
   t = t.replace(/\b([dfrlstm])\s+([ae])\b/g, '$1$2'); // "t a" spaced out is ta
   t = t.replace(/\b([a-z]{1,2})11(?![\d'])/g, (_, n: string) => `${n}2`); // two low marks: two octaves down
   t = t.replace(/\s*\|\s*/g, ' | ').replace(/\s*\/\s*/g, ' / ').trim();
+  t = t.replace(/\}\s+(?=[a-z])/g, '}'); // a mark goes just before its note
+  t = t.replace(/\(((?:\s|\{[^{}]*\})*)\)/g, '$1'); // a slur around no note (an underlined "mf") goes
   t = t.replace(/^(\|\s*)+/, ''); // double borders at the start
   t = t.replace(/(\|\s*)+$/, '').trim();
   return t ? `${t} |` : t;
@@ -695,8 +728,32 @@ const KEY = /(?:doh\s*(?:is|=|–|-|:)?|key\s*(?:of|:|=)?)\s*([A-G])\s*(♭|♯|
 const TIME = /(\d{1,2})\s*\/\s*(\d{1,2})/;
 const SUPERSUB: Record<string, string> = Object.fromEntries([...'⁰¹²³⁴⁵⁶⁷⁸⁹'].map((c, i) => [c, String(i)]).concat([...'₀₁₂₃₄₅₆₇₈₉'].map((c, i) => [c, String(i)])));
 
-/** The key ("Doh is G", "Key Eb") and time ("Time 3/4") printed in a sheet's heading. */
-export function headerInfo(lines: string[]): { key: string; time: string } {
+/** A metronome mark as printed: "M. 70", "M.M. 70", "MM = 70", "M = 70", "♩ = 70". */
+const METRONOME = String.raw`(?:\bM\.\s*M\.?|\bMM\b\.?|\bM\.|\bM(?=\s*=)|♩|𝅘𝅥)\s*=?\s*\d{2,3}(?!\d)`;
+const TEMPO_NAMES = Object.keys(TEMPO_WORDS).join('|');
+/** A tempo word SolfaScores knows the speed of (and a second, "Allegro moderato"), with a metronome mark after it or not; or the mark alone. */
+const TEMPO_PRINTED = new RegExp(String.raw`\b(?:${TEMPO_NAMES})\b(?:\s+(?:${TEMPO_NAMES})\b)?(?:[\s.,;:(–—-]{0,4}${METRONOME})?|${METRONOME}`, 'gi');
+
+/**
+ * A tempo printed in a line of text, as printed ("Andante. M. 70", "Larghetto, M. 79", "♩ = 72"), or "". A
+ * tempo word is printed with a capital (a small one is running text), and "Grave" only with a metronome mark or
+ * on its own (a title's "The Empty Grave" isn't one).
+ */
+export function tempoPrinted(text: string): string {
+  for (const m of text.matchAll(TEMPO_PRINTED)) {
+    const t = m[0];
+    if (/^[a-z]/.test(t)) continue;
+    const metronome = new RegExp(METRONOME, 'i').test(t);
+    if (!metronome && /^grave$/i.test(t) && /[A-Za-z]/.test(text.replace(t, ''))) continue;
+    let out = t.replace(/[\s.,;:(–—-]+$/, '');
+    if (out.includes('(') && !out.includes(')')) out += ')';
+    return out;
+  }
+  return '';
+}
+
+/** The key ("Doh is G", "Key Eb"), time ("Time 3/4") and tempo ("Andante. M. 70") printed in a sheet's heading. */
+export function headerInfo(lines: string[]): { key: string; time: string; tempo: string } {
   const text = lines.join(' ').replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉]/g, (c) => SUPERSUB[c]);
   let key = '';
   const k = text.match(KEY);
@@ -707,7 +764,8 @@ export function headerInfo(lines: string[]): { key: string; time: string } {
   const w = text.search(/time/i);
   const m = (w >= 0 ? text.slice(w + 4) : text).match(TIME);
   const time = m && ['2', '4', '8', '16'].includes(m[2]) ? `${m[1]}/${m[2]}` : '';
-  return { key, time };
+  const tempo = lines.map(tempoPrinted).find(Boolean) ?? '';
+  return { key, time, tempo };
 }
 
 interface System {
@@ -720,6 +778,18 @@ interface System {
   x1: number;
   /** A new key printed above it (after the heading): the key, and where along the line it's printed. */
   key?: { name: string; x: number };
+  /** A tempo printed above it (after the heading), as printed: "Allegro", "M. 120". */
+  tempo?: string;
+}
+
+/**
+ * A tempo printed on a row of its own after the heading ("Allegro", "Andante. M. 70"), perhaps with a new key:
+ * the tempo, or "" when the row has words as well ("Chorus, Allegro" is left as it was).
+ */
+function tempoRow(text: string): string {
+  const tempo = tempoPrinted(text);
+  if (!tempo) return '';
+  return /[A-Za-z]{2,}/.test(text.replace(tempo, ' ').replace(NEW_KEY, ' ')) ? '' : tempo;
 }
 
 /**
@@ -794,6 +864,9 @@ function mergeUpbeats(systems: System[]): void {
     const firsts = cRows.map((i) => barsOf(cur.rows[i][1]));
     const lasts = pRows.map((i) => barsOf(prev.rows[i][1]));
     if (firsts.some((f, i) => f.length < 2 || !lasts[i].length)) continue;
+    // A dynamic typed alone between bar lines ("| {p} |") is no bar to move or move into.
+    const marksOnly = (bar: string) => !bar.replace(/\{[^{}]*\}/g, '').trim();
+    if (firsts.some((f) => marksOnly(f[0])) || lasts.some((l) => marksOnly(l[l.length - 1]))) continue;
     const b = beatsOf(firsts[0][0]).length;
     if (b >= bpb || firsts.some((f) => beatsOf(f[0]).length !== b)) continue;
     const merged: string[] = [];
@@ -882,18 +955,87 @@ function drawnLines(notes: { y: number; main: number }[], segs: Seg[], x0: numbe
   return through.map(([s]) => [s[0], s[1], s[2], accents.has(s) ? '┆' : '¦']);
 }
 
+/**
+ * The short lines drawn across a page, run together where they touch (some programs draw an underline in
+ * pieces, one for each run of text), and not a table's rules: those meet a drawn line down at an end, or run
+ * on into the next cell.
+ */
+function underlines(page: PageText): [number, number, number][] {
+  const lines = [...(page.unders ?? [])].sort((a, b) => a[2] - b[2] || a[0] - b[0]);
+  const joined: [number, number, number][] = [];
+  for (const [x0, x1, y] of lines) {
+    const prev = joined.find((j) => Math.abs(j[2] - y) < 0.6 && x0 <= j[1] + 1.5 && x1 >= j[0] - 1.5);
+    if (prev) {
+      prev[0] = Math.min(prev[0], x0);
+      prev[1] = Math.max(prev[1], x1);
+    } else joined.push([x0, x1, y]);
+  }
+  const atEnd = (x: number, y: number) => page.segs.some(([sx, top, bottom]) => Math.abs(sx - x) < 2 && top <= y + 2 && bottom >= y - 2);
+  return joined.filter(([x0, x1, y]) => !atEnd(x0, y) && !atEnd(x1, y));
+}
+
+/** A note's first letter in a row ("d", the "f" of "fe"), as against the second letter of "fe" or "ta". */
+const noteStart = (c: PdfChar) => /^[drmfslt]$/.test(c.c);
+const isLetter = (c: PdfChar) => /^[A-Za-z]$/.test(c.c);
+
+/**
+ * A row of notes' items with each slur printed under it in brackets (owner's request, 21 November 2026: slurs are
+ * needed to read sol-fa): a line drawn just under two notes or more of the row, from the first note under it to
+ * the last, as a typist underlines the notes sung to one syllable (`m'.d'` underlined is `(m'.d')`). On the
+ * owner's typed sheets these are short lines a little under the notes' baseline; a table's rules are left out
+ * (`underlines`), and so is one under a single note, under a word or a dynamic, or as long as a bar of eight
+ * beats. On the 81 typed sample sheets (21 November 2026) it found slurs on 411 of 1,082 lines (51 sheets),
+ * changed nothing else in any line and gave the checker no new problems; rows of words with as many syllables
+ * as notes that take one rose from 144 to 242 of 918 on those lines (344 rows nearer, 158 further off, mostly
+ * where a row's words are another part's or a chant's).
+ */
+function withSlurs(items: Item[], row: PdfChar[], y: number, main: number, lines: [number, number, number][]): Item[] {
+  const ink = row.filter((c) => c.c !== ' ');
+  // The row's runs of letters set together: notes ("d", "fe", "rm") or a word ("Chorus", "descant").
+  const runOf = new Map<PdfChar, number>();
+  const runs: string[] = [];
+  ink.forEach((c, i) => {
+    if (!isLetter(c)) return;
+    const prev = ink[i - 1];
+    if (!(prev && isLetter(prev) && c.x0 - prev.x1 < 0.3 * main)) runs.push('');
+    runs[runs.length - 1] += c.c;
+    runOf.set(c, runs.length - 1);
+  });
+  const added: Item[] = [];
+  let taken = -Infinity;
+  for (const [x0, x1, at] of lines) {
+    if (at <= y || at > y + 0.45 * main || x1 - x0 > 8 * main) continue;
+    const inside = ink.filter((c) => (c.x0 + c.x1) / 2 >= x0 && (c.x0 + c.x1) / 2 <= x1);
+    // Only notes underlined (and rests): a word, a label ("Chorus") or a dynamic ("mf") underlined with them isn't a slur.
+    const notNotes = (run: string) => run !== 'x' && (!NOTE_RUN.test(run) || (run !== 'f' && DYNAMIC_ONLY.test(run)));
+    if (inside.some((c) => runOf.has(c) && notNotes(runs[runOf.get(c)!]))) continue;
+    const under = inside.filter(noteStart);
+    if (under.length < 2 || under[0].x0 <= taken) continue;
+    const last = under[under.length - 1];
+    // The note's second letter ("fe", "ta") is part of it.
+    const next = ink[ink.indexOf(last) + 1];
+    const end = next && /^[ea]$/.test(next.c) && next.x0 - last.x1 < 0.3 * main ? next.x1 : last.x1;
+    added.push([under[0].x0 - 0.02, under[0].x0 - 0.01, '('], [end + 0.01, end + 0.02, ')']);
+    taken = end;
+  }
+  if (!added.length) return items;
+  return [...items, ...added].sort((a, b) => a[0] + a[1] - (b[0] + b[1]));
+}
+
 /** The heading lines and each line of music (rows of notes and words), page by page. */
 export function readSystems(pages: PageText[]): { header: string[]; systems: System[]; printed: TypedLine[]; music: number } {
   const header: string[] = [];
   const systems: System[] = [];
   let music = 0;
-  // Keys printed after the heading, with where they're printed: each goes to the line of music just below it.
+  // Keys and tempos printed after the heading, with where they're printed: each goes to the line of music just below it.
   const keys: { name: string; x: number; y: number; page: number }[] = [];
+  const tempos: { text: string; y: number; page: number }[] = [];
   pages.forEach((page, number) => {
     music += page.music;
     if (!page.chars.length) return;
     const { rows, base, size } = rowsOf(page.chars);
     const { segs, across } = page;
+    const lines = underlines(page).sort((a, b) => a[0] - b[0]);
     let cur: System | null = null;
     let lastY: number | null = null;
     const pageSystems: System[] = [];
@@ -906,6 +1048,8 @@ export function readSystems(pages: PageText[]): { header: string[]; systems: Sys
       if (label < 0) return; // a part's name on a row of its own
       const r = label ? whole.slice(label) : whole;
       const plain = rowText(r, y, main, []);
+      // Dynamics printed on a row of their own ("mf", "p"): neither notes ("mf" reads as two) nor words. Not placed yet.
+      if (dynamicsOnly(plain)) return;
       const gap = lastY !== null ? y - lastY : 1e9;
       const ink = r.filter((c) => c.c !== ' ');
       const solfa = isSolfa(plain);
@@ -913,6 +1057,8 @@ export function readSystems(pages: PageText[]): { header: string[]; systems: Sys
       // A key printed after the heading (the heading's is the song's): kept for the line below it, and not words.
       const keyHere = !solfa && (systems.length || pageSystems.length) ? keyPrinted(plain, whole) : null;
       if (keyHere) keys.push({ ...keyHere, y, page: number });
+      const tempoHere = !solfa && (systems.length || pageSystems.length) ? tempoRow(plain) : '';
+      if (tempoHere) tempos.push({ text: tempoHere, y, page: number });
       if (solfa) {
         if (!cur || gap > 2.6 * main) {
           cur = { rows: [], ys: [], main, page: number, x0: 1e9, x1: 0 };
@@ -925,7 +1071,7 @@ export function readSystems(pages: PageText[]): { header: string[]; systems: Sys
         cur.rows.push(['n', '']);
         cur.ys.push(y);
         lastY = y;
-      } else if (cur && gap <= 2.6 * main && WORDISH.test(plain) && !/^[\d\s]+$/.test(plain) && !TEMPO.test(plain)) {
+      } else if (cur && gap <= 2.6 * main && WORDISH.test(plain) && !/^[\d\s]+$/.test(plain) && !TEMPO.test(plain) && !tempoHere) {
         if (!keyHere) {
           cur.rows.push(['w', plain]);
           cur.ys.push(y);
@@ -940,7 +1086,7 @@ export function readSystems(pages: PageText[]): { header: string[]; systems: Sys
       const notes = noteRows.get(s) ?? [];
       const drawn = drawnLines(notes, segs, s.x0, s.x1, s.main);
       const ruled = notes.map((n) => drawn.some((d) => crosses([d[0], d[1], d[2]], n.y, n.main)));
-      const items = notes.map((n, k) => rowItems(n.row, n.y, n.main, ruled[k] ? drawn : []));
+      const items = notes.map((n, k) => withSlurs(rowItems(n.row, n.y, n.main, ruled[k] ? drawn : []), n.row, n.y, n.main, lines));
       const texts = notes.map((n, k) => toAbu(itemsText(items[k], n.main), ruled[k]));
       // In a ruled row a typed "|" is a half-bar line; in a plain one it's a bar line (as is a tall one, "¦").
       const aligned = alignBars(items, ruled.map((r) => (r ? (x: string) => x === '¦' : (x: string) => x === '|' || x === '¦')), s.main);
@@ -955,6 +1101,11 @@ export function readSystems(pages: PageText[]): { header: string[]; systems: Sys
     const below = systems.filter((s) => s.page === k.page && firstNotes(s) > k.y).sort((a, b) => firstNotes(a) - firstNotes(b))[0];
     if (below && firstNotes(below) - k.y < 4 * below.main) below.key = { name: k.name, x: k.x };
   }
+  for (const t of tempos) {
+    const firstNotes = (s: System) => Math.min(...s.ys.filter((_, i) => s.rows[i][0] === 'n'));
+    const below = systems.filter((s) => s.page === t.page && firstNotes(s) > t.y).sort((a, b) => firstNotes(a) - firstNotes(b))[0];
+    if (below && firstNotes(below) - t.y < 4 * below.main) below.tempo = t.text;
+  }
   const printed: TypedLine[] = systems.map((s) => ({
     page: s.page,
     box: [s.x0 - 14, Math.min(...s.ys) - 1.2 * s.main, s.x1 + 14, Math.max(...s.ys) + 0.7 * s.main],
@@ -967,7 +1118,7 @@ export function readSystems(pages: PageText[]): { header: string[]; systems: Sys
 /** A typed sheet read from its pages' text: the heading, and each line in SolfaScores' format with where it's printed. */
 export function readTypedSheet(pages: PageText[]): TypedSheet {
   const { header, systems, printed, music } = readSystems(pages);
-  const { key, time } = headerInfo(header);
+  const { key, time, tempo } = headerInfo(header);
   const title = header.find((h) => /[A-Za-z]{3}/.test(h))?.trim() ?? '';
   const lines = systems.map((s, i) => {
     const n = s.rows.filter(([k]) => k === 'n').length;
@@ -979,9 +1130,11 @@ export function readTypedSheet(pages: PageText[]): TypedSheet {
     let words = 0;
     for (const [kind, text, lined] of s.rows) {
       if (kind === 'n') {
+        // A tempo printed over the line starts the top part's row (it's for every part).
+        const first = k === 0 && s.tempo ? `${markOf(s.tempo)}` : '';
         part = names[k++];
-        out.push(`${part.padEnd(2)} ${text.replace(/ {2,}/g, ' ')}`);
-        alt.push(`${part.padEnd(2)} ${(lined ?? text).replace(/ {2,}/g, ' ').trim()}`);
+        out.push(`${part.padEnd(2)} ${first}${text.replace(/ {2,}/g, ' ')}`);
+        alt.push(`${part.padEnd(2)} ${first}${(lined ?? text).replace(/ {2,}/g, ' ').trim()}`);
       } else if (part) {
         const w = `W  ${text.replace(/-\s+/g, '-').trim()}`;
         out.push(w);
@@ -996,5 +1149,5 @@ export function readTypedSheet(pages: PageText[]): TypedSheet {
     const key = s.key && s.key.x < s.x0 + 0.35 * (s.x1 - s.x0) && !text.includes('=') ? s.key.name : undefined;
     return { page: s.page, box: printed[i].box, parts: names, words, text, ...(lined !== text ? { lined } : {}), ...(key ? { key } : {}) };
   });
-  return { title, key, time, lines, staff: music > 50 };
+  return { title, key, time, tempo, lines, staff: music > 50 };
 }

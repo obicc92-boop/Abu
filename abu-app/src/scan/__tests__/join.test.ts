@@ -2,7 +2,7 @@ import { describe, expect, it } from '@jest/globals';
 
 import { parseSolfa } from '@/solfa';
 
-import { guessBeats, joinLines, linesKeys, timeFor } from '../join';
+import { guessBeats, joinLines, linesKeys, timeFor, withTempo } from '../join';
 
 const LINE_1 = ['S  s1 | d :r /m :f | s :- /- : |', 'W  O come let us a-dore', 'A  s1 | d :t1 /d :d | d :- /- : |'].join('\n');
 const LINE_2 = ['S  m | r :d /t1 :d | d :- /- :- |', 'W  him the new born king', 'A  d | t1 :l1 /s1 :s1 | s1 :- /- :- |'].join('\n');
@@ -84,5 +84,41 @@ describe('key changes in a scanned sheet', () => {
 
   it('puts a key line before a line that changes key', () => {
     expect(joinLines(['S  d :r |', 'S  m :f |'], '2/4', [undefined, 'F'])).toBe('S  d :r |\n\nDoh is F\nS  m :f |');
+  });
+});
+
+describe('musical markings in a scanned sheet', () => {
+  it('moves an upbeat back with its mark, and only as many words as it has notes', () => {
+    const marked = LINE_2.replace('S  m |', 'S  {Andante}m |').replace('A  d |', 'A  {mf}d |');
+    const text = joinLines([LINE_1, marked], '4/4');
+    expect(text.split('\n').slice(0, 3)).toEqual(['S  s1 | d :r /m :f | s :- /- :{Andante}m |', 'W  O come let us a-dore him', 'A  s1 | d :t1 /d :d | d :- /- :{mf}d |']);
+    expect(text.split('\n')[5]).toBe('W  the new born king');
+    expect(parseSolfa(text, { time: '4/4' }).errors).toEqual([]);
+    // A mark alone after a line's last bar line is no bar to move an upbeat into.
+    const after = joinLines([LINE_1.replace('A  s1 | d :t1 /d :d | d :- /- : |', 'A  s1 | d :t1 /d :d | d :- /- : | {p} |'), LINE_2], '4/4');
+    expect(after).toContain('A  s1 | d :t1 /d :d | d :- /- : | {p} |');
+    expect(after).toContain('S  m | r :d /t1 :d | d :- /- :- |');
+  });
+
+  it('moves an upbeat back with only as many words as its notes take: a slur’s are sung to one', () => {
+    const slurred = LINE_2.replace('S  m |', 'S  (m.f) |').replace('A  d |', 'A  (d.r) |');
+    const text = joinLines([LINE_1, slurred], '4/4');
+    expect(text.split('\n').slice(0, 2)).toEqual(['S  s1 | d :r /m :f | s :- /- :(m.f) |', 'W  O come let us a-dore him']);
+    expect(text.split('\n')[5]).toBe('W  the new born king');
+    expect(parseSolfa(text, { time: '4/4' }).errors).toEqual([]);
+  });
+
+  it('starts the song with the tempo printed in its heading', () => {
+    const song = joinLines([LINE_1, LINE_2], '4/4');
+    const text = withTempo(song, 'Larghetto, M. 79');
+    expect(text.split('\n').slice(0, 3)).toEqual(['tempo: Larghetto, M. 79', '', 'S  s1 | d :r /m :f | s :- /- :m |']);
+    const parsed = parseSolfa(text, { time: '4/4' });
+    expect(parsed.meta.tempo).toEqual({ text: 'Larghetto, M. 79', bpm: 79 });
+    expect(parsed.errors).toEqual([]);
+    expect(parseSolfa(withTempo(song, 'Andante'), { time: '4/4' }).meta.tempo?.bpm).toBe(76);
+    // None printed, or none SolfaScores can play: the song as it is.
+    expect(withTempo(song, '')).toBe(song);
+    expect(withTempo(song, undefined)).toBe(song);
+    expect(withTempo(song, 'Joyfully')).toBe(song);
   });
 });

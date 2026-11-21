@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 
-import { alignedRows, barColumns, changedShare, freeRepair, joinLine, keepsParts, namesNotWords, noteColumns, problemsByPart, splitLine, tidyNotes, tidyTitle, withBarLinesInStep, withBarsInStep, withBridgeNotes, withFullEmptyBars, withGapsAsBars, withHalfBarsAsBars, withoutNameColumn, withRestingEdges, withShortBarsJoined, withSpacedBeats, withWords, wordsAsSpaced, wordsOf, wordsPreferring, wordsUnderNotes } from '../line-text';
+import { alignedRows, barColumns, bestFree, changedShare, freeRepair, joinLine, keepsParts, namesNotWords, noteColumns, problemsByPart, splitLine, tidyNotes, tidyTitle, withBarLinesInStep, withBarsInStep, withBridgeNotes, withFullEmptyBars, withGapsAsBars, withHalfBarsAsBars, withoutNameColumn, withRestingEdges, withShortBarsJoined, withSpacedBeats, withWords, wordsAsSpaced, wordsOf, wordsPreferring, wordsUnderNotes } from '../line-text';
 import { parseSolfa, splitWords } from '@/solfa';
 
 describe('tidyNotes', () => {
@@ -401,5 +401,151 @@ describe('a row of words to type in', () => {
       free = at + w.length;
     });
     expect(splitWords(spaced)).toEqual(syllables);
+  });
+});
+
+describe('musical markings in braces', () => {
+  // Marks ({p}, {cresc}, {Andante M. 70}) are written just before the note they start on; the checker takes them
+  // out before counting beats, and so must every helper here: never a beat, a note or a bar line, and kept in place.
+  const passes = (time: string) => (t: string) => !parseSolfa(t, { time }).errors.length;
+
+  it('are tidied as written, not as notes', () => {
+    expect(tidyNotes('{p}d . r :{Andante  M. 70} m |')).toBe('{p}d.r :{Andante M. 70} m |');
+    expect(tidyNotes('{ cresc }d :r |')).toBe('{cresc}d :r |');
+    // One still being typed is left as it is.
+    expect(tidyNotes('d :r {Andante M. 7')).toBe('d :r {Andante M. 7');
+  });
+
+  it('take their room in the columns but are never split, and their "|" or ":" is no bar line or beat', () => {
+    const rows = [
+      { part: 'S', text: '{p}d :r /{f}m :f | {tempo: 70}s :- |' },
+      { part: 'A', text: 'd :t1 /d :d | m :- |' },
+    ];
+    const shown = alignedRows(rows);
+    // Only spaces are added, and each bar line is in the same column in both rows.
+    expect(shown.map((t) => t.replace(/\s/g, ''))).toEqual(rows.map((r) => r.text.replace(/\s/g, '')));
+    expect(barColumns(shown[0])).toEqual(barColumns(shown[1]));
+    expect(barColumns('{a|b}d :r |')).toEqual([10]);
+    // A part's notes are where the notes are, after their marks.
+    expect(noteColumns('{p}d :r /{f}m :f |')).toEqual([3, 6, 12, 15]);
+    expect(wordsUnderNotes('O come', '{Andante M. 70}d :r |').map((w) => w.at)).toEqual([15, 18]);
+  });
+
+  it('aren’t beats when beat marks a typist left out are put back', () => {
+    const line = (bar: string) => `S  d :r :m :f | ${bar} | s :- :- :- |`;
+    expect(withSpacedBeats(line('{Andante M. 70}d :r m :f'), 4)).toBe(line('{Andante M. 70}d :r :m :f'));
+    // A space after a mark isn't a gap between notes; one before a mark is.
+    expect(withSpacedBeats(line('{p} d r :m :f'), 4)).toBe(line('{p} d :r :m :f'));
+    expect(withSpacedBeats(line('d {p}r :m :f'), 4)).toBe(line('d :{p}r :m :f'));
+    expect(withSpacedBeats(line('d :r :m :f {rit}'), 4)).toBeNull();
+    expect(withGapsAsBars('S  {p}s :- : m : r d : - : - : {rit}m.s |', 4)).toBe('S  {p}s :- : m : r | d : - : - : {rit}m.s |');
+  });
+
+  it('stay where they are when bar lines are put back in step', () => {
+    const READ = [
+      "S  {Andante M. 70}l :-.l :s.l | m :m :- /{cresc}l :-.d' :t.l /s :- :- |",
+      'A  {p}m :m :r.d | t1 :t1 :- /d :m :r.d /t1 :- :- |',
+      "T  d' :d' :t.l | l :s :- /l :m :f.m /{rit}r :- :- |",
+      'B  l :d :r.r | m /m :- /l :d :r.r /s1 :- :- |',
+    ].join('\n');
+    const FIXED = [
+      "S  {Andante M. 70}l :-.l :s.l | m :m :- | {cresc}l :-.d' :t.l | s :- :- |",
+      'A  {p}m :m :r.d | t1 :t1 :- | d :m :r.d | t1 :- :- |',
+      "T  d' :d' :t.l | l :s :- | l :m :f.m | {rit}r :- :- |",
+      'B  l :d :r.r | m /m :- | l :d :r.r | s1 :- :- |',
+    ].join('\n');
+    expect(withBarsInStep(READ, 3)).toBe(FIXED);
+    expect(passes('3/4')(FIXED)).toBe(true);
+    const line = ['S  {mf}d :r /m :f | s :- /- :- |', 'A  {mf}d :t1 /d :r / m :- /- :- |', 'T  {mf}m :s /s :l | s :- /- :- |', 'B  {mf}d :s1 /l1 :f1 | {dim}d :- /- :- |'].join('\n');
+    expect(withBarLinesInStep(line, 4)).toBe(line.replace('A  {mf}d :t1 /d :r / m', 'A  {mf}d :t1 /d :r | m'));
+    expect(freeRepair(line, passes('4/4'), 4)).toBe(withBarLinesInStep(line, 4));
+  });
+
+  it('don’t count as a bar on their own, or stop a repair', () => {
+    // A mark after the last bar line ({fine}) is no bar, as for the checker.
+    const line = ['S  d :r :m / f :s :l | s :- :- | {fine}', 'A  d :t1 :d / r :m :f | m :- :- |'].join('\n');
+    expect(withBarsInStep(line, 3)).toBe(['S  d :r :m | f :s :l | s :- :- | {fine}', 'A  d :t1 :d | r :m :f | m :- :- |'].join('\n'));
+  });
+
+  it('go along with parts resting, empty bars filled out and bridge notes', () => {
+    expect(withRestingEdges('S  {Andante M. 70}s1 | d :r /m :f |\nA  {p}d :t1 /d :d |')).toBe('S  {Andante M. 70}s1 | d :r /m :f |\nA  x | {p}d :t1 /d :d |');
+    expect(withFullEmptyBars('S  {p}d :r /m :f | : | s :- /- :- |', 4)).toBe('S  {p}d :r /m :f | : : : | s :- /- :- |');
+    expect(withBridgeNotes('S  d :r /{p}sd :r |\nA  m :f /{p}m1l1 :t1 |')).toBe('S  d :r /{p}s=d :r |\nA  m :f /{p}m1=l1 :t1 |');
+    expect(withHalfBarsAsBars('S  {p}d :r / m :f / s :l |', 2)).toBe('S  {p}d :r | m :f | s :l |');
+  });
+
+  it('don’t make a reader’s answer look as if it lost a part’s notes, or changed them', () => {
+    const reading = 'S  d :r /m :f |\nA  d :t1 /d :d |';
+    const answer = 'S  {p}d :{cresc}r /{f}m :{ff}f |\nA  {p}d :t1 /d :d |';
+    expect(keepsParts(answer, reading)).toBe(true);
+    expect(changedShare(answer, reading)).toBe(0);
+    expect(changedShare('S  {Andante M. 70}d :r /m :s |\nA  d :t1 /d :d |', reading)).toBeCloseTo(1 / 16);
+    expect(bestFree([answer], passes('4/4'), 4)).toBe(answer);
+  });
+
+  it('leave the checker’s problems with the part they’re about', () => {
+    const line = 'S  {p}d :r /m :f | {cresc}s :- /- | {rit}d :- /- :- |\nA  d :t1 /d :d | m :- /- :- | d :- /- :- |';
+    const { byPart } = problemsByPart(
+      parseSolfa(line, { time: '4/4' }).errors.map((e) => e.message),
+      ['S', 'A'],
+    );
+    expect(byPart.S).toEqual(['Bar 2 has 3 beats; 4/4 needs 4.']);
+  });
+});
+
+describe('slurs in round brackets', () => {
+  // Notes a sheet underlines or joins with a curve are sung to one syllable: `(m'.d')`, `(s :f |m)`. Brackets
+  // aren't beats or notes, and only the slur's first note takes a syllable.
+  const passes = (time: string) => (t: string) => !parseSolfa(t, { time }).errors.length;
+
+  it('give a syllable only to a slur’s first note, as the checker pairs them', () => {
+    expect(noteColumns("(m'.d') :(d'.s) |")).toEqual([1, 10]);
+    expect(noteColumns('(s :f |m) :r |')).toEqual([1, 11]);
+    expect(noteColumns('( d.r ) :{p}(m :f) |')).toEqual([2, 13]);
+    const notes = "(m'.d') :d' | s :- |";
+    expect(wordsUnderNotes('Glo-ry be', notes)).toEqual([
+      { text: 'Glo-', at: 1 },
+      { text: 'ry', at: 9 },
+      { text: 'be', at: 14 },
+    ]);
+    expect(wordsAsSpaced('Glo-ry be', notes)).toBe(' Glo-    ry   be');
+    // The same syllables on the same notes as the checker gives them.
+    const song = parseSolfa(`S  ${notes}\nW  Glo-ry be`, { time: '2/4' });
+    expect(song.events.S.filter((e) => e.lyric).map((e) => [e.text, e.lyric])).toEqual([
+      ["m'", 'Glo-'],
+      ["d'", 'ry'],
+      ['s', 'be'],
+    ]);
+  });
+
+  it('leave the rows lined up as before, and are no bar line', () => {
+    const rows = [
+      { part: 'S', text: "(m'.d') :(d'.s) | (s :f |m) :- |" },
+      { part: 'A', text: 'd :t1 | d :r | m :- |' },
+    ];
+    const shown = alignedRows(rows);
+    expect(shown.map((t) => t.replace(/\s/g, ''))).toEqual(rows.map((r) => r.text.replace(/\s/g, '')));
+    expect(barColumns(shown[0])).toEqual(barColumns(shown[1]));
+    expect(tidyNotes("(m' . d') : ( d'.s ) |")).toBe("(m'.d') : ( d'.s ) |");
+  });
+
+  it('stay on their notes through the free repairs', () => {
+    const line = (bar: string) => `S  d :r :m :f | ${bar} | s :- :- :- |`;
+    expect(withSpacedBeats(line('(s l) :t :d'), 4)).toBe(line('(s :l) :t :d'));
+    // An upbeat in a slur is still notes.
+    const upbeat = ['S  (s /d) :r :m /f :- :s | l :- :- |', 'A  m /m :m :d /r :- :m | f :- :- |'].join('\n');
+    expect(withBarsInStep(upbeat, 3)).toBe(['S  (s | d) :r :m | f :- :s | l :- :- |', 'A  m | m :m :d | r :- :m | f :- :- |'].join('\n'));
+    expect(passes('3/4')(withBarsInStep(upbeat, 3) ?? '')).toBe(true);
+    expect(withBridgeNotes('S  d :r /(sd :r) |\nA  m :f /(m1l1 :t1) |')).toBe('S  d :r /(s=d :r) |\nA  m :f /(m1=l1 :t1) |');
+    const four = ['S  (d :r /m) :f | s :- /- :- |', 'A  d :t1 /d :r / m :- /- :- |', 'T  m :s /s :l | s :- /- :- |', 'B  d :s1 /l1 :f1 | d :- /- :- |'].join('\n');
+    expect(freeRepair(four, passes('4/4'), 4)).toBe(four.replace('A  d :t1 /d :r / m', 'A  d :t1 /d :r | m'));
+  });
+
+  it('don’t make a reader’s answer look as if it lost or changed notes', () => {
+    const reading = 'S  d :r /m :f |\nA  d :t1 /d :d |';
+    const answer = 'S  (d :r) /(m :f) |\nA  (d :t1) /d :d |';
+    expect(keepsParts(answer, reading)).toBe(true);
+    expect(changedShare(answer, reading)).toBe(0);
+    expect(bestFree([answer], passes('4/4'), 4)).toBe(answer);
   });
 });

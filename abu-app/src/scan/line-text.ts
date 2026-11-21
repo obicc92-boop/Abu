@@ -30,9 +30,59 @@ export function joinLine(rows: LineRow[]): string {
   return rows.map((r) => (r.part ? `${r.part.padEnd(2)} ${r.text.trim()}` : `W  ${r.text.trim()}`)).join('\n');
 }
 
-/** A row of notes tidied: single spaces, none around "." and ",". */
+/**
+ * Musical markings in braces, written just before the note they start on (`{p}d`, `{cresc}`, `{Andante M. 70}`:
+ * src/solfa/expressions.ts). The checker takes them out before it counts beats, so here too a mark is never a
+ * beat, a note or a bar line, whatever is written in it, and a repair keeps each one where it was. (A slur's
+ * round brackets, `(m'.d')`, stay on the notes they're written against: each repair keeps them there.)
+ */
+const MARKS = /\{[^{}]*\}/g;
+const HAS_MARK = /\{[^{}]*\}/;
+/** While a line is repaired, each mark is a run of stand-ins as long as itself: one to start it, then the rest. */
+const HIDDEN = '\uE001';
+const HIDDEN_MORE = '\uE000';
+const HIDDEN_RUN = /\uE001\uE000*/g;
+
+/** The text with each mark hidden behind its stand-ins, and the marks, to put back in order with `marksBack`. */
+function hideMarks(text: string): { text: string; marks: string[] } {
+  const marks: string[] = [];
+  const hidden = text.replace(MARKS, (m) => {
+    marks.push(m);
+    return HIDDEN + HIDDEN_MORE.repeat(m.length - 1);
+  });
+  return { text: hidden, marks };
+}
+
+/** The marks put back in order; null if one was lost or split. */
+function marksBack(text: string, marks: string[], each: (mark: string) => string = (m) => m): string | null {
+  let k = 0;
+  const out = text.replace(HIDDEN_RUN, () => (k < marks.length ? each(marks[k++]) : '\uFFFF'));
+  return k === marks.length && !/[\uE000\uE001\uFFFF]/.test(out) ? out : null;
+}
+
+/**
+ * A repair made with the line's marks hidden (each one solid, with no spaces or beat marks in it to take for a
+ * beat), then put back where they were. Null if the repair makes no change, or if it lost a mark.
+ */
+function keepingMarks(text: string, repair: (hidden: string) => string | null): string | null {
+  const h = hideMarks(text);
+  if (HAS_MARK.test(h.text)) return null; // a mark inside a mark: left alone
+  const fixed = repair(h.text);
+  return fixed === null ? null : marksBack(fixed, h.marks);
+}
+
+/** The text with each mark blanked out by spaces, so the columns of what's left stay where they are. */
+const blankMarks = (text: string) => text.replace(MARKS, (m) => ' '.repeat(m.length));
+
+/** A row of notes tidied: single spaces, none around "." and ","; a mark's own words as written. */
 export function tidyNotes(text: string): string {
-  return text.replace(/\s+/g, ' ').replace(/\s*([.,=])\s*/g, '$1').trim();
+  // A mark still being typed, open at the end, is kept as it is too.
+  const open = text.match(/\{[^{}]*$/)?.[0] ?? '';
+  const rest = text.slice(0, text.length - open.length);
+  const tidy = (t: string) => t.replace(/\s+/g, ' ').replace(/\s*([.,=])\s*/g, '$1');
+  const h = hideMarks(rest);
+  const notes = marksBack(tidy(h.text), h.marks, (m) => `{${m.slice(1, -1).replace(/\s+/g, ' ').trim()}}`) ?? tidy(rest);
+  return `${notes}${open.replace(/\s+/g, ' ')}`.trim();
 }
 
 /**
@@ -42,9 +92,12 @@ export function tidyNotes(text: string): string {
  * are added, so a row shown this way reads the same as before.
  */
 export function alignedRows(rows: LineRow[]): string[] {
-  const split = rows.map((r) => {
-    if (!r.part) return null;
-    const pieces = tidyNotes(r.text).split('|');
+  // Each mark hidden as a solid run as long as itself (so it's never split, and its width still counts), and put back after.
+  const hidden = rows.map((r) => (r.part ? hideMarks(tidyNotes(r.text)) : null));
+  const split = rows.map((r, i) => {
+    const h = hidden[i];
+    if (!r.part || !h) return null;
+    const pieces = h.text.split('|');
     const closed = pieces.length > 1 && !pieces[pieces.length - 1].trim();
     const bars = (closed ? pieces.slice(0, -1) : pieces).map((bar) => {
       const parts = bar.split(/([:/])/);
@@ -70,18 +123,21 @@ export function alignedRows(rows: LineRow[]): string[] {
   return rows.map((r, i) => {
     const s = split[i];
     const bars = shown[i];
-    if (!s || !bars) return r.text;
-    return `${bars.join(' | ')}${s.closed ? ' |' : ''}`.trimEnd();
+    const h = hidden[i];
+    if (!s || !bars || !h) return r.text;
+    return marksBack(`${bars.join(' | ')}${s.closed ? ' |' : ''}`.trimEnd(), h.marks) ?? r.text;
   });
 }
 
 /**
  * Where a row's bar lines ("|") are, in characters from its start. Check the
  * reading draws each one as a line through the parts' rows, as on the sheet.
+ * (Not in a mark.)
  */
 export function barColumns(text: string): number[] {
   const out: number[] = [];
-  for (let k = 0; k < text.length; k++) if (text[k] === '|') out.push(k);
+  const shown = blankMarks(text);
+  for (let k = 0; k < shown.length; k++) if (shown[k] === '|') out.push(k);
   return out;
 }
 
@@ -110,12 +166,25 @@ export function wordsPreferring(theirs: LineWords[], mine: LineWords[]): LineWor
   return [...theirs, ...mine.filter((w) => w.text.trim() && !theirs.some((t) => t.after === w.after))].sort((a, b) => a.after - b.after);
 }
 
-/** The character columns where a row's notes are written, left to right (not its holds or rests). */
+/**
+ * The character columns where a row's notes that take a syllable are written, left to right: not its holds,
+ * rests or marks, nor the notes under a slur after its first (`(m'.d')` is sung to one syllable, as the checker
+ * pairs them), so each syllable goes under the note it's sung on.
+ */
 export function noteColumns(text: string): number[] {
   const out: number[] = [];
-  for (const m of text.matchAll(/[^\s:|/.,]+/g)) {
-    const t = m[0];
-    if (t.includes('=') || parseNote(t)) out.push(m.index ?? 0);
+  // As the checker reads a slur: its first note takes the syllable, the rest until it closes don't.
+  let slur: 'none' | 'first' | 'in' = 'none';
+  for (const m of blankMarks(text).matchAll(/[^\s:|/.,]+/g)) {
+    const raw = m[0];
+    const opens = (raw.match(/^\(+/)?.[0] ?? '').length;
+    const t = raw.slice(opens).replace(/\)+$/, '');
+    if (opens) slur = 'first';
+    if (t.includes('=') || parseNote(t)) {
+      if (slur !== 'in') out.push((m.index ?? 0) + opens);
+      if (slur === 'first') slur = 'in';
+    }
+    if (raw.endsWith(')')) slur = 'none';
   }
   return out;
 }
@@ -191,6 +260,7 @@ export function withWords(text: string, words: LineWords[]): string {
  * it only if the line then passes the checker (an upbeat column already does).
  */
 export function withoutNameColumn(text: string): string | null {
+  if (HAS_MARK.test(text)) return keepingMarks(text, (t) => withoutNameColumn(t));
   const rows = splitLine(text);
   const notes = rows.filter((r) => r.part);
   if (notes.length < 2) return null;
@@ -206,8 +276,11 @@ function barsOfRow(text: string): { bars: string[]; closed: boolean } {
   return { bars: closed ? pieces.slice(0, -1) : pieces, closed };
 }
 const beatCount = (bar: string) => bar.split(/[:/]/).length;
-/** A space between two notes or holds inside a beat (not one around "." or ","). */
-const GAP = /(?<=[^\s.,:/|])\s+(?=[^\s.,:/|])/g;
+/**
+ * A space between two notes or holds inside a beat (not one around "." or ","). With the marks hidden, a mark
+ * goes with the note right after it: a space after one, or before one with no note after it, isn't a gap.
+ */
+const GAP = /(?<=[^\s.,:/|\uE000\uE001])\s+(?=\uE001?\uE000*[^\s.,:/|\uE000\uE001])/g;
 
 /**
  * The line with beat marks a typist left out: "d : m : r -.s1" for
@@ -217,6 +290,7 @@ const GAP = /(?<=[^\s.,:/|])\s+(?=[^\s.,:/|])/g;
  * Null if no bar changes. The caller keeps it only if the line then passes.
  */
 export function withSpacedBeats(text: string, beatsPerBar: number): string | null {
+  if (HAS_MARK.test(text)) return keepingMarks(text, (t) => withSpacedBeats(t, beatsPerBar));
   const rows = splitLine(text);
   const noteBars = rows.filter((r) => r.part).map((r) => barsOfRow(r.text).bars);
   let changed = false;
@@ -246,6 +320,7 @@ export function withSpacedBeats(text: string, beatsPerBar: number): string | nul
  * part changes.
  */
 export function withRestingEdges(text: string): string | null {
+  if (HAS_MARK.test(text)) return keepingMarks(text, (t) => withRestingEdges(t));
   const rows = splitLine(text);
   const notes = rows.filter((r) => r.part).map((r) => barsOfRow(r.text));
   const most = Math.max(0, ...notes.map((n) => n.bars.length));
@@ -281,6 +356,7 @@ export function withRestingEdges(text: string): string | null {
  * bar changes.
  */
 function withBarsCut(text: string, beatsPerBar: number, cut: (bar: string, j: number) => string[], upbeat: boolean): string | null {
+  if (HAS_MARK.test(text)) return keepingMarks(text, (t) => withBarsCut(t, beatsPerBar, cut, upbeat));
   let changed = false;
   const fixed = splitLine(text).map((r) => {
     if (!r.part) return r;
@@ -331,6 +407,7 @@ export function withHalfBarsAsBars(text: string, beatsPerBar: number): string | 
  * (boxes.ts). Null if no bars join.
  */
 export function withShortBarsJoined(text: string, beatsPerBar: number): string | null {
+  if (HAS_MARK.test(text)) return keepingMarks(text, (t) => withShortBarsJoined(t, beatsPerBar));
   const rows = splitLine(text);
   const parts = rows.filter((r) => r.part).map((r) => barsOfRow(r.text));
   if (!parts.length) return null;
@@ -379,6 +456,7 @@ export function withGapsAsBars(text: string, beatsPerBar: number): string | null
  * as many as the longest part has there. Null if no part changes.
  */
 export function withFullEmptyBars(text: string, beatsPerBar: number): string | null {
+  if (HAS_MARK.test(text)) return keepingMarks(text, (t) => withFullEmptyBars(t, beatsPerBar));
   const rows = splitLine(text);
   const notes = rows.filter((r) => r.part).map((r) => barsOfRow(r.text).bars);
   let changed = false;
@@ -407,11 +485,20 @@ export function withFullEmptyBars(text: string, beatsPerBar: number): string | n
  */
 function checkedBars(text: string): { pieces: string[]; bars: number[] } {
   const pieces = text.split('|');
-  return { pieces, bars: pieces.flatMap((p, k) => (p.trim() ? [k] : [])) };
+  return { pieces, bars: pieces.flatMap((p, k) => (blank(p) ? [] : [k])) };
 }
 
-/** Whether every mark in a piece of a row is a note, a hold or a rest (not a part's name read as notes). */
-const readsAsNotes = (piece: string) => piece.split(/[\s:|/.,=-]+/).every((t) => !t || t === 'x' || parseNote(t));
+/** Whether a piece of a row has nothing in it but marks (hidden or not), which the checker doesn't count as a bar. */
+const blank = (piece: string) => !piece.replace(HIDDEN_RUN, '').replace(MARKS, '').trim();
+
+/** Whether every mark in a piece of a row is a note, a hold or a rest (not a part's name read as notes); musical markings and slurs aside. */
+const readsAsNotes = (piece: string) =>
+  piece
+    .replace(HIDDEN_RUN, ' ')
+    .replace(MARKS, ' ')
+    .replace(/[()]/g, ' ')
+    .split(/[\s:|/.,=-]+/)
+    .every((t) => !t || t === 'x' || parseNote(t));
 
 /**
  * Whether two marks this many beats apart are too close to be a bar line and
@@ -447,6 +534,7 @@ function cutAfter(bar: string, ends: number[]): string[] {
  * even if the line still fails. Null if no bar changes.
  */
 export function withBarsInStep(text: string, beatsPerBar: number): string | null {
+  if (HAS_MARK.test(text)) return keepingMarks(text, (t) => withBarsInStep(t, beatsPerBar));
   const rows = splitLine(text);
   const parts = rows.flatMap((r) => (r.part ? [checkedBars(r.text)] : []));
   if (parts.length < 2 || beatsPerBar < 1) return null;
@@ -499,7 +587,7 @@ function beatMarks(text: string): { beats: number; marks: { mark: string; at: nu
   let lines: number[] = [];
   let at = 0;
   for (const piece of text.split('|')) {
-    if (piece.trim()) {
+    if (!blank(piece)) {
       if (beats) marks.push({ mark: '|', at: lines });
       for (let k = 0; k < piece.length; k++) if (piece[k] === ':' || piece[k] === '/') marks.push({ mark: piece[k], at: [at + k] });
       beats += beatCount(piece);
@@ -527,6 +615,7 @@ function beatMarks(text: string): { beats: number; marks: { mark: string; at: nu
  * Null if no part changes, or if the parts' beats don't add up alike.
  */
 export function withBarLinesInStep(text: string, beatsPerBar: number): string | null {
+  if (HAS_MARK.test(text)) return keepingMarks(text, (t) => withBarLinesInStep(t, beatsPerBar));
   const rows = splitLine(text);
   const parts = rows.flatMap((r, i) => (r.part ? [{ row: i, ...beatMarks(r.text) }] : []));
   if (parts.length < 3 || parts.some((p) => p.beats !== parts[0].beats)) return null;
@@ -575,7 +664,7 @@ export function withBarLinesInStep(text: string, beatsPerBar: number): string | 
 }
 
 /** Two notes run together with nothing between them (`sd`, `s1d`, `d'f`): how SolfaScores' own reader writes a bridge note. */
-const RUN_TOGETHER = new RegExp(`(^|[\\s:|/.,])(${SYLLABLE_PATTERN})('{1,2}|[12])?(${SYLLABLE_PATTERN})('{1,2}|[12])?(?=$|[\\s:|/.,])`, 'g');
+const RUN_TOGETHER = new RegExp(`(^|[\\s:|/.,(\uE000])(${SYLLABLE_PATTERN})('{1,2}|[12])?(${SYLLABLE_PATTERN})('{1,2}|[12])?(?=$|[\\s:|/.,)])`, 'g');
 
 /**
  * Bridge notes, where the key changes (ˢd, the old name small and raised before the new): SolfaScores' own
@@ -588,6 +677,7 @@ const RUN_TOGETHER = new RegExp(`(^|[\\s:|/.,])(${SYLLABLE_PATTERN})('{1,2}|[12]
  * "bridge"). Null if there are none, or they don't agree.
  */
 export function withBridgeNotes(text: string): string | null {
+  if (HAS_MARK.test(text)) return keepingMarks(text, (t) => withBridgeNotes(t));
   const rows = splitLine(text);
   const moves = new Set<number>();
   let found = 0;
@@ -663,7 +753,7 @@ export function bestFree(readings: string[], passes: (t: string) => boolean, bea
 function notesByPart(text: string): string[][] {
   return splitLine(text)
     .filter((r) => r.part)
-    .map((r) => r.text.split(/[\s:|/.,=-]+/).filter((t) => parseNote(t)));
+    .map((r) => r.text.replace(MARKS, ' ').replace(/[()]/g, ' ').split(/[\s:|/.,=-]+/).filter((t) => parseNote(t)));
 }
 
 /**
@@ -699,7 +789,8 @@ const SYMBOL = /(?:de|re|fe|se|le|ta|ra|ma|lo|[drmfsltx])[',_1-9¹₁]*|[:|/.,\-
  * ten symbols or more though they added up (16 November 2026).
  */
 export function changedShare(answer: string, reading: string): number {
-  const symbols = (t: string) => splitLine(t).flatMap((r) => (r.part ? (r.text.match(SYMBOL) ?? []) : []));
+  // Musical markings aren't counted: an AI that copies the marks printed (which SolfaScores' own reader can't) changed no notes.
+  const symbols = (t: string) => splitLine(t).flatMap((r) => (r.part ? (r.text.replace(MARKS, ' ').match(SYMBOL) ?? []) : []));
   const a = symbols(reading);
   const b = symbols(answer);
   if (!a.length) return b.length ? 1 : 0;

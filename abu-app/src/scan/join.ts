@@ -7,7 +7,9 @@
  * checker only allows at the very start of a song, so the upbeat goes back
  * where it's sung, with its words.
  */
-import { keyFromSemitone, parseKey, parseSolfa, parseTime, splitWords } from '@/solfa';
+import { keyFromSemitone, parseKey, parseSolfa, parseTempo, parseTime, splitWords } from '@/solfa';
+
+import { noteColumns } from './line-text';
 
 interface Row {
   part: string | null;
@@ -16,7 +18,6 @@ interface Row {
 
 const PART_ROW = /^(Solo|S|A|T|B|P\d+)\s+(.*)$/;
 const WORDS_ROW = /^W\s*:?\s+(.*)$/;
-const NOTE = /(?:de|re|fe|se|le|ra|ma|lo|ta|ba|d|r|m|f|s|l|t)/g;
 
 function rowsOf(text: string): Row[] {
   return text
@@ -33,8 +34,14 @@ function rowsOf(text: string): Row[] {
 
 const barsOf = (body: string) => body.split('|').map((b) => b.trim()).filter(Boolean);
 const beatsOf = (bar: string) => bar.split(/[:/]/);
-const notesIn = (bar: string) => (bar.replace(/x/g, '').match(NOTE) ?? []).length;
+/**
+ * A bar's notes that take a syllable, for moving the words sung on them: not the letters of a mark ({f},
+ * {Andante}), nor a slur's notes after its first ("(s.l)" takes one), and a bridge note ("s=d") is one.
+ */
+const notesIn = (bar: string) => noteColumns(bar).length;
 const row = (part: string, bars: string[]) => `${part.padEnd(2)} ${bars.join(' | ')} |`;
+/** Whether a bar has nothing in it but marks in braces, which the checker doesn't count as a bar. */
+const marksOnly = (bar: string) => !bar.replace(/\{[^{}]*\}/g, '').trim();
 
 /**
  * The usual number of beats in a bar, from the bars inside each line (a
@@ -81,6 +88,8 @@ function moveUpbeat(prev: Row[], next: Row[], beats: number): [Row[], Row[]] | n
   const lasts = prevParts.map((r) => barsOf(r.body));
   const b = beatsOf(firsts[0][0] ?? '').length;
   if (firsts.some((f) => f.length < 2 || beatsOf(f[0]).length !== b) || b >= beats || lasts.some((l) => !l.length)) return null;
+  // A mark alone between bar lines ("| {p} |") is no bar to move or move into.
+  if (firsts.some((f) => marksOnly(f[0])) || lasts.some((l) => marksOnly(l[l.length - 1]))) return null;
 
   const joined: string[] = [];
   for (let i = 0; i < lasts.length; i++) {
@@ -175,4 +184,15 @@ export function joinLines(lines: string[], time: string, keys: (string | undefin
     })
     .filter(Boolean)
     .join('\n\n');
+}
+
+/**
+ * The song's text with the tempo printed in the sheet's heading ("Larghetto, M. 79", "Andante. M. 70") as its
+ * first line, \`tempo: …\`, as the song editor saves it; the text as it is when there's none, or when it says no
+ * speed SolfaScores can play (src/solfa/parse.ts reads the number as beats a minute, or a tempo word's usual speed).
+ */
+export function withTempo(text: string, tempo: string | undefined): string {
+  const t = (tempo ?? '').replace(/\s+/g, ' ').trim();
+  if (!t || parseTempo(t).bpm === null) return text;
+  return text ? `tempo: ${t}\n\n${text}` : `tempo: ${t}`;
 }

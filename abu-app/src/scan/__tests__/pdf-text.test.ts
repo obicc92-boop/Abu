@@ -1,6 +1,7 @@
 import { describe, expect, it } from '@jest/globals';
 
-import { headerInfo, isSolfa, pageText, readTypedSheet, toAbu, type PageText, type PdfChar, type Seg } from '../pdf-text';
+import { dynamicsOnly, headerInfo, isSolfa, pageText, readTypedSheet, tempoPrinted, toAbu, type PageText, type PdfChar, type Seg } from '../pdf-text';
+import { parseSolfa } from '@/solfa';
 
 /** Characters typed along a baseline, each `w` points wide (like a monospaced font). */
 function typed(text: string, x: number, y: number, size = 12, w = 6): PdfChar[] {
@@ -23,8 +24,8 @@ describe('rows of notes as typed', () => {
     expect(toAbu('d :r |m :f', false)).toBe('d :r | m :f |');
     // In a table, the borders (¦) are the bars and a typed "|" is the medium accent.
     expect(toAbu('¦d :r |m :f ¦s :- |- :- ¦', true)).toBe('d :r / m :f | s :- / - :- |');
-    // "t," is the low t1; bar numbers and dynamics go.
-    expect(toAbu('12 t, :d |mf r :m', false)).toBe('t1 :d | r :m |');
+    // "t," is the low t1; bar numbers go, and dynamics are kept in braces before their note.
+    expect(toAbu('12 t, :d |mf r :m', false)).toBe('t1 :d | {mf}r :m |');
     // A part's name printed before the row goes; a row starting with the note s stays.
     expect(toAbu('¦S ¦d :r |m :f ¦', true)).toBe('d :r / m :f |');
     expect(toAbu('Alto: d :r |m :f', false)).toBe('d :r | m :f |');
@@ -32,8 +33,8 @@ describe('rows of notes as typed', () => {
   });
 
   it('reads the key and time from the heading', () => {
-    expect(headerInfo(['AMAZING LOVE', 'Key E Time 3/4'])).toEqual({ key: 'E', time: '3/4' });
-    expect(headerInfo(['Doh is B♭'])).toEqual({ key: 'Bb', time: '' });
+    expect(headerInfo(['AMAZING LOVE', 'Key E Time 3/4'])).toEqual({ key: 'E', time: '3/4', tempo: '' });
+    expect(headerInfo(['Doh is B♭'])).toEqual({ key: 'Bb', time: '', tempo: '' });
   });
 });
 
@@ -283,6 +284,8 @@ describe('a PDF page as pdf.js draws it', () => {
     [OPS.setTextRenderingMode, [0]],
     // A thin filled box: a drawn line, 0.5 wide.
     [OPS.constructPath, [OPS.fill, [new Float32Array([0, 150, 640, 1, 150.5, 640, 1, 150.5, 660, 1, 150, 660, 4])], [150, 640, 150.5, 660]]],
+    // A thin filled box across, under "d.r": an underline.
+    [OPS.constructPath, [OPS.fill, [new Float32Array([0, 100, 648, 1, 113, 648, 1, 113, 648.5, 1, 100, 648.5, 4])], [100, 648, 113, 648.5]]],
   ] as [number, unknown][];
   const fake = {
     getViewport: () => ({ width: 600, height: 800, convertToViewportPoint: (x: number, y: number) => [x, 800 - y] }),
@@ -298,6 +301,7 @@ describe('a PDF page as pdf.js draws it', () => {
     expect(ink.map((c) => Math.round(c.x0 * 10) / 10)).toEqual([100, 106, 109, 200, 213.2]);
     expect(ink.every((c) => c.y === 150 && c.size === 12)).toBe(true);
     expect(p.segs).toEqual([[150.25, 140, 160, 0.5]]);
+    expect(p.unders?.map((u) => u.map((v) => Math.round(v * 10) / 10))).toEqual([[100, 113, 151.8]]);
   });
 });
 
@@ -320,5 +324,122 @@ describe('a new key printed partway through', () => {
     const words = readTypedSheet([page([...heading, ...lineOf(150), ...typed('Open the key And sing', 106, 178)])]);
     expect(words.lines[0].key).toBeUndefined();
     expect(words.lines[0].text).toContain('Open the key And sing');
+  });
+});
+
+describe('musical markings in a typed sheet', () => {
+  const lineOf = (y: number) => [...typed('d :- |d :t | l :s |d :r', 106, y), ...typed('s :- |l :s | m :m |s :t', 106, y + 14)];
+
+  it('finds the tempo printed in the heading, as printed', () => {
+    expect(headerInfo(['COMFORT YE', 'Doh is E   Larghetto, M. 79'])).toEqual({ key: 'E', time: '', tempo: 'Larghetto, M. 79' });
+    expect(headerInfo(['THE LORD IS MY SHEPHERD', 'Andante. M. 70', 'Doh is G   Time 4/4'])).toEqual({ key: 'G', time: '4/4', tempo: 'Andante. M. 70' });
+    expect(headerInfo(['Key F', 'M.M. ♩ = 72']).tempo).toBe('♩ = 72');
+    expect(headerInfo(['ALLEGRO MODERATO', 'Doh is D']).tempo).toBe('ALLEGRO MODERATO');
+    expect(headerInfo(['Ave Maria', 'Moderato (M. 84)']).tempo).toBe('Moderato (M. 84)');
+  });
+
+  it('takes no tempo from running text or a title', () => {
+    expect(tempoPrinted('Beyond the Grave')).toBe('');
+    expect(tempoPrinted('Grave')).toBe('Grave');
+    expect(tempoPrinted('Grave M. 40')).toBe('Grave M. 40');
+    expect(tempoPrinted('sung andante by all')).toBe('');
+    expect(tempoPrinted('Psalm 70, Matthew 5')).toBe('');
+    expect(tempoPrinted('Key E Time 3/4')).toBe('');
+  });
+
+  it('gives the sheet its heading’s tempo, and the song plays at it', () => {
+    const sheet = readTypedSheet([page([...typed('PSALM 23', 200, 60, 20, 10), ...typed('Doh is G   Andante. M. 70', 106, 90), ...lineOf(150)])]);
+    expect(sheet.tempo).toBe('Andante. M. 70');
+    expect(sheet.lines[0].text).not.toContain('Andante');
+    expect(parseSolfa(`tempo: ${sheet.tempo}\n${sheet.lines[0].text}`).meta.tempo).toEqual({ text: 'Andante. M. 70', bpm: 70 });
+  });
+
+  it('starts a line with a tempo printed over it after the heading, for every part', () => {
+    const heading = typed('Doh is G   Time 4/4', 106, 90);
+    const sheet = readTypedSheet([page([...heading, ...lineOf(150), ...typed('Allegro  M. 120', 106, 200), ...lineOf(220)])]);
+    expect(sheet.tempo).toBe('');
+    expect(sheet.lines.map((l) => l.text.split('\n')[0])).toEqual(['S  d :- | d :t | l :s | d :r |', 'S  {Allegro M. 120}d :- | d :t | l :s | d :r |']);
+    expect(sheet.lines[1].text.split('\n')[1]).toBe('A  s :- | l :s | m :m | s :t |');
+    const song = parseSolfa(sheet.lines.map((l) => l.text).join('\n\n'), { time: '2/4' });
+    expect(song.errors).toEqual([]);
+    expect(song.expressions).toEqual([{ kind: 'tempo', text: 'Allegro M. 120', bpm: 120, part: null, beat: 8 }]);
+    // Printed close under the line before, it's still not words.
+    const close = readTypedSheet([page([...heading, ...lineOf(150), ...typed('MM = 72', 106, 186), ...lineOf(210)])]);
+    expect(close.lines.map((l) => l.text)).toEqual(['S  d :- | d :t | l :s | d :r |\nA  s :- | l :s | m :m | s :t |', 'S  {MM 72}d :- | d :t | l :s | d :r |\nA  s :- | l :s | m :m | s :t |']);
+    expect(parseSolfa(close.lines[1].text, { time: '2/4' }).expressions[0]).toMatchObject({ kind: 'tempo', bpm: 72 });
+    // A row with words as well as a tempo word isn't a tempo.
+    const words = readTypedSheet([page([...heading, ...lineOf(150), ...typed('Chorus, Allegro', 106, 200), ...lineOf(220)])]);
+    expect(words.lines[1].text).not.toContain('{');
+  });
+
+  it('keeps dynamics typed among the notes, before their note', () => {
+    expect(toAbu('mf d :r |p m :f', false)).toBe('{mf}d :r | {p}m :f |');
+    expect(toAbu('d :- |cresc. r :m |dim. f :- ', false)).toBe('d :- | {cresc}r :m | {dim}f :- |');
+    // "accel." isn't played yet: it goes, as before.
+    expect(toAbu('accel. d :r', false)).toBe('d :r |');
+    // A lone "f" may be fah: it stays a note.
+    expect(toAbu('f :r |m :f', false)).toBe('f :r | m :f |');
+    // One typed after the last note, for the line after, stays at the end.
+    expect(toAbu('d :- |s :- | p', false)).toBe('d :- | s :- | {p} |');
+  });
+
+  it('reads a row of only dynamics between the parts as neither notes nor words', () => {
+    expect(['mf', 'p   cresc.', 'pp', 'ff'].map(dynamicsOnly)).toEqual([true, true, true, true]);
+    expect(['f', 'f f', 'd :r', 'O come', 'p and'].map(dynamicsOnly)).toEqual([false, false, false, false, false]);
+    const rows = [
+      ...typed('mf', 106, 140, 9),
+      ...typed('d :- |d :t | l :s |d :r', 106, 150),
+      ...typed('All peo-ple that on', 106, 164),
+      ...typed('mf', 106, 176, 9),
+      ...typed('s :- |l :s | m :m |s :t', 106, 186),
+    ];
+    const sheet = readTypedSheet([page([...typed('Doh is G   Time 4/4', 106, 90), ...rows])]);
+    expect(sheet.lines[0].parts).toEqual(['S', 'A']);
+    expect(sheet.lines[0].text.split('\n')).toEqual(['S  d :- | d :t | l :s | d :r |', 'W  All peo-ple that on', 'A  s :- | l :s | m :m | s :t |']);
+  });
+});
+
+describe('slurs underlined in a typed sheet', () => {
+  // A typist underlines the notes sung to one syllable; the PDF draws the underline as a short line just under them.
+  const heading = typed('Doh is G   Time 2/4', 106, 90);
+  const row = (text: string, y = 150) => typed(text, 106, y);
+  /** The x where the n-th character of a row typed at 106 starts and ends (6 points each). */
+  const at = (n: number) => 106 + n * 6;
+  const sheet = (chars: PdfChar[], unders: [number, number, number][], segs: Seg[] = []) => readTypedSheet([{ ...page([...heading, ...chars], segs), unders }]);
+
+  it('puts the notes over a short line just under them in brackets', () => {
+    // "d :r.m |f :s" with "r.m" underlined (characters 3 to 5).
+    const s1 = sheet(row('d :r.m |f :s'), [[at(3), at(6), 152]]);
+    expect(s1.lines[0].text).toBe('S  d :(r.m) | f :s |');
+    // Across a beat and a bar line: "s" to "m".
+    const s2 = sheet(row('d :s |f :m'), [[at(3), at(10), 152.5]]);
+    expect(s2.lines[0].text).toBe('S  d :(s | f :m) |');
+    // The slur's notes after its first take no syllable.
+    const song = parseSolfa(`time: 2/4\n${s2.lines[0].text}\nW  O come`);
+    expect(song.events.S.filter((e) => e.lyric).map((e) => [e.text, e.lyric])).toEqual([
+      ['d', 'O'],
+      ['s', 'come'],
+    ]);
+  });
+
+  it('keeps a note’s octave mark inside its slur, and joins an underline drawn in pieces', () => {
+    expect(sheet(row("d :r.m' |f :s"), [[at(3), at(7), 152]]).lines[0].text).toBe("S  d :(r.m') | f :s |");
+    expect(sheet(row('d :r.t, |f :s'), [[at(3), at(7), 152]]).lines[0].text).toBe('S  d :(r.t1) | f :s |');
+    expect(sheet(row('d :r.m |f :s'), [[at(3), at(4.5), 152], [at(4.5), at(6), 152.2]]).lines[0].text).toBe('S  d :(r.m) | f :s |');
+  });
+
+  it('leaves out a line under one note, a word, a dynamic, or far below the notes', () => {
+    expect(sheet(row('d :r.m |f :s'), [[at(3), at(4), 152]]).lines[0].text).toBe('S  d :r.m | f :s |');
+    // A label typed among the notes ("Ref") underlined with them.
+    expect(sheet(row('d :r.m.f |s :l.t.d Ref'), [[at(15), at(18), 152]]).lines[0].text).toBe('S  d :r.m.f | s :l.(t.d) |');
+    expect(sheet(row('d :r.m.f |s :l.t.d Ref'), [[at(15), at(22), 152]]).lines[0].text).toBe('S  d :r.m.f | s :l.t.d |');
+    expect(sheet(row('d :mf r |f :s'), [[at(3), at(5), 152]]).lines[0].text).toBe('S  d : {mf}r | f :s |');
+    expect(sheet(row('d :r.m |f :s'), [[at(3), at(6), 158]]).lines[0].text).toBe('S  d :r.m | f :s |');
+  });
+
+  it('leaves out a table’s rules: a line across that meets a border, or one as long as a bar of eight beats', () => {
+    const cells: Seg[] = [[at(0) - 2, 140, 154], [at(7) - 2, 140, 154]];
+    expect(sheet(row('d :r.m |f :s'), [[at(0) - 2, at(7) - 2, 152]], cells).lines[0].text).not.toContain('(');
+    expect(sheet(row('d :r :m :f :s :l :t :d :r :m'), [[at(0), at(29), 152]]).lines[0].text).not.toContain('(');
   });
 });

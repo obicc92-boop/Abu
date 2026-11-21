@@ -123,6 +123,8 @@ export interface ScanPageReading {
   composer: string;
   key: string;
   time: string;
+  /** The tempo as printed in the heading ("Larghetto, M. 79"), or "" (a Worker from before tempo may leave it out). */
+  tempo?: string;
   lines: { top: number; bottom: number; left: number; right: number; parts: string[]; words: number }[];
 }
 
@@ -376,7 +378,7 @@ export const api = {
   },
   /** The sheet's title, composer, key and time, from a picture of the top of its first page (Cloudflare's reader); "" where none was found. */
   scanHeading: (image: Blob) =>
-    request<{ title: string; composer: string; key: string; time: string }>('/scan/heading', { method: 'POST', body: image, headers: { 'Content-Type': 'image/jpeg' } }),
+    request<{ title: string; composer: string; key: string; time: string; tempo?: string }>('/scan/heading', { method: 'POST', body: image, headers: { 'Content-Type': 'image/jpeg' } }),
   /** Today's allowance, and which AI readers the Worker has (the app tries Cloudflare's, then Claude). */
   scanAllowance: () => request<{ pages: number; lines: number; readers?: { cloudflare: boolean; anthropic: boolean } }>('/scan/allowance'),
   /** One play-through, on today's date on this phone (for the week and streak on Me). */
