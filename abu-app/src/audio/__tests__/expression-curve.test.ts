@@ -4,6 +4,7 @@ import { OLD100 } from '@/data/demo-songs';
 import { DEFAULT_LEVEL, parseSolfa, type Expression, type ParsedSong } from '@/solfa';
 
 import {
+  ACCEL_TO,
   FULL_LOUDNESS,
   loudness,
   loudnessCurve,
@@ -115,6 +116,17 @@ describe('loudness', () => {
     expect(curve.at('S', 8)).toBe(P);
   });
 
+  it('plays the hairpins < and > exactly as cresc. and dim.', () => {
+    const words = loudnessCurve(marked([dyn(0, P), { kind: 'cresc', text: 'cresc.', beat: 2 }, dyn(8, F), { kind: 'dim', text: 'dim.', beat: 10 }]));
+    const pins = loudnessCurve(marked([dyn(0, P), { kind: 'cresc', text: '<', beat: 2 }, dyn(8, F), { kind: 'dim', text: '>', beat: 10 }]));
+    for (const beat of [0, 2, 3.5, 5, 7.9, 8, 10, 12, 14, 18, 30]) expect(pins.at('S', beat)).toBe(words.at('S', beat));
+    expect(pins.at('S', 5)).toBeCloseTo((P + F) / 2, 9);
+    // As the reader gives them, from the sheet's own marks.
+    const song = parseSolfa('time: 4/4\nS  {p}d :r /{<}m :f |s :- /- :- |{f}d :- /- :- |');
+    expect(song.expressions.map((e) => [e.kind, e.text])).toContainEqual(['cresc', '<']);
+    expect(loudness(song, 'S', 5)).toBeCloseTo(P + ((F - P) * 3) / 6, 9);
+  });
+
   it('holds a note at its own level up to a new dynamic on the next note', () => {
     const curve = loudnessCurve(marked([dyn(0, F), dyn(4, P)]));
     expect(curve.heldTo('S', 0, 4)).toBe(F);
@@ -202,6 +214,42 @@ describe('tempo curve', () => {
     expect(curve.factorAt(2)).toBeCloseTo((1 + RIT_TO) / 2, 9);
     expect(curve.factorAt(4)).toBeCloseTo(1.25, 9);
     expect(curve.factorAt(10)).toBeCloseTo(1.25, 9);
+  });
+
+  it('speeds up through an accel. to a quarter faster over 8 beats, then holds', () => {
+    const curve = tempoCurve(marked([{ kind: 'tempo', bpm: 80 }, { kind: 'accel', text: 'accel.', beat: 4 }]));
+    expect(curve.factorAt(4)).toBe(1);
+    expect(curve.factorAt(8)).toBeCloseTo((1 + ACCEL_TO) / 2, 9);
+    expect(curve.factorAt(4 + RIT_BEATS)).toBeCloseTo(ACCEL_TO, 9);
+    expect(curve.factorAt(40)).toBeCloseTo(ACCEL_TO, 9);
+    // The accel.'s 8 beats take ∫ 1/factor: 32 ln(1.25) beats at the starting tempo, fewer than 8.
+    expect(curve.span(4, 8)).toBeCloseTo(32 * Math.log(1.25), 9);
+    for (const from of [0, 5, 11.5, 13]) expect(curve.beatAfter(from, curve.span(from, 3))).toBeCloseTo(from + 3, 9);
+    // By the next tempo mark, if that's sooner.
+    const cut = tempoCurve(marked([{ kind: 'tempo', bpm: 80 }, { kind: 'accel', beat: 4 }, { kind: 'tempo', beat: 8, bpm: 90 }]));
+    expect(cut.factorAt(6)).toBeCloseTo((1 + ACCEL_TO) / 2, 9);
+    expect(cut.factorAt(8)).toBeCloseTo(90 / 80, 9);
+  });
+
+  it('goes back with a tempo to the tempo before the run of rit. and accel., and slows a rit. from the accel.’s speed', () => {
+    const curve = tempoCurve(
+      marked([{ kind: 'tempo', bpm: 80 }, { kind: 'accel', beat: 4 }, { kind: 'rit', beat: 16 }, { kind: 'atempo', beat: 30 }]),
+    );
+    expect(curve.factorAt(14)).toBeCloseTo(ACCEL_TO, 9);
+    expect(curve.factorAt(20)).toBeCloseTo(ACCEL_TO * (1 + RIT_TO) / 2, 9);
+    expect(curve.factorAt(26)).toBeCloseTo(ACCEL_TO * RIT_TO, 9);
+    expect(curve.factorAt(30)).toBe(1);
+    // An a tempo straight after an accel.
+    const after = tempoCurve(marked([{ kind: 'tempo', bpm: 80 }, { kind: 'accel', beat: 0 }, { kind: 'atempo', beat: 12 }]));
+    expect(after.factorAt(10)).toBeCloseTo(ACCEL_TO, 9);
+    expect(after.factorAt(12)).toBe(1);
+  });
+
+  it('changes nothing for a direction (Maestoso, dolce, legato)', () => {
+    const song = parseSolfa('time: 4/4\n{M. 60}\nS  {Maestoso}d :r /{dolce}m :f |{legato}s :- /- :- |');
+    expect(song.expressions.filter((e) => e.kind === 'direction').map((e) => e.text)).toEqual(['Maestoso', 'dolce', 'legato']);
+    expect(tempoCurve(song).steady).toBe(true);
+    expect(loudnessCurve(song)).toBe(FULL_LOUDNESS);
   });
 
   it('reads a rit. written in every part’s row once', () => {

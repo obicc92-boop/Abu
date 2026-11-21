@@ -1,6 +1,7 @@
 /**
  * How the player follows a song's musical markings (owner's request, 21 November 2026): louder and softer for the
- * dynamics (p, f, cresc., dim., sfz), faster and slower for the tempo marks (Andante, M. 70, rit., a tempo). Both
+ * dynamics (p, f, cresc., dim., the hairpins < and >, sfz), faster and slower for the tempo marks (Andante, M. 70,
+ * rit., accel., a tempo). Directions (Maestoso, dolce, legato…) change nothing. Both
  * are worked out once per song from `ParsedSong.expressions` (read in src/solfa/expressions.ts), so the player can
  * ask about every note and every tick. A song with no markings plays exactly as before: every note at full
  * loudness, at the person's own tempo.
@@ -129,6 +130,8 @@ function partLoudness(marks: Expression[], part: string): PartLoudness {
 /** A rit. slows to this share of the tempo it starts from, over this many beats (or by the next tempo mark, if sooner). */
 export const RIT_TO = 0.75;
 export const RIT_BEATS = 8;
+/** An accel. speeds up to this share of the tempo it starts from, over as many beats as a rit. */
+export const ACCEL_TO = 1.25;
 
 export interface TempoCurve {
   /** The song's starting tempo, in beats a minute: what the factors are measured from. */
@@ -166,7 +169,7 @@ export function startingTempo(song: ParsedSong): number {
   return song.beatsPerBar === 3 ? 96 : 84;
 }
 
-/** A stretch of the tempo: `bpm` at beat `from`, changing by `slope` beats a minute each beat (only in a rit.). */
+/** A stretch of the tempo: `bpm` at beat `from`, changing by `slope` beats a minute each beat (only in a rit. or accel.). */
 interface Pace {
   from: number;
   bpm: number;
@@ -179,11 +182,13 @@ interface Pace {
  * left alone, a tempo mark plays at its own speed.
  * - A tempo mark with a speed (Andante, M. 70) sets it from its beat.
  * - A rit. (or rall.) slows in a straight line from its beat to three quarters of the tempo then, over 8 beats or
- *   by the next tempo mark if that's sooner, and holds.
- * - An a tempo goes back to the tempo before the rit. (before the first, after a rit. and then another).
+ *   by the next tempo mark if that's sooner, and holds. An accel. (owner's request, 21 November 2026) speeds up the
+ *   same way, to a quarter faster. Either starts from wherever the tempo has got to, so a rit. after an accel.
+ *   slows from the accel.'s speed.
+ * - An a tempo goes back to the tempo before the run of rit. and accel. (before the first of them).
  */
 export function tempoCurve(song: ParsedSong, start = startingTempo(song)): TempoCurve {
-  const marks = song.expressions.filter((e) => (e.kind === 'tempo' && !!e.bpm) || e.kind === 'rit' || e.kind === 'atempo');
+  const marks = song.expressions.filter((e) => (e.kind === 'tempo' && !!e.bpm) || e.kind === 'rit' || e.kind === 'accel' || e.kind === 'atempo');
   const paces: Pace[] = [{ from: 0, bpm: start, slope: 0 }];
   const bpmAt = (beat: number) => {
     const p = paces[lastAtOrBefore(paces, (x) => x.from, beat)];
@@ -195,22 +200,24 @@ export function tempoCurve(song: ParsedSong, start = startingTempo(song)): Tempo
     paces.push({ from, bpm, slope });
   };
 
-  let beforeRit: number | null = null;
+  // The tempo before a run of rit. and accel., for an a tempo to go back to.
+  let before: number | null = null;
   marks.forEach((m, i) => {
     if (m.kind === 'tempo') {
       set(m.beat, m.bpm!);
-      beforeRit = null;
+      before = null;
     } else if (m.kind === 'atempo') {
-      if (beforeRit !== null) set(m.beat, beforeRit);
-      beforeRit = null;
+      if (before !== null) set(m.beat, before);
+      before = null;
     } else {
       // The same rit. written in every part's row is read once over: it starts from the same tempo, so it's the same.
       const from = bpmAt(m.beat);
-      beforeRit ??= from;
+      before ??= from;
+      const to = from * (m.kind === 'rit' ? RIT_TO : ACCEL_TO);
       const next = marks.slice(i + 1).find((n) => n.beat > m.beat);
       const end = Math.min(m.beat + RIT_BEATS, next?.beat ?? Infinity);
-      set(m.beat, from, (from * RIT_TO - from) / (end - m.beat));
-      set(end, from * RIT_TO);
+      set(m.beat, from, (to - from) / (end - m.beat));
+      set(end, to);
     }
   });
 
