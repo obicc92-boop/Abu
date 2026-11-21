@@ -8,7 +8,7 @@
          and from then on it slid about under a finger. SolfaScores has its own bigger text where it matters
          (Perform's A+). -->
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, shrink-to-fit=no" />
-    <meta name="theme-color" content="#D14617" />
+    <meta name="theme-color" content="#18181B" />
     <script>
       // SolfaScores lives at solfascores.com. A browser on the old address (abu.adalingo.workers.dev)
       // or on www goes there, to the same page. Not the app installed from the old address, which
@@ -83,15 +83,19 @@
         height: 100%;
         flex: 1;
       }
-      /* Shown until the app loads: the same screen and s:s mark as the splash
-         (the brand's orange running into pink, as on the app icon), so slow
-         connections never see a blank page. */
+      /* Shown until the app loads: the same screen and s:s mark as the splash,
+         the welcome screen's night (near-black, an orange glow from the top
+         right and a pink one from below), so slow connections never see a
+         blank page. */
       #first-paint {
         flex: 1;
         display: flex;
         align-items: center;
         justify-content: center;
-        background: #d14617 linear-gradient(to bottom right, #d14617, #da2f6e);
+        background:
+          radial-gradient(circle 85vmax at 95% -20%, rgba(240, 106, 44, 0.5), rgba(240, 106, 44, 0)),
+          radial-gradient(circle 60vmax at 70% 125%, rgba(226, 69, 122, 0.28), rgba(226, 69, 122, 0)),
+          #18181b;
       }
     </style>
   </head>

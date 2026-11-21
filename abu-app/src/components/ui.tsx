@@ -3,10 +3,11 @@
  * fields, cards and the voice-part picker.
  */
 import { router } from 'expo-router';
-import type { ReactNode } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View, type StyleProp, type TextInputProps, type ViewStyle } from 'react-native';
+import { useState, type ReactNode } from 'react';
+import { ActivityIndicator, Image, Pressable, ScrollView, Text, TextInput, View, type StyleProp, type TextInputProps, type ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { avatarUrl } from '@/api/client';
 import { useOnline } from '@/lib/online';
 import { partName } from '@/solfa';
 import { makeStyles, useColors, usePartInk } from '@/theme/theme';
@@ -185,9 +186,23 @@ export function Loading({ label = 'Loading…' }: { label?: string }) {
 }
 
 /** Round badge with a person's initials, ringed in their part's colour. */
-export function Avatar({ name, part, size = 38 }: { name: string; part?: string | null; size?: number }) {
+/** Someone's profile picture (`photo`: its key), or their initials on their part's colour. */
+export function Avatar({ name, part, size = 38, photo }: { name: string; part?: string | null; size?: number; photo?: string | null }) {
   const styles = useStyles();
   const colors = useColors();
+  // A picture that doesn't load (offline, say) falls back to the initials.
+  const [failed, setFailed] = useState<string | null>(null);
+  const uri = avatarUrl(photo);
+  if (uri && failed !== uri) {
+    return (
+      <Image
+        source={{ uri }}
+        onError={() => setFailed(uri)}
+        accessibilityIgnoresInvertColors
+        style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: colors.board }}
+      />
+    );
+  }
   const initials = name
     .split(/\s+/)
     .filter(Boolean)

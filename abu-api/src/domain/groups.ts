@@ -30,6 +30,8 @@ export interface Group {
 
 export interface Member extends Membership {
   display_name: string;
+  /** Their profile picture (in the AVATARS bucket), if they've put one. */
+  avatar_key: string | null;
 }
 
 interface GroupRow extends Omit<Group, 'requires_approval' | 'self_check_in' | 'part_leaders_edit_orders' | 'sections' | 'parts'> {
@@ -93,6 +95,16 @@ export async function updateProfile(db: D1Database, me: string, patch: { display
     }
   }
   return getProfile(db, me, me);
+}
+
+/**
+ * Put or take away your profile picture (its key in the AVATARS bucket, or null). Gives back the picture it
+ * replaces, for the caller to delete from the bucket.
+ */
+export async function setAvatar(db: D1Database, me: string, key: string | null): Promise<string | null> {
+  const old = await db.prepare('select avatar_key from profiles where id = ?').bind(me).first<{ avatar_key: string | null }>();
+  await db.prepare('update profiles set avatar_key = ? where id = ?').bind(key, me).run();
+  return old?.avatar_key ?? null;
 }
 
 /** Your own profile, or someone you share a group with. */
@@ -215,7 +227,7 @@ export async function myGroups(db: D1Database, me: string): Promise<(Group & Pic
 export async function listMembers(db: D1Database, me: string, groupId: string): Promise<Member[]> {
   const mine = await membershipOf(db, groupId, me);
   if (!mine) throw forbidden('You’re not in this group.');
-  const base = 'select m.*, p.display_name from memberships m join profiles p on p.id = m.user_id where m.group_id = ?';
+  const base = 'select m.*, p.display_name, p.avatar_key from memberships m join profiles p on p.id = m.user_id where m.group_id = ?';
   const stmt =
     mine.status !== 'active'
       ? db.prepare(`${base} and m.user_id = ? order by p.display_name`).bind(groupId, me)

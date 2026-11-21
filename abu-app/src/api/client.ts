@@ -51,6 +51,8 @@ export interface Membership {
 
 export interface Member extends Membership {
   display_name: string;
+  /** Their profile picture, if they've put one (`avatarUrl` gives its address). */
+  avatar_key: string | null;
 }
 
 export interface GroupPreview {
@@ -180,6 +182,7 @@ export type AttendanceStatus = 'present' | 'absent' | 'excused';
 export interface SheetRow {
   user_id: string;
   display_name: string;
+  avatar_key: string | null;
   part: string | null;
   role: Role;
   reply: Reply | null;
@@ -304,6 +307,9 @@ const json = (method: string, data: unknown): RequestInit => ({ method, body: JS
 export const api = {
   me: () => request<{ profile: Profile; groups: MyGroup[] }>('/me'),
   updateMe: (patch: { display_name: string }) => request<Profile>('/me', json('PATCH', patch)),
+  /** Your profile picture: a small square JPEG (src/lib/avatar-photo.ts), or taken away. */
+  setAvatar: (image: Blob, type: string) => request<Profile>('/me/avatar', { method: 'PUT', body: image, headers: { 'Content-Type': type } }),
+  removeAvatar: () => request<Profile>('/me/avatar', { method: 'DELETE' }),
 
   createGroup: (input: { name: string; type: Exclude<GroupType, 'personal'>; church?: string; town?: string; part?: string | null }) =>
     request<Group>('/groups', json('POST', input)),
@@ -461,3 +467,6 @@ export function inviteLink(code: string): string {
 export function inviteMessage(groupName: string, code: string): string {
   return `Join ${groupName} on SolfaScores to learn your part and see our song orders. Open ${inviteLink(code)} or enter the code ${code}.`;
 }
+
+/** A profile picture's address, from its key (avatars/<person>/<picture>.jpg); null without one. */
+export const avatarUrl = (key: string | null | undefined): string | null => (key ? `${API_URL}/api/${key}` : null);

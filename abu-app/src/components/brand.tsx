@@ -1,6 +1,6 @@
 /**
- * Brand pieces drawn in SVG: the mark from the app icon, the icon's orange-to-pink background (`BrandFill`), and the
- * background for feature cards.
+ * Brand pieces drawn in SVG: the mark from the app icon, the welcome screen's night for the splash (`BrandNight`),
+ * and the background for feature cards.
  * Sources and usage rules: design/brand/ and design/brand-draft.html.
  */
 import { useId, useState } from 'react';
@@ -150,23 +150,15 @@ export function MainFill({ from, to }: { from: string; to: string }) {
 }
 
 /**
- * The brand's background, as on the app icon (design/brand/icon.svg): the main colour, warm orange-red at the top
- * left running into pink at the bottom right. Fills its parent: the splash animation and the loading screen, like
- * the web's first paint (public/index.html).
+ * The welcome screen's night, for the splash animation and the loading screen (owner's request, 21 November 2026:
+ * the splash "close to" the welcome screen), like the web's first paint (public/index.html): near-black, an orange
+ * glow from the top right and a pink one from below, and the faint sol-fa colons clearing away from the middle,
+ * where the mark is. Fills its parent.
  */
-export function BrandFill() {
-  const id = useId().replace(/[^a-zA-Z0-9]/g, '');
+export function BrandNight({ focus = { x: 0.5, y: 0.45 } }: { focus?: { x: number; y: number } }) {
   return (
-    <View style={styles.fill}>
-      <Svg width="100%" height="100%" preserveAspectRatio="none">
-        <Defs>
-          <LinearGradient id={`b${id}`} x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0" stopColor={colors.orange} />
-            <Stop offset="1" stopColor={colors.pink} />
-          </LinearGradient>
-        </Defs>
-        <Rect width="100%" height="100%" fill={`url(#b${id})`} />
-      </Svg>
+    <View style={[styles.fill, { backgroundColor: colors.night }]}>
+      <Motif color={colors.onNight} opacity={0.12} focus={focus} glow={colors.nightGlow} glow2={colors.nightGlow2} />
     </View>
   );
 }

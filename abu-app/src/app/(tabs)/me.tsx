@@ -1,6 +1,6 @@
 /**
  * Me: your profile, laid out as popular apps lay theirs out (owner's request, 21 November 2026): a header with
- * your picture, name, email, part and group, and Edit profile; your practice (private to you) as a row of numbers
+ * your picture (a photo of your own, or your initials), your name with a pencil to change it, email, part and group; your practice (private to you) as a row of numbers
  * and the songs you're learning; then lists of rows, each with an icon, what it's set to and a chevron, that open
  * in place: your groups (tap to show one, the part pill to change your part there, join or start one), settings
  * (appearance, Perform's background, saved for offline, installing the app) and your account (email, password,
@@ -10,16 +10,22 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { useState, type ReactNode } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
 
 import { api, type MyGroup } from '@/api/client';
 import { authClient } from '@/auth/client';
+import { BottomSheet, SheetRow } from '@/components/bottom-sheet';
+import { MainFill } from '@/components/brand';
 import {
+  CameraIcon,
+  CheckIcon,
   ChevronIcon,
+  CloseIcon,
   DownloadIcon,
   LockIcon,
   MailIcon,
   MoonIcon,
+  PencilIcon,
   PeopleIcon,
   PersonIcon,
   PhoneIcon,
@@ -29,6 +35,7 @@ import {
 } from '@/components/icons';
 import { SongRow } from '@/components/song-row';
 import { Avatar, Button, Chip, ErrorText, Field, Loading, Page, PartPicker } from '@/components/ui';
+import { pickAvatar } from '@/lib/avatar-photo';
 import { sinceText } from '@/lib/dates';
 import { GROUP_TYPES } from '@/lib/group-types';
 import { dataSaverOn, forgetOfflineSummary, saveForOffline, setDataSaver, useOfflineSummary } from '@/lib/keep-offline';
@@ -40,7 +47,7 @@ import { readSetting, writeSetting } from '@/lib/storage';
 import { partName } from '@/solfa';
 import { useSession } from '@/state/session';
 import { makeStyles, type ThemeChoice, useColors, usePartInk, useTheme } from '@/theme/theme';
-import { fonts, palettes, partColor, type Palette } from '@/theme/tokens';
+import { brand, fonts, palettes, partColor, type Palette } from '@/theme/tokens';
 
 const PERFORM_THEME = 'abu.performTheme';
 
@@ -162,54 +169,140 @@ export default function Me() {
   );
 }
 
-/** Your picture, name and email, your part and group, and Edit profile (your name, in place). */
+/**
+ * Your picture, name and email, your part and group (owner's request, 21 November 2026). The picture has a camera
+ * badge: tapped, it chooses a photo (with one already, a sheet offers a new one or taking it away). The name has a
+ * pencil beside it: tapped, the name becomes a field in place, with ✓ and ✕.
+ */
 function Header() {
   const styles = useStyles();
+  const colors = useColors();
   const ink = usePartInk();
   const s = useSession();
   const [name, setName] = useState<string | null>(null);
-  const save = useMutation({ mutationFn: (display_name: string) => api.updateMe({ display_name }), onSuccess: () => (setName(null), s.refresh()) });
+  const [photoSheet, setPhotoSheet] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  // Your name and picture show on members lists and registers too: those are fetched afresh.
+  const changed = async () => {
+    await s.refresh();
+    await queryClient.invalidateQueries({ queryKey: ['members'] });
+  };
+  const save = useMutation({ mutationFn: (display_name: string) => api.updateMe({ display_name }), onSuccess: () => (setName(null), changed()) });
+  const upload = useMutation({ mutationFn: (p: { image: Blob; type: string }) => api.setAvatar(p.image, p.type), onSuccess: changed });
+  const remove = useMutation({ mutationFn: api.removeAvatar, onSuccess: changed });
   const profile = s.profile!;
+  const hasPhoto = !!profile.avatar_key;
+  const busy = upload.isPending || remove.isPending;
+  const error = photoError ?? upload.error?.message ?? remove.error?.message ?? null;
+  // The file chooser opens straight from the tap (a phone allows it only then).
+  const choose = async () => {
+    setPhotoSheet(false);
+    setPhotoError(null);
+    upload.reset();
+    remove.reset();
+    try {
+      const picked = await pickAvatar();
+      if (picked) upload.mutate(picked);
+    } catch (e) {
+      setPhotoError(e instanceof Error ? e.message : 'Couldn’t use that photo.');
+    }
+  };
   const g = s.group;
   const personal = g?.type === 'personal';
   const role = g && !personal ? (g.role === 'leader' ? g.leader_title : g.role === 'part_leader' ? 'Part leader' : null) : null;
+  const done = () => name !== null && name.trim() && save.mutate(name);
   return (
     <View style={styles.header}>
-      <View style={[styles.ring, g?.part ? { borderColor: partColor(g.part) } : null]}>
-        <Avatar name={profile.display_name} part={g?.part} size={84} />
-      </View>
+      <Pressable
+        onPress={() => (hasPhoto ? setPhotoSheet(true) : void choose())}
+        disabled={busy}
+        accessibilityRole="button"
+        accessibilityLabel={hasPhoto ? 'Profile photo: change or remove it' : 'Add a profile photo'}
+        style={({ pressed }) => [styles.ring, g?.part ? { borderColor: partColor(g.part) } : null, pressed && { opacity: 0.85 }]}
+      >
+        <Avatar name={profile.display_name} part={g?.part} size={84} photo={profile.avatar_key} />
+        {busy ? (
+          <View style={styles.photoBusy}>
+            <ActivityIndicator color={brand.white} />
+          </View>
+        ) : null}
+        <View style={styles.cameraBadge}>
+          <CameraIcon color={colors.onInk} size={15} />
+        </View>
+      </Pressable>
+      {error ? <ErrorText message={error} /> : null}
+
       {name === null ? (
-        <>
-          <Text style={styles.name}>{profile.display_name}</Text>
-          {s.email ? <Text style={styles.email}>{s.email}</Text> : null}
-          <View style={styles.facts}>
-            {g?.part ? (
-              <View style={styles.fact}>
-                <View style={[styles.factDot, { backgroundColor: partColor(g.part) }]} />
-                <Text style={[styles.factText, { color: ink(g.part) }]}>{partName(g.part)}</Text>
-              </View>
-            ) : null}
-            {g ? (
-              <View style={styles.fact}>
-                <Text style={styles.factText} numberOfLines={1}>
-                  {personal ? 'My space' : g.name}
-                  {role ? ` · ${role}` : ''}
-                </Text>
-              </View>
-            ) : null}
-          </View>
-          <Button small kind="ghost" label="Edit profile" onPress={() => setName(profile.display_name)} style={styles.headerButton} />
-        </>
+        <View style={styles.nameRow}>
+          {/* As wide as the pencil, so the name stays in the middle. */}
+          <View style={styles.pencilSpace} />
+          <Text style={styles.name} numberOfLines={2}>
+            {profile.display_name}
+          </Text>
+          <Pressable onPress={() => (save.reset(), setName(profile.display_name))} accessibilityRole="button" accessibilityLabel="Edit your name" style={styles.pencil} hitSlop={10}>
+            <PencilIcon color={colors.ink} size={15} />
+          </Pressable>
+        </View>
       ) : (
-        <View style={styles.editName}>
-          <Field label="Your name" value={name} onChangeText={setName} autoComplete="name" autoFocus />
-          {save.error ? <ErrorText message={save.error.message} /> : null}
-          <View style={[styles.wrap, { justifyContent: 'center' }]}>
-            <Button small label="Save" onPress={() => save.mutate(name)} disabled={!name.trim()} busy={save.isPending} />
-            <Button small kind="ghost" label="Cancel" onPress={() => setName(null)} />
-          </View>
+        <View style={styles.nameEdit}>
+          <TextInput
+            value={name}
+            onChangeText={setName}
+            onSubmitEditing={done}
+            autoFocus
+            selectTextOnFocus
+            maxLength={80}
+            returnKeyType="done"
+            autoComplete="name"
+            accessibilityLabel="Your name"
+            style={styles.nameInput}
+          />
+          <Pressable onPress={done} disabled={!name.trim() || save.isPending} accessibilityRole="button" accessibilityLabel="Save your name" style={[styles.nameSave, !name.trim() && { opacity: 0.5 }]}>
+            <MainFill from={colors.primary} to={colors.primary2} />
+            <View>{save.isPending ? <ActivityIndicator color={colors.onPrimary} size="small" /> : <CheckIcon color={colors.onPrimary} size={18} />}</View>
+          </Pressable>
+          <Pressable onPress={() => setName(null)} accessibilityRole="button" accessibilityLabel="Cancel" style={styles.nameCancel}>
+            <CloseIcon color={colors.ink} size={14} />
+          </Pressable>
         </View>
       )}
+      {save.error ? <ErrorText message={save.error.message} /> : null}
+      {s.email ? <Text style={styles.email}>{s.email}</Text> : null}
+      <View style={styles.facts}>
+        {g?.part ? (
+          <View style={styles.fact}>
+            <View style={[styles.factDot, { backgroundColor: partColor(g.part) }]} />
+            <Text style={[styles.factText, { color: ink(g.part) }]}>{partName(g.part)}</Text>
+          </View>
+        ) : null}
+        {g ? (
+          <View style={styles.fact}>
+            <Text style={styles.factText} numberOfLines={1}>
+              {personal ? 'My space' : g.name}
+              {role ? ` · ${role}` : ''}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+
+      <BottomSheet open={photoSheet} onClose={() => setPhotoSheet(false)} title="Profile photo" subtitle="Your groups see it beside your name.">
+        <SheetRow index={0} icon={<CameraIcon color={colors.ink} />} wash={colors.board} title="Choose a new photo" sub="From your gallery or camera" onPress={() => void choose()} />
+        <SheetRow
+          index={1}
+          icon={<CloseIcon color={colors.danger} size={16} />}
+          wash={colors.dangerTint}
+          title="Remove photo"
+          sub="Your initials show instead"
+          danger
+          chevron={false}
+          onPress={() => {
+            setPhotoSheet(false);
+            setPhotoError(null);
+            remove.mutate();
+          }}
+        />
+      </BottomSheet>
     </View>
   );
 }
@@ -605,8 +698,17 @@ const useStyles = makeStyles((colors) => ({
   // The header, centred, as profile pages are.
   header: { alignItems: 'center', gap: 6, paddingTop: 12, paddingBottom: 4 },
   ring: { padding: 3, borderRadius: 50, borderWidth: 2.5, borderColor: colors.line, marginBottom: 6 },
+  photoBusy: { position: 'absolute', top: 3, left: 3, width: 84, height: 84, borderRadius: 42, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
+  cameraBadge: { position: 'absolute', right: -2, bottom: -2, width: 32, height: 32, borderRadius: 16, backgroundColor: colors.ink, borderWidth: 3, borderColor: colors.sand, alignItems: 'center', justifyContent: 'center' },
+  nameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, maxWidth: '100%' },
+  pencilSpace: { width: 30 },
+  pencil: { width: 30, height: 30, borderRadius: 15, backgroundColor: colors.board, alignItems: 'center', justifyContent: 'center' },
+  nameEdit: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'stretch', paddingHorizontal: 8 },
+  nameInput: { flex: 1, minWidth: 0, fontFamily: fonts.heavy, fontSize: 21, color: colors.ink, textAlign: 'center', paddingVertical: 6, borderBottomWidth: 2, borderBottomColor: colors.primary, outlineStyle: 'none' } as object,
+  nameSave: { width: 40, height: 40, borderRadius: 20, overflow: 'hidden', backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+  nameCancel: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.board, alignItems: 'center', justifyContent: 'center' },
   guest: { width: 90, height: 90, borderRadius: 45, backgroundColor: colors.board, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
-  name: { fontFamily: fonts.heavy, fontSize: 24, lineHeight: 29, color: colors.ink, textAlign: 'center' },
+  name: { flexShrink: 1, fontFamily: fonts.heavy, fontSize: 24, lineHeight: 29, color: colors.ink, textAlign: 'center' },
   email: { fontFamily: fonts.body, fontSize: 14, lineHeight: 19, color: colors.muted, textAlign: 'center', paddingHorizontal: 12 },
   facts: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginTop: 6 },
   fact: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 999, backgroundColor: colors.board, paddingHorizontal: 12, paddingVertical: 6, maxWidth: 260 },

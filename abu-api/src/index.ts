@@ -20,6 +20,7 @@ import {
   listMembers,
   myGroups,
   removeMember,
+  setAvatar,
   setPart,
   setRole,
   updateGroup,
@@ -113,6 +114,22 @@ app.get('/songs/:id/sheet', async (c) => {
       'content-type': song.sheet_type ?? 'application/octet-stream',
       'content-disposition': `inline; filename="${name}.${ext}"`,
       'cache-control': 'public, max-age=86400',
+    },
+  });
+});
+
+/**
+ * A profile picture, by its key (avatars/<person>/<picture>.jpg). Each picture has a key of its own that's hard to
+ * guess, so it's served like a song's sheet, and kept by phones for good: a new picture gets a new key.
+ */
+app.get('/avatars/:user/:file', async (c) => {
+  const key = `avatars/${c.req.param('user')}/${c.req.param('file')}`;
+  const file = await c.env.AVATARS.get(key);
+  if (!file) throw notFound('No such picture.');
+  return new Response(file.body, {
+    headers: {
+      'content-type': file.httpMetadata?.contentType ?? 'image/jpeg',
+      'cache-control': 'public, max-age=31536000, immutable',
     },
   });
 });
@@ -339,6 +356,36 @@ app.get('/me', async (c) => {
 app.patch('/me', async (c) => {
   const b = await body(c);
   return c.json(await updateProfile(c.env.DB, c.get('userId'), { display_name: text(b, 'display_name') }));
+});
+
+/*
+ * Profile pictures (owner's request, 21 November 2026), in the AVATARS bucket: the app sends a small square JPEG
+ * (it shrinks the photo first), each picture under a key of its own, so it can be kept by phones for good.
+ */
+const AVATAR_TYPES: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
+
+app.put('/me/avatar', async (c) => {
+  const me = c.get('userId');
+  const type = (c.req.header('content-type') ?? '').split(';')[0].trim().toLowerCase();
+  const ext = AVATAR_TYPES[type];
+  if (!ext) throw badRequest('Choose a photo (JPEG, PNG or WebP).');
+  if (Number(c.req.header('content-length') ?? 0) > MAX_AVATAR_BYTES) throw badRequest('That photo is over 5 MB. Try a smaller one.');
+  const file = await c.req.arrayBuffer();
+  if (!file.byteLength) throw badRequest('That photo is empty.');
+  if (file.byteLength > MAX_AVATAR_BYTES) throw badRequest('That photo is over 5 MB. Try a smaller one.');
+  const key = `avatars/${me}/${newId()}.${ext}`;
+  await c.env.AVATARS.put(key, file, { httpMetadata: { contentType: type } });
+  const old = await setAvatar(c.env.DB, me, key);
+  if (old) await c.env.AVATARS.delete(old);
+  return c.json(await getProfile(c.env.DB, me, me));
+});
+
+app.delete('/me/avatar', async (c) => {
+  const me = c.get('userId');
+  const old = await setAvatar(c.env.DB, me, null);
+  if (old) await c.env.AVATARS.delete(old);
+  return c.json(await getProfile(c.env.DB, me, me));
 });
 
 app.post('/groups', async (c) => {

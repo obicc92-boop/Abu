@@ -146,3 +146,41 @@ describe('Your password', () => {
     expect(cookieFrom(ok)).toMatch(/session_token/);
   });
 });
+
+describe('Profile pictures', () => {
+  it('puts, serves, replaces and takes away your picture; your group sees it on the members list', async () => {
+    const { emeka, adaeze, group } = await choir();
+    const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
+    // Pictures only, and only your own (signed in).
+    expect((await call('/me/avatar', { method: 'PUT', cookie: adaeze.cookie, headers: { 'content-type': 'application/pdf' }, body: jpeg })).status).toBe(400);
+    expect((await call('/me/avatar', { method: 'PUT', headers: { 'content-type': 'image/jpeg' }, body: jpeg })).status).toBe(401);
+
+    const put = await call('/me/avatar', { method: 'PUT', cookie: adaeze.cookie, headers: { 'content-type': 'image/jpeg' }, body: jpeg });
+    expect(put.status).toBe(200);
+    const first = ((await put.json()) as { avatar_key: string }).avatar_key;
+    expect(first).toMatch(new RegExp(`^avatars/${adaeze.id}/.+\\.jpg$`));
+
+    // Served to anyone who has its address, and kept for good (a new picture gets a new address).
+    const got = await call(`/${first}`);
+    expect(got.status).toBe(200);
+    expect(got.headers.get('content-type')).toBe('image/jpeg');
+    expect(got.headers.get('cache-control')).toContain('immutable');
+    expect(new Uint8Array(await got.arrayBuffer())).toEqual(jpeg);
+
+    // The leader sees it on the members list.
+    const members = (await send<{ user_id: string; avatar_key: string | null }[]>(`/groups/${group.id}/members`, 'GET', emeka.cookie)).body;
+    expect(members.find((m) => m.user_id === adaeze.id)?.avatar_key).toBe(first);
+
+    // A new picture replaces the old one, which is gone from the bucket.
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 9, 9]);
+    const second = ((await (await call('/me/avatar', { method: 'PUT', cookie: adaeze.cookie, headers: { 'content-type': 'image/png' }, body: png })).json()) as { avatar_key: string }).avatar_key;
+    expect(second).not.toBe(first);
+    expect(second).toMatch(/\.png$/);
+    expect((await call(`/${first}`)).status).toBe(404);
+
+    // Taken away: no picture, and the file is gone.
+    const removed = (await send<{ avatar_key: string | null }>('/me/avatar', 'DELETE', adaeze.cookie)).body;
+    expect(removed.avatar_key).toBeNull();
+    expect((await call(`/${second}`)).status).toBe(404);
+  });
+});

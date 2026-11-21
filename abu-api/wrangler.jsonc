@@ -24,8 +24,12 @@
       "migrations_dir": "migrations",
     },
   ],
-  // Original sheets (PDFs and photos), keyed by song.
-  "r2_buckets": [{ "binding": "SHEETS", "bucket_name": "abu-sheets" }],
+  // Original sheets (PDFs and photos), keyed by song; and profile pictures (owner's request, 21 November 2026),
+  // keyed by person, a new key for each picture so phones can keep them.
+  "r2_buckets": [
+    { "binding": "SHEETS", "bucket_name": "abu-sheets" },
+    { "binding": "AVATARS", "bucket_name": "abu-avatars" },
+  ],
   // Cloudflare's own AI (Workers AI), for scanning: corrects lines SolfaScores' own reader got wrong, and reads words in pictures.
   "ai": { "binding": "AI" },
   // The app's own address, and www, which the page sends on to it. The old address,

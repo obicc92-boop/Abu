@@ -1,8 +1,10 @@
 /**
- * The opening animation. Its first frame matches the still splash screen
- * (the brand's orange, with the s:s mark in the middle), so the hand-over is
- * seamless; the orange then runs into pink as on the app icon (`BrandFill`).
- * On the web it starts with the gradient, as the first paint has it.
+ * The opening animation, on the welcome screen's night (owner's request, 21
+ * November 2026): near-black with an orange glow from the top right and a pink
+ * one from below, and faint sol-fa colons (`BrandNight`). Its first frame
+ * matches the still splash screen (the night, the s:s mark in the middle), so
+ * the hand-over is seamless: on a phone the glows come in over the first
+ * moments; on the web they're there from the first paint.
  * Then the mark bounces, a glow and sound rings spread from it, the sol-fa
  * scale (d r m f s l t d', each syllable in its own soft colour) bursts out
  * of it and pops up all over the screen, "SolfaScores" rises in, and
@@ -22,7 +24,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Circle, Defs, Path, RadialGradient, Stop } from 'react-native-svg';
 
-import { BrandFill, BrandMark, MARK_ASPECT } from '@/components/brand';
+import { BrandMark, BrandNight, MARK_ASPECT } from '@/components/brand';
 import { brand as colors, fonts } from '@/theme/tokens';
 
 import { splashParticles, type Burst, type Pop } from './particles';
@@ -115,8 +117,8 @@ export function AnimatedSplash({ onDone }: { onDone: () => void }) {
 /* ---------- Pieces ---------- */
 
 /**
- * The orange-to-pink background. A phone's still splash can only be one colour (orange), so there it comes in
- * over the first moments; the web's first paint already has it.
+ * The night's glows and colons. A phone's still splash can only be one colour (the night), so there they come in
+ * over the first moments; the web's first paint already has them.
  */
 function Sky() {
   const a = useSharedValue(Platform.OS === 'web' ? 1 : 0);
@@ -126,7 +128,7 @@ function Sky() {
   const style = useAnimatedStyle(() => ({ opacity: a.value }));
   return (
     <Animated.View style={[StyleSheet.absoluteFill, style]}>
-      <BrandFill />
+      <BrandNight focus={{ x: 0.5, y: 0.5 }} />
     </Animated.View>
   );
 }
@@ -167,9 +169,9 @@ function Glow() {
       <Svg width={GLOW} height={GLOW}>
         <Defs>
           <RadialGradient id="splashGlow" cx="50%" cy="50%" r="50%">
-            <Stop offset="0" stopColor="#FF9A78" stopOpacity={0.85} />
-            <Stop offset="0.45" stopColor="#F2604F" stopOpacity={0.45} />
-            <Stop offset="1" stopColor={colors.orange} stopOpacity={0} />
+            <Stop offset="0" stopColor={colors.nightGlow} stopOpacity={0.5} />
+            <Stop offset="0.45" stopColor={colors.nightGlow2} stopOpacity={0.18} />
+            <Stop offset="1" stopColor={colors.night} stopOpacity={0} />
           </RadialGradient>
         </Defs>
         <Circle cx={GLOW / 2} cy={GLOW / 2} r={GLOW / 2} fill="url(#splashGlow)" />
@@ -275,6 +277,7 @@ function Wordmark() {
   return (
     <Animated.View style={[styles.wordmarkBox, style]}>
       <Text style={styles.wordmark}>SolfaScores</Text>
+      <Text style={styles.tagline}>Learn your part. Keep your choir together.</Text>
     </Animated.View>
   );
 }
@@ -287,7 +290,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     zIndex: 1000,
-    backgroundColor: colors.orange,
+    backgroundColor: colors.night,
     overflow: 'hidden',
   },
   fill: { flex: 1 },
@@ -305,5 +308,6 @@ const styles = StyleSheet.create({
   syllable: { fontFamily: fonts.display, textAlign: 'center' },
   pop: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
   wordmarkBox: { position: 'absolute', left: 0, right: 0, top: '50%', marginTop: MARK_HEIGHT / 2 + 18, alignItems: 'center' },
-  wordmark: { fontFamily: fonts.display, fontSize: 46, lineHeight: 58, color: colors.white },
+  wordmark: { fontFamily: fonts.display, fontSize: 46, lineHeight: 58, color: colors.onNight },
+  tagline: { fontFamily: fonts.body, fontSize: 16, lineHeight: 22, color: colors.onNightSoft, textAlign: 'center', marginTop: 4, paddingHorizontal: 24 },
 });

@@ -217,7 +217,7 @@ function WaitingRow({ groupId, member, onDone }: { groupId: string; member: Memb
   const decline = useMutation({ mutationFn: () => api.removeMember(groupId, member.user_id), onSuccess: onDone });
   return (
     <View style={styles.memberRow}>
-      <Avatar name={member.display_name} part={member.part} />
+      <Avatar name={member.display_name} part={member.part} photo={member.avatar_key} />
       <View style={{ flex: 1 }}>
         <Text style={styles.name}>{member.display_name}</Text>
         <Text style={styles.hint}>{member.part ? partName(member.part) : 'No part chosen'}</Text>
@@ -264,7 +264,7 @@ function MemberRow({
         accessibilityLabel={`${member.display_name}${role ? `, ${role}` : ''}`}
         style={styles.memberRow}
       >
-        <Avatar name={member.display_name} part={member.part} />
+        <Avatar name={member.display_name} part={member.part} photo={member.avatar_key} />
         <View style={{ flex: 1 }}>
           <Text style={styles.name}>
             {member.display_name}

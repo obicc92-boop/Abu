@@ -100,7 +100,7 @@ export default function Home() {
           </Text>
         </View>
         <Pressable onPress={() => router.push('/me')} accessibilityRole="button" accessibilityLabel="Your profile">
-          <Avatar name={s.profile.display_name} part={g.part} size={42} />
+          <Avatar name={s.profile.display_name} part={g.part} size={42} photo={s.profile.avatar_key} />
         </Pressable>
       </View>
 

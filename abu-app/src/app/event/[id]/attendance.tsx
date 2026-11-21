@@ -188,7 +188,7 @@ function Row({ row, status, onTap }: { row: SheetRow; status: AttendanceStatus |
   const label = status ? LABEL[status] : row.can_mark ? 'Mark' : '—';
   return (
     <View style={styles.row}>
-      <Avatar name={row.display_name} part={row.part} />
+      <Avatar name={row.display_name} part={row.part} photo={row.avatar_key} />
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text style={styles.name} numberOfLines={1}>
           {row.display_name}

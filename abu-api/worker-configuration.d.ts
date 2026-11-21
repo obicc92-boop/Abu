@@ -3,6 +3,7 @@
 // Runtime types generated with workerd@1.20261110.1 2026-11-01
 interface __BaseEnv_Env {
 	SHEETS: R2Bucket;
+	AVATARS: R2Bucket;
 	DB: D1Database;
 	AI: Ai;
 	ASSETS: Fetcher;

@@ -169,12 +169,19 @@ export const darkColors: Palette = {
 export const palettes: Readonly<Record<Scheme, Palette>> = { light: lightColors, dark: darkColors };
 
 /**
- * Colours that don't change with light or dark: the icon's, splash's and first paint's gradient (the main colour,
- * orange at the top left running into pink at the bottom right; red until 21 November 2026), and WhatsApp's green.
+ * Colours that don't change with light or dark: the icon's gradient (the main colour, orange at the top left running
+ * into pink at the bottom right; red until 21 November 2026); the night the splash, the loading screen and the web's
+ * first paint share with the welcome screen (its near-black with an orange glow from the top right and a pink one
+ * from below: owner's request, 21 November 2026); and WhatsApp's green.
  */
 export const brand = {
   orange,
   pink,
+  night: lightColors.hero,
+  onNight: lightColors.onHero,
+  onNightSoft: lightColors.onHeroSoft,
+  nightGlow: lightColors.heroGlow,
+  nightGlow2: lightColors.heroGlow2,
   gold: '#E6A325',
   white: '#FFFFFF',
   ink: '#22160F',

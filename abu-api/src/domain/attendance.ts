@@ -119,6 +119,8 @@ export async function checkIn(db: D1Database, me: string, eventId: string, code:
 export interface SheetRow {
   user_id: string;
   display_name: string;
+  /** Their profile picture (in the AVATARS bucket), if they've put one. */
+  avatar_key: string | null;
   part: string | null;
   role: Role;
   /** Their own reply before the day. */
@@ -136,7 +138,7 @@ export async function attendanceSheet(db: D1Database, me: string, eventId: strin
   const mine = await requireRole(db, groupId, me, LEADERS, 'Only leaders and part leaders can see the attendance register.');
   const { results } = await db
     .prepare(
-      `select m.user_id, p.display_name, m.part, m.role, r.status as reply, a.status, coalesce(a.self_check_in, 0) as self_check_in
+      `select m.user_id, p.display_name, p.avatar_key, m.part, m.role, r.status as reply, a.status, coalesce(a.self_check_in, 0) as self_check_in
        from memberships m
        join profiles p on p.id = m.user_id
        left join rsvps r on r.event_id = ?1 and r.user_id = m.user_id
