@@ -163,6 +163,7 @@ function songInput(b: Record<string, unknown>): SongInput {
     time_signature: text(b, 'time_signature'),
     tags: Array.isArray(b.tags) ? b.tags.filter((t): t is string => typeof t === 'string') : undefined,
     solfa: text(b, 'solfa'),
+    ignore_problems: flag(b, 'ignore_problems'),
   };
 }
 

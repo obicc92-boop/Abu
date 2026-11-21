@@ -89,6 +89,8 @@ export interface SongInput {
   time_signature: string;
   tags: string[];
   solfa: string;
+  /** Save it even though the checker found problems (the person chose "Save anyway"). */
+  ignore_problems?: boolean;
 }
 
 /** What you can do with a song, and your own practice of it. */

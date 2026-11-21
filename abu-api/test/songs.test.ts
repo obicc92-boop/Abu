@@ -49,6 +49,10 @@ describe('Sharing and editing songs', () => {
     const bad = await send<{ error: string }>('/songs', 'POST', emeka.cookie, { title: 'Broken', solfa: BAD, time_signature: '4/4' });
     expect(bad.status).toBe(400);
     expect(bad.body.error).toBe('The sol-fa has a problem: Soprano, bar 2 has 3 beats; 4/4 needs 4.');
+    // Saved anyway, when the person chooses to keep the problems.
+    const anyway = await send<Song>('/songs', 'POST', emeka.cookie, { title: 'Kept as it is', solfa: BAD, time_signature: '4/4', ignore_problems: true });
+    expect(anyway.status).toBe(201);
+    expect(anyway.body.solfa).toBe(BAD);
 
     const ok = await send<Song>('/songs', 'POST', emeka.cookie, {
       title: 'Gloria (Igbo)',

@@ -37,6 +37,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { api, ApiError, type PickedFile, type ScanLineReading } from '@/api/client';
 import { useSongPlayer } from '@/audio/use-song-player';
 import { MainFill } from '@/components/brand';
+import { PartSheet } from '@/components/part-sheet';
 import { AgainIcon, CameraIcon, CheckIcon, CloseIcon, FileIcon, PlusIcon, ScanIcon, ZoomIcon } from '@/components/icons';
 import { LineRows } from '@/components/line-rows';
 import { PlayButton } from '@/components/player-controls';
@@ -971,6 +972,12 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
     const next: LineRow[] = rows.map((r, k) => (k === i ? { ...r, text: r.part ? tidyNotes(text) : text } : r));
     update(line.id, { text: joinLine(next), checked: false });
   };
+  // Who sings a row (a bass solo read as soprano, say): its colour or its name in the list is tapped.
+  const [partRow, setPartRow] = useState<number | null>(null);
+  const setPart = (i: number, part: string) => {
+    const next: LineRow[] = rows.map((r, k) => (k === i ? { ...r, part } : r));
+    update(line.id, { text: joinLine(next), checked: false });
+  };
   const go = (i: number) => setCurrent(Math.max(0, Math.min(lines.length - 1, i)));
   const looksRight = () => {
     update(line.id, { checked: true, skipped: false });
@@ -1050,16 +1057,18 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
           <View style={[styles.rowBetween, styles.pad]}>
             <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
               <Kicker>What SolfaScores read</Kicker>
-              <Text style={styles.small}>Tap a row to fix it.</Text>
-              {/* Each part by its colour, as in the score. */}
+              <Text style={styles.small}>Tap a row to fix it, or its colour to change who sings it.</Text>
+              {/* Each part by its colour, as in the score; tapped, who sings that row. */}
               <View style={styles.legend}>
-                {rows.flatMap((r) => (r.part ? [r.part] : [])).map((p) => (
-                  <View key={p} style={styles.legendItem}>
+                {rows.flatMap((r, i) => (r.part ? [{ p: r.part, i }] : [])).map(({ p, i }) => (
+                  <Pressable key={i} onPress={() => setPartRow(i)} accessibilityRole="button" accessibilityLabel={`${partName(p)}: change who sings it`} style={styles.legendItem} hitSlop={6}>
                     <View style={[styles.legendDot, { backgroundColor: partColor(p) }]} />
                     <Text style={[styles.legendText, { color: ink(p) }]}>{partName(p)}</Text>
-                  </View>
+                    <Text style={styles.legendChange}>▾</Text>
+                  </Pressable>
                 ))}
               </View>
+              <PartSheet open={partRow !== null} onClose={() => setPartRow(null)} current={partRow !== null ? (rows[partRow]?.part ?? null) : null} onChoose={(p) => partRow !== null && setPart(partRow, p)} />
             </View>
             {!empty && !parsed.errors.length ? <PlayButton playing={player.playing} onPress={player.togglePlay} size={42} /> : null}
           </View>
@@ -1091,6 +1100,7 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
             scroller={reading}
             onScroll={(e) => follow('reading', e)}
             onWidths={(w) => (readingWidths.current = w)}
+            onPart={(i) => setPartRow(i)}
           />
           <View style={[styles.pad, { gap: 6 }]}>
             {Object.entries(byPart).map(([part, messages]) => (
@@ -1318,6 +1328,7 @@ const useStyles = makeStyles((colors) => ({
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   legendDot: { width: 9, height: 9, borderRadius: 4.5 },
   legendText: { fontFamily: fonts.bold, fontSize: 12 },
+  legendChange: { fontFamily: fonts.bold, fontSize: 10, color: colors.muted, marginLeft: -2 },
   rowInput: {
     // Placed, so it's drawn over the tints placed before it (a browser draws placed boxes last, in order).
     position: 'relative',

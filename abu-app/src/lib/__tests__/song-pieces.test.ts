@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 
-import { barsBefore, songPieces, withKeyBefore, withNewLine, withoutLine, withoutTextLine, withRow, withWordsRow } from '../song-pieces';
+import { barsBefore, songPieces, withKeyBefore, withNewLine, withoutLine, withoutTextLine, withRow, withRowPart, withWordsRow } from '../song-pieces';
 
 const SONG = `title: Morning Song
 [Verse]
@@ -65,5 +65,17 @@ describe('changing a song by its rows', () => {
     expect(withKeyBefore('S  d |\n\nS  r |', 2, 'G')).toBe('S  d |\n\nDoh is G\nS  r |');
     expect(withKeyBefore(SONG, 5, 'G').split('\n')[6]).toBe('Doh is G');
     expect(withoutTextLine(SONG, 6)).not.toContain('Doh is F');
+  });
+});
+
+describe('who sings a row', () => {
+  it('gives a row to another part, its notes kept, and knows a solo sung by one part', () => {
+    const text = 'S  d :r |m :f |\nW  Bless-ing and\nA  s1 :t1 |d :r |';
+    const next = withRowPart(text, 0, 0, 'SoloB');
+    expect(next.split('\n')[0]).toBe('SoloB d :r |m :f |');
+    const rows = (songPieces(next)[0] as Extract<ReturnType<typeof songPieces>[number], { kind: 'music' }>).rows;
+    expect(rows.map((r) => r.part)).toEqual(['SoloB', null, 'A']);
+    // Words have no part to change.
+    expect(withRowPart(text, 0, 1, 'T')).toBe(text);
   });
 });

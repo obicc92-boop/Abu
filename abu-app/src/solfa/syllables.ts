@@ -76,17 +76,27 @@ const FULL_PART_NAMES: Readonly<Record<string, string>> = {
   bass: 'B',
 };
 
-/** "soprano" → "S", "s1" → "S1", "solo" → "Solo", "keys" → "Keys". */
+/**
+ * A solo sung by one part (owner's request, 21 November 2026: a bass solo read as soprano couldn't be changed):
+ * "SoloB" on its row, or "Solo B". It's a solo, shown in the solo's colour, and sung where that part sings.
+ */
+const SOLO_VOICE = /^solo\s*([satb])$/i;
+
+/** "soprano" → "S", "s1" → "S1", "solo" → "Solo", "solob" → "SoloB" (a bass solo), "keys" → "Keys". */
 export function normalizePart(label: string): string {
   const full = FULL_PART_NAMES[label.toLowerCase()];
   if (full) return full;
+  const solo = label.match(SOLO_VOICE);
+  if (solo) return `Solo${solo[1].toUpperCase()}`;
   return label.length <= 2
     ? label.toUpperCase()
     : label.charAt(0).toUpperCase() + label.slice(1).toLowerCase();
 }
 
-/** Display name for a part label: "S" → "Soprano"; other labels unchanged. */
+/** Display name for a part label: "S" → "Soprano", "SoloB" → "Bass solo"; other labels unchanged. */
 export function partName(part: string): string {
+  const solo = part.match(SOLO_VOICE);
+  if (solo) return `${partName(solo[1].toUpperCase())} solo`;
   return ({ S: 'Soprano', A: 'Alto', T: 'Tenor', B: 'Bass' } as Record<string, string>)[part] ?? part;
 }
 
@@ -102,6 +112,9 @@ export function partPlural(part: string): string {
  * Solo is never lowered.
  */
 export function isLowPart(part: string): boolean {
+  // A tenor or bass solo is sung where that part sings; a solo of no part named, where a soprano does.
+  const solo = part.match(SOLO_VOICE);
+  if (solo) return /[tb]/i.test(solo[1]);
   if (/^solo/i.test(part)) return false;
   const first = part.charAt(0).toUpperCase();
   return first === 'T' || first === 'B';

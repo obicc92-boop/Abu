@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 import { OLD100 } from '../../data/demo-songs';
-import { dohAt, dohMidi, dohTimeline, midiToHz, noteMidi, parseSolfa } from '..';
+import { dohAt, dohMidi, dohTimeline, isLowPart, midiToHz, normalizePart, noteMidi, parseSolfa, partName } from '..';
 
 describe('doh', () => {
   it('sits between A♭3 and G4, as in the prototype', () => {
@@ -84,5 +84,22 @@ describe('midiToHz', () => {
   it('tunes A4 to 440 Hz', () => {
     expect(midiToHz(69)).toBe(440);
     expect(midiToHz(57)).toBeCloseTo(220);
+  });
+});
+
+describe('a solo sung by one part', () => {
+  it('is named for its part, and sung where that part sings', () => {
+    expect(normalizePart('solob')).toBe('SoloB');
+    expect(normalizePart('Solo T')).toBe('SoloT');
+    expect(partName('SoloB')).toBe('Bass solo');
+    expect(partName('SoloS')).toBe('Soprano solo');
+    expect(isLowPart('SoloB')).toBe(true);
+    expect(isLowPart('SoloT')).toBe(true);
+    expect(isLowPart('SoloA')).toBe(false);
+    expect(isLowPart('Solo')).toBe(false);
+    // A bass solo's doh is the basses' doh, an octave under a solo of no part named.
+    const d = { deg: 0, oct: 0 };
+    expect(noteMidi('SoloB', d, 7)).toBe(noteMidi('B', d, 7));
+    expect(noteMidi('Solo', d, 7) - noteMidi('SoloB', d, 7)).toBe(12);
   });
 });

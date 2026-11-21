@@ -1,7 +1,7 @@
 import { describe, expect, it } from '@jest/globals';
 
-import { alignedRows, barColumns, changedShare, freeRepair, joinLine, keepsParts, namesNotWords, noteColumns, problemsByPart, splitLine, tidyNotes, tidyTitle, withBarLinesInStep, withBarsInStep, withBridgeNotes, withFullEmptyBars, withGapsAsBars, withHalfBarsAsBars, withoutNameColumn, withRestingEdges, withShortBarsJoined, withSpacedBeats, withWords, wordsOf, wordsPreferring, wordsUnderNotes } from '../line-text';
-import { parseSolfa } from '@/solfa';
+import { alignedRows, barColumns, changedShare, freeRepair, joinLine, keepsParts, namesNotWords, noteColumns, problemsByPart, splitLine, tidyNotes, tidyTitle, withBarLinesInStep, withBarsInStep, withBridgeNotes, withFullEmptyBars, withGapsAsBars, withHalfBarsAsBars, withoutNameColumn, withRestingEdges, withShortBarsJoined, withSpacedBeats, withWords, wordsAsSpaced, wordsOf, wordsPreferring, wordsUnderNotes } from '../line-text';
+import { parseSolfa, splitWords } from '@/solfa';
 
 describe('tidyNotes', () => {
   it('joins a bridge note typed with spaces', () => {
@@ -383,5 +383,23 @@ describe('bridge notes read as two notes run together', () => {
   it('make a line add up as a free repair', () => {
     const passes = (t: string) => !parseSolfa(t, { time: '4/4' }).errors.length;
     expect(freeRepair('S  d :r /m :f | sd :- /- :- |\nA  d :t1 /d :r | m1l1 :- /- :- |', passes, 4)).toBe('S  d :r /m :f | s=d :- /- :- |\nA  d :t1 /d :r | m1=l1 :- /- :- |');
+  });
+});
+
+describe('a row of words to type in', () => {
+  it('starts with each syllable under its note, and reads as the same words', () => {
+    const notes = 'm :- .f |s :l |t :d’ |';
+    const words = 'Bless-ing and hon-our';
+    const spaced = wordsAsSpaced(words, notes.replace('’', "'"));
+    const cols = noteColumns(notes.replace('’', "'"));
+    // Each syllable starts at its note's column, or a space after the one before it when that one is wider.
+    const syllables = splitWords(words);
+    let free = 0;
+    syllables.forEach((w, k) => {
+      const at = spaced.indexOf(w, free);
+      expect(at).toBe(Math.max(cols[k], free ? free + 1 : 0));
+      free = at + w.length;
+    });
+    expect(splitWords(spaced)).toEqual(syllables);
   });
 });

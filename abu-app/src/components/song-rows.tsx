@@ -9,7 +9,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, Text, View, type TextInputInstance } from 'react-native';
 
 import type { Selection } from '@/lib/solfa-keys';
-import { barsBefore, musicText, songPieces, withNewLine, withoutLine, withoutTextLine, withRow, withWordsRow, type Piece } from '@/lib/song-pieces';
+import { barsBefore, musicText, songPieces, withNewLine, withoutLine, withoutTextLine, withRow, withRowPart, withWordsRow, type Piece } from '@/lib/song-pieces';
 import { tidyNotes } from '@/scan/line-text';
 import { normalizePart, parseSolfa, partName } from '@/solfa';
 import { makeStyles, useColors, usePartInk } from '@/theme/theme';
@@ -17,6 +17,7 @@ import { fonts, partColor } from '@/theme/tokens';
 
 import { CloseIcon, PlusIcon } from './icons';
 import { LineRows } from './line-rows';
+import { PartSheet } from './part-sheet';
 import { Button, Chip } from './ui';
 
 /** The row being typed in: which line of music (counting lines of music from 0), which row, and its text as typed. */
@@ -70,6 +71,10 @@ export function SongRows({
   const lastParts = music.at(-1)?.rows.flatMap((r) => (r.part && PART_CHOICES.includes(r.part) ? [r.part] : [])) ?? [];
   const [parts, setParts] = useState<string[]>(lastParts.length ? lastParts : ['S', 'A', 'T', 'B']);
   const [removing, setRemoving] = useState<number | null>(null);
+  // A row whose part is being changed (its colour tapped, or Change part): the piece and the row.
+  const [partOf, setPartOf] = useState<{ k: number; row: number } | null>(null);
+  const partPiece = partOf ? pieces[partOf.k] : null;
+  const partNow = partOf && partPiece?.kind === 'music' ? (partPiece.rows[partOf.row]?.part ?? null) : null;
 
   // A line just added: its first row is typed in straight away. (Lines of music are known by their place among
   // the lines of music, which a key change or a section's name put before one doesn't change.)
@@ -148,6 +153,7 @@ export function SongRows({
                 fields.current.set(`${m}:${i}`, f);
                 onField(m, i, f);
               }}
+              onPart={(i) => setPartOf({ k, row: i })}
             />
             {/* What can be done to the line being written in. */}
             {here ? (
@@ -156,6 +162,12 @@ export function SongRows({
                   <Pressable onPress={() => onChange(withWordsRow(text, k, here.row))} accessibilityRole="button" style={styles.action}>
                     <PlusIcon color={colors.link} size={13} />
                     <Text style={styles.actionText}>Words under {partName(row.part).toLowerCase()}</Text>
+                  </Pressable>
+                ) : null}
+                {row?.part ? (
+                  <Pressable onPress={() => setPartOf({ k, row: here.row })} accessibilityRole="button" style={styles.action}>
+                    <View style={[styles.legendDot, { backgroundColor: partColor(row.part) }]} />
+                    <Text style={styles.actionText}>Change part</Text>
                   </Pressable>
                 ) : null}
                 <Pressable onPress={() => setRemoving(k)} accessibilityRole="button" style={styles.action}>
@@ -185,6 +197,15 @@ export function SongRows({
           </View>
         );
       })}
+
+      <PartSheet
+        open={!!partOf}
+        onClose={() => setPartOf(null)}
+        current={partNow}
+        onChoose={(part) => {
+          if (partOf) onChange(withRowPart(text, partOf.k, partOf.row, part));
+        }}
+      />
 
       <View style={styles.adding}>
         <Text style={styles.label}>Parts in a new line</Text>

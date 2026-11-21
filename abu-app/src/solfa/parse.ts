@@ -63,6 +63,14 @@ interface RawMark {
   part: string | null;
   barIndex: number;
   atEnd: boolean;
+  /** On a line of its own between lines of music: the line of music it comes before (index in `blocks`). */
+  block?: number;
+}
+
+/** A line of music as written: its part lines up to a blank line, and how many bars each part had in it. */
+interface RawBlock {
+  counts: Record<string, number>;
+  line: number;
 }
 
 interface RawSection {
@@ -74,11 +82,14 @@ interface RawSection {
   /** Words from a W line with no part above it in the section: used by every part without its own. */
   sharedWords: string[] | null;
   marks: RawMark[];
+  blocks: RawBlock[];
 }
 
 interface RawKeyChange {
   sec: RawSection;
   barIndex: number;
+  /** On a line of its own between lines of music: the line of music it comes before (index in `blocks`). */
+  block?: number;
   key: KeyInfo | null;
   pivot: Pivot | null;
   line: number;
@@ -128,12 +139,17 @@ export function parseSolfa(text: string, options: ParseOptions = {}): ParsedSong
   /** Header values found in the text (kept on an object so callbacks can set them). */
   const head: { time: TimeSig | null; key: KeyInfo | null } = { time: null, key: null };
   let anyBars = false;
+  /** The line of music being read (a blank line or a new section ends it). */
+  let open: RawBlock | null = null;
+  /** Where a line of its own (a key, marks) falls: before the next line of music, or inside the one being read. */
+  const blockAt = (s: RawSection): number | undefined => (open && s.blocks.includes(open) ? undefined : s.blocks.length);
 
   const newSection = (name: string): RawSection => {
-    const s: RawSection = { name, order: [], bars: {}, barLines: {}, words: {}, sharedWords: null, marks: [] };
+    const s: RawSection = { name, order: [], bars: {}, barLines: {}, words: {}, sharedWords: null, marks: [], blocks: [] };
     raw.push(s);
     cur = s;
     lastPart = null;
+    open = null;
     return s;
   };
   const section = (): RawSection => cur ?? newSection('');
@@ -192,7 +208,7 @@ export function parseSolfa(text: string, options: ParseOptions = {}): ParsedSong
           return;
         }
         const s = section();
-        rawKeys.push({ sec: s, barIndex: barCount(s), key: k.key, pivot: k.pivot, line });
+        rawKeys.push({ sec: s, barIndex: barCount(s), block: blockAt(s), key: k.key, pivot: k.pivot, line });
         return;
       }
     }
@@ -230,6 +246,7 @@ export function parseSolfa(text: string, options: ParseOptions = {}): ParsedSong
       const line = rawLine.replace(/[\t ]/g, ' ').trim();
       if (!line) {
         if (inVerses) flushVerse();
+        open = null;
         return;
       }
       if (line.startsWith('#')) return;
@@ -251,7 +268,7 @@ export function parseSolfa(text: string, options: ParseOptions = {}): ParsedSong
         const s = section();
         for (const mm of line.matchAll(MARK_RE)) {
           const name = readMark(mm[1], ln);
-          if (name) s.marks.push({ name, part: null, barIndex: barCount(s), atEnd: false });
+          if (name) s.marks.push({ name, part: null, barIndex: barCount(s), atEnd: false, block: blockAt(s) });
         }
         return;
       }
@@ -296,9 +313,16 @@ export function parseSolfa(text: string, options: ParseOptions = {}): ParsedSong
       }
       if (!parts.includes(label)) parts.push(label);
       lastPart = label;
+      if (!open || !s.blocks.includes(open)) {
+        open = { counts: {}, line: ln };
+        s.blocks.push(open);
+      }
+      const before = s.bars[label].length;
       readBars(s, label, body, ln);
+      open.counts[label] = (open.counts[label] ?? 0) + s.bars[label].length - before;
     });
   flushVerse();
+  for (const s of raw) restInLinesLeftOut(s, rawKeys);
 
   meta.key = head.key ?? keyFromOption(options.key);
 
@@ -654,6 +678,67 @@ export function parseTempo(value: string): Tempo {
   }
   const word = (value.toLowerCase().match(/[a-z]+/g) ?? []).find((w) => w in TEMPO_WORDS);
   return { text: value, bpm: word ? TEMPO_WORDS[word] : null };
+}
+
+/**
+ * Parts left out of a line of music rest through it (owner's report, 21 November 2026: a soprano solo line made
+ * the sopranos 4 bars longer than the rest, so the song couldn't be saved, and everything after it would have
+ * played out of step). A line of music is the part lines up to a blank line, as the song editor and scanning write
+ * them. This applies once a section has a line with two or more parts, so a song written a whole part at a time
+ * reads as before. A part first seen partway through (a bass solo) rests through the lines before it. Marks and
+ * key changes keep their places in the music.
+ */
+function restInLinesLeftOut(s: RawSection, rawKeys: RawKeyChange[]): void {
+  const blocks = s.blocks.filter((b) => Object.keys(b.counts).length);
+  if (blocks.length < 2 || !blocks.some((b) => Object.keys(b.counts).length >= 2)) return;
+  const bars: Record<string, string[][]> = {};
+  const lines: Record<string, number[]> = {};
+  const taken: Record<string, number> = {};
+  // Where each bar as written ends up: at[part][n] for its n-th bar (and one past its last).
+  const at: Record<string, number[]> = {};
+  for (const p of s.order) {
+    bars[p] = [];
+    lines[p] = [];
+    taken[p] = 0;
+    at[p] = [];
+  }
+  const longest = () => Math.max(0, ...s.order.map((p) => bars[p].length));
+  // Each line of music's first bar, with the parts lined up.
+  const starts: number[] = [];
+  s.blocks.forEach((b, bi) => {
+    starts[bi] = longest();
+    const ins = s.order.filter((p) => b.counts[p]);
+    if (!ins.length) return;
+    const most = Math.max(...ins.map((p) => b.counts[p]));
+    const ref = ins.find((p) => b.counts[p] === most)!;
+    const refBars = s.bars[ref].slice(taken[ref], taken[ref] + most);
+    for (const p of s.order) {
+      const n = b.counts[p] ?? 0;
+      if (n) {
+        for (let k = 0; k < n; k++) {
+          at[p].push(bars[p].length);
+          bars[p].push(s.bars[p][taken[p] + k]);
+          lines[p].push(s.barLines[p][taken[p] + k]);
+        }
+        taken[p] += n;
+      } else {
+        // Left out of this line: a rest as long as each of its bars.
+        for (const bar of refBars) {
+          bars[p].push(bar.map(() => ''));
+          lines[p].push(b.line);
+        }
+      }
+    }
+  });
+  starts.push(longest());
+  for (const p of s.order) at[p].push(bars[p].length);
+  const first = s.order[0];
+  const place = (part: string | null, barIndex: number, block: number | undefined): number =>
+    block !== undefined ? (starts[block] ?? starts[starts.length - 1]) : (at[part ?? first]?.[barIndex] ?? barIndex);
+  for (const mk of s.marks) mk.barIndex = place(mk.part, mk.barIndex, mk.part === null ? mk.block : undefined);
+  for (const rk of rawKeys) if (rk.sec === s) rk.barIndex = place(null, rk.barIndex, rk.block);
+  s.bars = bars;
+  s.barLines = lines;
 }
 
 function keyFromOption(key: ParseOptions['key']): KeyInfo | null {

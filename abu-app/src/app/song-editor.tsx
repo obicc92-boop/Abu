@@ -14,7 +14,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as DocumentPicker from 'expo-document-picker';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Pressable, Switch, Text, TextInput, View, type TextInputInstance } from 'react-native';
+import { Linking, Platform, Pressable, Switch, Text, TextInput, View, type TextInputInstance } from 'react-native';
 
 import { api, type PickedFile, type Song } from '@/api/client';
 import { useSongPlayer } from '@/audio/use-song-player';
@@ -206,8 +206,9 @@ function Editor({ song, draft, pasted, written }: { song?: Song; draft: ScanDraf
   const canAddToRep = !editing && fromGroup?.role === 'leader';
 
   const save = useMutation({
-    mutationFn: async () => {
-      const input = { title: title.trim(), composer: composer.trim(), doh, time_signature: time, tags, solfa };
+    // `anyway`: saved with the sol-fa's problems, as the person chose (owner's request, 21 November 2026).
+    mutationFn: async (anyway: boolean = false) => {
+      const input = { title: title.trim(), composer: composer.trim(), doh, time_signature: time, tags, solfa, ...(anyway ? { ignore_problems: true } : {}) };
       const saved = editing ? await api.editSong(song!.id, input) : await api.shareSong({ ...input, shared_from_group: from });
       if (removeSheet && !picked) await api.removeSheet(saved.id);
       if (picked) await api.attachSheet(saved.id, picked);
@@ -258,8 +259,16 @@ function Editor({ song, draft, pasted, written }: { song?: Song; draft: ScanDraf
     setRemoveSheet(false);
   };
 
-  const blocked = !title.trim() || (!empty && parsed.errors.length > 0);
-  const why = !title.trim() ? 'Give the song a title to save it: tap Change at the top.' : blocked ? 'Fix the sol-fa problems above to save.' : null;
+  const problems = !empty && parsed.errors.length > 0;
+  const blocked = !title.trim() || problems;
+  const why = !title.trim() ? 'Give the song a title to save it: tap Change at the top.' : null;
+  // The scanned sheet, attached as it came: said so, and it can be opened to see it.
+  const scannedSheet = !!picked && picked === draft?.sheet;
+  const viewSheet = () => {
+    if (!picked) return;
+    if (Platform.OS === 'web' && picked.file) window.open(URL.createObjectURL(picked.file), '_blank');
+    else void Linking.openURL(picked.uri);
+  };
 
   return (
     <Page
@@ -486,12 +495,22 @@ function Editor({ song, draft, pasted, written }: { song?: Song; draft: ScanDraf
         </Folding>
         <Folding
           label="Original sheet (optional)"
-          value={picked ? picked.name : song?.sheet_key && !removeSheet ? 'Attached' : 'None'}
+          value={picked ? (scannedSheet ? `The sheet you scanned: ${picked.name}` : picked.name) : song?.sheet_key && !removeSheet ? 'Attached' : 'None'}
           open={showSheet}
           onToggle={() => setShowSheet(!showSheet)}
         >
           <Body muted>A PDF or a photo of the printed sheet, so members can see the original. Up to 10 MB.</Body>
-          {picked ? <Body>Attaching: {picked.name}</Body> : song?.sheet_key && !removeSheet ? <Body>A sheet is attached.</Body> : null}
+          {picked ? (
+            <View style={styles.sheetRow}>
+              <Text style={styles.sheetName} numberOfLines={2}>
+                {scannedSheet ? 'The sheet you scanned is attached: ' : 'Attaching: '}
+                <Text style={styles.sheetFile}>{picked.name}</Text>
+              </Text>
+              <Button small kind="ghost" label="View" onPress={viewSheet} />
+            </View>
+          ) : song?.sheet_key && !removeSheet ? (
+            <Body>A sheet is attached.</Body>
+          ) : null}
           <View style={styles.wrap}>
             <Button small kind="ghost" label={picked || song?.sheet_key ? 'Choose another file' : 'Attach PDF or photo'} onPress={pick} />
             {picked ? <Button small kind="ghost" label="Don’t attach" onPress={() => setPicked(null)} /> : null}
@@ -502,8 +521,15 @@ function Editor({ song, draft, pasted, written }: { song?: Song; draft: ScanDraf
       </Card>
 
       {save.error ? <ErrorText message={save.error.message} /> : null}
-      <Button label={editing ? 'Save changes' : 'Save song'} onPress={() => save.mutate()} disabled={blocked} busy={save.isPending} style={styles.big} />
+      <Button label={editing ? 'Save changes' : 'Save song'} onPress={() => save.mutate(false)} disabled={blocked} busy={save.isPending && !save.variables} style={styles.big} />
       {why ? <Body muted style={{ textAlign: 'center' }}>{why}</Body> : null}
+      {/* Problems the person knows about and keeps (a part resting where the sheet doesn't say, say): saved as they are. */}
+      {title.trim() && problems ? (
+        <Card tone="sand">
+          <Body>Fix the sol-fa problems above, or save it as it is. It may not play quite right until they’re fixed, and anyone who can edit it can fix it later.</Body>
+          <Button small kind="ghost" label="Save anyway" onPress={() => save.mutate(true)} busy={save.isPending && !!save.variables} style={{ alignSelf: 'flex-start' }} />
+        </Card>
+      ) : null}
 
       {editing ? (
         confirmDelete ? (
@@ -614,5 +640,8 @@ const useStyles = makeStyles((colors) => ({
   chevronOpen: { transform: [{ rotate: '90deg' }] },
   foldBody: { gap: 10, paddingBottom: 12 },
   big: { minHeight: 56 },
+  sheetRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  sheetName: { flex: 1, minWidth: 0, fontFamily: fonts.body, fontSize: 14.5, lineHeight: 20, color: colors.ink },
+  sheetFile: { fontFamily: fonts.bold },
   toggleText: { fontFamily: fonts.bold, fontSize: 15, color: colors.ink },
 }));

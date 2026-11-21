@@ -6,12 +6,12 @@
  * screen shows: the row being typed in, and what's typed there, are the screen's (`editing`).
  */
 import { useMemo, useRef, useState, type Ref } from 'react';
-import { ScrollView, Text, TextInput, View, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollViewInstance, type TextInputInstance } from 'react-native';
+import { Pressable, ScrollView, Text, TextInput, View, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollViewInstance, type TextInputInstance } from 'react-native';
 
 import { keepCursor } from '@/lib/field-cursor';
 import { lowMarksShown, lowMarksTyped, type Selection } from '@/lib/solfa-keys';
 import { barNumbers, checkRows } from '@/scan/bar-check';
-import { alignedRows, barColumns, wordsUnderNotes, type LineRow } from '@/scan/line-text';
+import { alignedRows, barColumns, wordsAsSpaced, wordsUnderNotes, type LineRow } from '@/scan/line-text';
 import { partName, type ParsedSong } from '@/solfa';
 import { makeStyles, useColors } from '@/theme/theme';
 import { fonts, partColor } from '@/theme/tokens';
@@ -62,10 +62,12 @@ export interface LineRowsProps {
   onScroll?(e: NativeSyntheticEvent<NativeScrollEvent>): void;
   /** How wide the rows are, and how much of them shows, as they change. */
   onWidths?(widths: { content: number; view: number }): void;
+  /** A row's colour is tapped, to change who sings it (src/components/part-sheet.tsx). */
+  onPart?(row: number): void;
 }
 
 export function LineRows(props: LineRowsProps) {
-  const { rows, editing, keyboard, errors, beatsPerBar, firstBar = 1, label, scroller, onScroll, onWidths, ...handlers } = props;
+  const { rows, editing, keyboard, errors, beatsPerBar, firstBar = 1, label, scroller, onScroll, onWidths, onPart, ...handlers } = props;
   const styles = useStyles();
   // A character's width in the rows' type, as drawn on this screen, so the bar lines land on the typed "|".
   const [charWidth, setCharWidth] = useState(CHAR);
@@ -74,12 +76,27 @@ export function LineRows(props: LineRowsProps) {
   const shown = useMemo(() => alignedRows(rows), [rows]);
   const valueOf = (i: number) => (editing && editing.row === i ? editing.value : (shown[i] ?? ''));
   // Each row of words set under its part's notes (the row being typed in shows what's typed).
-  const wordsLaid = rows.map((r, i) => {
-    if (r.part || editing?.row === i) return null;
+  const notesAbove = (i: number) => {
     let j = i - 1;
     while (j >= 0 && !rows[j].part) j--;
+    return j;
+  };
+  const wordsLaid = rows.map((r, i) => {
+    if (r.part || editing?.row === i) return null;
+    const j = notesAbove(i);
     return j >= 0 ? wordsUnderNotes(valueOf(i), valueOf(j), WORDS_CHAR) : null;
   });
+  // A row of words tapped to type in starts as it's laid out, each syllable under its note, in the notes' type:
+  // typing keeps them there. Leaving it, the spaces are tidied away (they don't change the words).
+  const startText = (i: number) => {
+    if (rows[i].part) return shown[i] ?? '';
+    const j = notesAbove(i);
+    return j >= 0 ? wordsAsSpaced(rows[i].text, valueOf(j)) : (shown[i] ?? '');
+  };
+  const leave = (i: number) => {
+    if (!rows[i].part && editing?.row === i && /\s{2}/.test(editing.value)) handlers.onType(i, editing.value.replace(/\s+/g, ' ').trim());
+    handlers.onLeave(i);
+  };
   // Each row's bars as shown, with the ones that don't add up.
   const marks = checkRows(
     rows.map((r, i) => ({ part: r.part, text: valueOf(i) })),
@@ -114,11 +131,23 @@ export function LineRows(props: LineRowsProps) {
       {/* Each part by its colour, not its name. */}
       <View style={styles.tags}>
         {numbers.length ? <View style={styles.numbersTop} /> : null}
-        {rows.map((r, i) => (
-          <View key={i} style={styles.tagCell}>
-            {r.part ? <View style={[styles.tag, { backgroundColor: partColor(r.part) }]} /> : null}
-          </View>
-        ))}
+        {rows.map((r, i) =>
+          r.part && onPart ? (
+            <Pressable
+              key={i}
+              onPress={() => onPart(i)}
+              accessibilityRole="button"
+              accessibilityLabel={`${partName(r.part)}, ${label}: change who sings it`}
+              style={({ pressed }) => [styles.tagCell, pressed && styles.tagPressed]}
+            >
+              <View style={[styles.tag, { backgroundColor: partColor(r.part) }]} />
+            </Pressable>
+          ) : (
+            <View key={i} style={styles.tagCell}>
+              {r.part ? <View style={[styles.tag, { backgroundColor: partColor(r.part) }]} /> : null}
+            </View>
+          ),
+        )}
       </View>
       <ScrollView
         ref={scroller}
@@ -169,7 +198,7 @@ export function LineRows(props: LineRowsProps) {
               ])}
             </View>
             {rows.map((r, i) => (
-              <Row key={i} {...handlers} editing={editing} label={label} i={i} row={r} value={valueOf(i)} shown={shown[i] ?? ''} laidOut={!!wordsLaid[i]} withKeys={!!r.part && !keyboard} />
+              <Row key={i} {...handlers} onLeave={leave} editing={editing} label={label} i={i} row={r} value={valueOf(i)} shown={startText(i)} laidOut={!!wordsLaid[i]} withKeys={!!r.part && !keyboard} />
             ))}
             {/* Each row of words, set under its part's notes; tap it to type (it then shows as typed). */}
             <View style={styles.overlay} aria-hidden importantForAccessibility="no-hide-descendants">
@@ -252,7 +281,7 @@ function Row(props: RowProps) {
       spellCheck={false}
       placeholder={props.placeholder?.(r)}
       placeholderTextColor={colors.placeholder}
-      style={[styles.rowInput, !r.part && styles.wordsInput, props.laidOut && styles.laidOut]}
+      style={[styles.rowInput, !r.part && editing?.row !== i && styles.wordsInput, !r.part && editing?.row === i && styles.wordsTyping, props.laidOut && styles.laidOut]}
       accessibilityLabel={`${r.part ? partName(r.part) : 'Words'}, ${props.label}`}
     />
   );
@@ -266,6 +295,7 @@ const useStyles = makeStyles((colors) => ({
   number: { position: 'absolute', top: 0, fontFamily: fonts.bold, fontSize: 10.5, lineHeight: NUMBERS_HEIGHT - 1, color: colors.muted },
   tagCell: { height: ROW_HEIGHT, alignItems: 'center', justifyContent: 'center' },
   tag: { width: 6, height: ROW_HEIGHT - 12, borderRadius: 3 },
+  tagPressed: { backgroundColor: colors.board },
   rowInput: {
     // Placed, so it's drawn over the tints placed before it (a browser draws placed boxes last, in order).
     position: 'relative',
@@ -291,5 +321,7 @@ const useStyles = makeStyles((colors) => ({
   wordsInput: { fontFamily: fonts.body, fontStyle: 'italic', fontSize: 14, color: colors.muted },
   // A row of words shown set under its notes: its own text hidden behind the syllables, until it's typed in.
   laidOut: { color: 'transparent' },
+  // A row of words being typed in: in the notes' type, so its syllables stay under their notes.
+  wordsTyping: { color: colors.ink },
   syllable: { position: 'absolute', height: ROW_HEIGHT, lineHeight: ROW_HEIGHT, fontFamily: fonts.body, fontStyle: 'italic', fontSize: 14, color: colors.muted },
 }));

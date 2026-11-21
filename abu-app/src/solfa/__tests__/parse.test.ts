@@ -545,3 +545,46 @@ describe('checks before saving', () => {
     expect(song.events.S.at(-1)?.bar).toBe(4);
   });
 });
+
+describe('parts left out of a line of music', () => {
+  const satb = (s: string, a: string, t: string, b: string) => `S  ${s}\nA  ${a}\nT  ${t}\nB  ${b}`;
+  const full = satb('d :d |r :r |', 's1 :s1 |t1 :t1 |', 'm :m |s :s |', 'd :d |s1 :s1 |');
+
+  it('rest through it, so a soprano solo line keeps every part in step', () => {
+    const text = `time: 2/4\n\n${full}\n\nS  m :f |s :- |\nW  Bless-ing and hon-our\n\n${full}`;
+    const song = parseSolfa(text);
+    expect(song.errors).toEqual([]);
+    expect(song.bars).toBe(6);
+    // The altos rest through the solo, and come back in with the sopranos.
+    const altoStarts = song.events.A.map((e) => e.start);
+    expect(altoStarts).toEqual([0, 1, 2, 3, 8, 9, 10, 11]);
+    expect(song.events.S.filter((e) => e.start >= 8)[0].start).toBe(8);
+  });
+
+  it('a bass solo first seen partway through starts where its line does, and the choir rests through it', () => {
+    const text = `time: 2/4\n\n${full}\n\nSoloB d :r |m :- |\n\n${full}`;
+    const song = parseSolfa(text);
+    expect(song.errors).toEqual([]);
+    expect(song.parts).toContain('SoloB');
+    expect(song.events.SoloB.map((e) => e.start)).toEqual([4, 5, 6]);
+    expect(song.events.T.map((e) => e.start)).toEqual([0, 1, 2, 3, 8, 9, 10, 11]);
+  });
+
+  it('keeps a key change at the line it comes before', () => {
+    const text = `time: 2/4\n\n${full}\n\nkey: D\nS  m :f |s :- |\n\n${full}`;
+    const song = parseSolfa(text, { key: 'C' });
+    expect(song.keyChanges.map((k) => k.beat)).toEqual([4]);
+  });
+
+  it('leave a song written a whole part at a time as it was', () => {
+    const text = 'time: 2/4\nS  d :d |r :r |\nS  m :m |f :f |\nA  s1 :s1 |t1 :t1 |\nA  d :d |r :r |';
+    const song = parseSolfa(text);
+    expect(song.errors).toEqual([]);
+    expect(song.events.A.map((e) => e.start)).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+  });
+
+  it('still says so when a part in the line has a bar too few', () => {
+    const text = `time: 2/4\n\n${satb('d :d |r :r |', 's1 :s1 |', 'm :m |s :s |', 'd :d |s1 :s1 |')}\n\n${full}`;
+    expect(parseSolfa(text).errors.length).toBeGreaterThan(0);
+  });
+});

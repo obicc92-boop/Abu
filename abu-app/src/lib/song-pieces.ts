@@ -24,7 +24,7 @@ const HEADING = /^(title|composer|arranger|lyricist|time|tempo)\s*(?::|\s)/i;
 const WORDS = /^(?:w|words)(?:\s*:\s*|\s+|$)(.*)$/i;
 const LABELLED = /^([A-Za-z][A-Za-z0-9]{0,7})(?:(?::\s*|\s+)(.*))?$/;
 /** Parts' names SolfaScores knows, even on a row with nothing in it yet. */
-const KNOWN_PART = /^(?:S|A|T|B|Solo|S\d|A\d|T\d|B\d|P\d+)$/;
+const KNOWN_PART = /^(?:S|A|T|B|Solo|Solo[SATB]|S\d|A\d|T\d|B\d|P\d+)$/;
 
 /** What a line of the text is, on its own. */
 function lineKind(line: string): { row: LineRow & { label: string } } | Exclude<Piece, { kind: 'music' }> | null {
@@ -87,6 +87,15 @@ export function withRow(text: string, piece: number, row: number, body: string):
   if (p?.kind !== 'music' || row >= p.rows.length) return text;
   const lines = text.split('\n');
   lines[p.from + row] = rowLine(p.labels[row], body.trim() ? body.replace(/\s+$/, '') : '');
+  return lines.join('\n');
+}
+
+/** The text with one row of a line of music given to another part ("S" to "SoloB"); its notes are kept. */
+export function withRowPart(text: string, piece: number, row: number, part: string): string {
+  const p = songPieces(text)[piece];
+  if (p?.kind !== 'music' || row >= p.rows.length || !p.rows[row].part) return text;
+  const lines = text.split('\n');
+  lines[p.from + row] = rowLine(part, p.rows[row].text.trim());
   return lines.join('\n');
 }
 

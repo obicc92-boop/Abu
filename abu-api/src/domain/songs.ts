@@ -39,6 +39,11 @@ export interface SongInput {
   time_signature?: string;
   tags?: string[];
   solfa?: string;
+  /**
+   * Save it even though the sol-fa has problems the checker found (owner's request, 21 November 2026: "a button
+   * which says to ignore these rules"). The person chose it; the song plays as best it can until they're fixed.
+   */
+  ignore_problems?: boolean;
 }
 
 export interface SongFilters {
@@ -80,7 +85,7 @@ export async function getSong(db: D1Database, songId: string): Promise<Song> {
 }
 
 /** Checks a song's details, and its sol-fa with the same reader the app uses. */
-function validate(song: Required<Pick<SongInput, 'title' | 'composer' | 'doh' | 'time_signature' | 'tags' | 'solfa'>>): void {
+function validate(song: Required<Pick<SongInput, 'title' | 'composer' | 'doh' | 'time_signature' | 'tags' | 'solfa'>>, ignoreProblems = false): void {
   if (!song.title.trim()) throw badRequest('Give the song a title.');
   if (song.title.length > 200) throw badRequest('Keep the title under 200 characters.');
   if (song.composer.length > 200) throw badRequest('Keep the composer under 200 characters.');
@@ -90,7 +95,7 @@ function validate(song: Required<Pick<SongInput, 'title' | 'composer' | 'doh' | 
     throw badRequest('Use up to 12 tags, each under 30 characters.');
   }
   if (song.solfa.length > 100_000) throw badRequest('That sol-fa is too long to save.');
-  if (song.solfa.trim()) {
+  if (song.solfa.trim() && !ignoreProblems) {
     const parsed = parseSolfa(song.solfa, { time: song.time_signature, key: song.doh });
     if (parsed.errors.length) throw badRequest(`The sol-fa has a problem: ${parsed.errors[0].message}`);
   }
@@ -106,7 +111,7 @@ export async function shareSong(db: D1Database, me: string, input: SongInput & {
     tags: (input.tags ?? []).map((t) => t.trim()),
     solfa: input.solfa ?? '',
   };
-  validate(song);
+  validate(song, input.ignore_problems);
   if (input.shared_from_group) await requireMember(db, input.shared_from_group, me);
   const id = newId();
   try {
@@ -144,7 +149,7 @@ export async function editSong(db: D1Database, me: string, songId: string, patch
     tags: patch.tags?.map((t) => t.trim()) ?? current.tags,
     solfa: patch.solfa ?? current.solfa,
   };
-  validate(next);
+  validate(next, patch.ignore_problems);
   try {
     await db
       .prepare('update songs set title = ?, composer = ?, doh = ?, time_signature = ?, tags = ?, solfa = ?, updated_at = ? where id = ?')

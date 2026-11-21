@@ -10,7 +10,7 @@ export interface LineRow {
   text: string;
 }
 
-const PART_ROW = /^(Solo|S|A|T|B|P\d+)\s+(.*)$/;
+const PART_ROW = /^(Solo[SATB]?|S|A|T|B|P\d+)\s+(.*)$/;
 const WORDS_ROW = /^W\s*:?\s+(.*)$/;
 
 export function splitLine(text: string): LineRow[] {
@@ -135,6 +135,21 @@ export function wordsUnderNotes(words: string, notes: string, width = 1): { text
     const at = Math.max(k < columns.length ? columns[k] : free, free);
     out.push({ text: w, at });
     free = at + Math.ceil(w.length * width) + 1;
+  });
+  return out;
+}
+
+/**
+ * A row of words as text to type in, each syllable starting in its note's column, with spaces between (owner's
+ * report, 21 November 2026: tapping a row of words to fix it lost how it lined up under the notes). In the notes'
+ * type, so typing keeps the syllables in place; spaces don't change the words (`splitWords`).
+ */
+export function wordsAsSpaced(words: string, notes: string): string {
+  const columns = noteColumns(notes);
+  let out = '';
+  splitWords(words).forEach((w, k) => {
+    const at = Math.max(k < columns.length ? columns[k] : 0, out ? out.length + 1 : 0);
+    out = out.padEnd(at) + w;
   });
   return out;
 }

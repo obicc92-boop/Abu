@@ -26,7 +26,8 @@ document.
 | Sharps and flats | `de`, `fe`, `se`, `ta`, `ba` | Same syllables: `de re fe se le` up, `ra ma ba ta` down. `ba` is accepted as `ta` |
 | Key change | `d/f`, `Key F#`, `(F)`, `A.t.` | A new `key:` line before the bar, with an optional pivot note written `s/d` |
 | Bridge note (where the key changes) | A small note raised before a note: `ˢd`, `ᵈ'f`, `ᵐl₁` | The old name, `=`, the new name: `s=d`, `d'=f`, `m=l1`. Each part changes key at its own bridge note |
-| Parts | Up to 5 rows: Solo + S A T B | Each line starts with a part name |
+| Parts | Up to 5 rows: Solo + S A T B | Each line starts with a part name. A solo sung by one part is `SoloS`, `SoloA`, `SoloT` or `SoloB` (a bass solo: shown as a solo, sung where the basses sing); `Solo` alone is sung where sopranos sing |
+| A line where some parts rest (a solo) | Only the singing parts' rows are printed | Lines of music are separated by a blank line. Once a section has a line with two or more parts, a part left out of a line rests through it, and a part first seen partway through rests through the lines before it |
 | Tenor | Written an octave above where it sounds | Written as on paper. The app plays it an octave lower |
 | Words | Under the soprano, often under each part | A `W` line follows the part it belongs to. `W:` with no part applies to all parts |
 | Sections | `CHORUS`, `CODA`, `Solo` | `[Verse]`, `[Chorus]`, `[Coda]` |
