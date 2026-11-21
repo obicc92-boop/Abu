@@ -4,7 +4,7 @@
  * the field being edited, which keeps its cursor: a key is pressed without taking the focus from the field.
  * The sharps and flats have a row of their own under the notes. Used to fix a scanned line (`bridge`: an "="
  * key for the bridge notes sheets print) and to write a song (`parts`: keys for the parts' names and a new line;
- * `keyChange`: a key to change key), with Undo beside delete where the screen keeps what's written (`onUndo`). Marks, on both, opens the musical markings (dynamics, tempo, and the repeats
+ * `keyChange`: a key to change key; `section`: a key for the section starting at the lines being written), with Undo beside delete where the screen keeps what's written (`onUndo`). Marks, on both, opens the musical markings (dynamics, tempo, and the repeats
  * and jumps) in place of the keys; a slur is a key of its own. While the phone's keyboard is in use instead, `PhoneKeyboardBar` sits over
  * it, to come back.
  */
@@ -13,7 +13,7 @@ import { Pressable, Text, View, type ViewInstance } from 'react-native';
 import Svg, { Polyline } from 'react-native-svg';
 
 import { type Key } from '@/lib/solfa-keys';
-import { KEY_NAMES } from '@/solfa';
+import { KEY_NAMES, SECTION_CHOICES } from '@/solfa';
 import { makeStyles, useColors } from '@/theme/theme';
 import { fonts } from '@/theme/tokens';
 
@@ -157,6 +157,15 @@ function useHoldFocus() {
   return ref;
 }
 
+/** The lines of music a section being written would start at: their number, and the section there now. */
+export interface SectionPlace {
+  line: number;
+  /** The section starting there, or null. */
+  current: string | null;
+  /** The section the lines carry on without one of their own, or null. */
+  carriesOn: string | null;
+}
+
 /** Where a key change being written would start: the bar (null at the song's start) and the key there. */
 export interface KeyPlace {
   bar: number | null;
@@ -170,6 +179,7 @@ export function SolfaKeypad({
   parts = false,
   bridge = false,
   keyChange,
+  section,
   onUndo,
   canUndo = false,
 }: {
@@ -183,11 +193,14 @@ export function SolfaKeypad({
   bridge?: boolean;
   /** Writing a song: "Key" picks a new key for the lines of music the cursor is in (`where` says which bar). */
   keyChange?: { where(): KeyPlace; pick(name: string): void };
+  /** Writing a song as text: "Section" picks the section starting at the lines of music the cursor is in. */
+  section?: { where(): SectionPlace; pick(name: string | null): void };
 }) {
   const styles = useStyles();
   const hold = useHoldFocus();
   const insert = (text: string) => onKey({ insert: text });
   const [place, setPlace] = useState<KeyPlace | null>(null);
+  const [sectionPlace, setSectionPlace] = useState<SectionPlace | null>(null);
   const [marking, setMarking] = useState(false);
   const beats = bridge ? [...BEATS.slice(0, 3), BRIDGE, BEATS[3]] : BEATS;
   return (
@@ -200,6 +213,42 @@ export function SolfaKeypad({
           }}
           onCancel={() => setMarking(false)}
         />
+      ) : sectionPlace && section ? (
+        // Picking the section starting at the lines the cursor is in (owner's request, 21 November 2026).
+        <>
+          <Text style={styles.heading}>Section from line {sectionPlace.line}</Text>
+          <Text style={styles.hint}>
+            {sectionPlace.current ? `${sectionPlace.current} starts here now.` : sectionPlace.carriesOn ? `It carries on ${sectionPlace.carriesOn} now.` : 'No section here yet.'} Tap one:
+          </Text>
+          {sectionRows(sectionPlace.current).map((row, r) => (
+            <View key={r} style={styles.row}>
+              {row.map((name) => (
+                <KeyButton
+                  key={name}
+                  label={name}
+                  onPress={() => {
+                    section.pick(name);
+                    setSectionPlace(null);
+                  }}
+                  word
+                  on={name === sectionPlace.current}
+                />
+              ))}
+            </View>
+          ))}
+          <View style={styles.row}>
+            <KeyButton
+              label={sectionPlace.carriesOn ? `None: carry on ${sectionPlace.carriesOn}` : 'No section'}
+              onPress={() => {
+                section.pick(null);
+                setSectionPlace(null);
+              }}
+              word
+              on={!sectionPlace.current}
+            />
+            <KeyButton label="Cancel" onPress={() => setSectionPlace(null)} word />
+          </View>
+        </>
       ) : place && keyChange ? (
         // Picking a new key: plainly where it starts, and doh there now.
         <>
@@ -235,6 +284,7 @@ export function SolfaKeypad({
               ))}
               <KeyButton label="↵" caption="new line" onPress={() => insert('\n')} small />
               {keyChange ? <KeyButton label="Key" caption="change" onPress={() => setPlace(keyChange.where())} accessibilityLabel="Change key" small /> : null}
+              {section ? <KeyButton label="§" caption="section" onPress={() => setSectionPlace(section.where())} accessibilityLabel="Section: verse, chorus, refrain" small /> : null}
             </View>
           ) : null}
           <View style={styles.row}>
@@ -277,6 +327,13 @@ export function SolfaKeypad({
       )}
     </View>
   );
+}
+
+/** The section names on the keypad, four to a row, with one a sheet printed that isn't among them ("Verse 2"). */
+function sectionRows(current: string | null): string[][] {
+  const names: string[] = [...SECTION_CHOICES];
+  if (current && !names.includes(current)) names.push(current);
+  return [names.slice(0, 4), names.slice(4)];
 }
 
 /**

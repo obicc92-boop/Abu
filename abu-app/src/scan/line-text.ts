@@ -2,7 +2,7 @@
  * A scanned line's text as rows to edit one by one: each part's row of notes
  * and the rows of words, in order, and back to text.
  */
-import { parseNote, partName, splitWords, SYLLABLE_PATTERN, SYLLABLE_SEMITONES } from '@/solfa';
+import { parseNote, partName, sectionName, splitWords, SYLLABLE_PATTERN, SYLLABLE_SEMITONES } from '@/solfa';
 
 export interface LineRow {
   /** S, A, T, B, Solo... or null for a row of words. */
@@ -156,6 +156,34 @@ export function wordsOf(text: string): LineWords[] {
     else if (r.text.trim()) out.push({ after: Math.max(0, seen - 1), text: r.text.trim() });
   }
   return out;
+}
+
+/**
+ * A section's label printed before a row of words, with a colon after it ("Refrain: Glory to God", "CHR:I know"):
+ * the section it names and the words after it, or null (owner's report, 21 November 2026: scanning didn't find
+ * "chorus, verses, refrain"). Only with the colon: a lyric can start with the word ("Chorus of angels sing").
+ */
+export function sectionBeforeWords(text: string): { name: string; words: string } | null {
+  const m = /^\s*([A-Z][A-Za-z.]*(?: [A-Za-z0-9]{1,6})?)\s*:\s*/.exec(text);
+  const name = m ? sectionName(m[1]) : null;
+  return m && name ? { name, words: text.slice(m[0].length) } : null;
+}
+
+/**
+ * A line's section read among its words, on a picture: a row read as words that's only a label ("CHORUS", "Verse
+ * 2") over the first part's notes or beside them (a row before the line's first notes is read as words under the
+ * first part), or a label with a colon before a row's words. The section (the first found), and the rows of words
+ * without it. A label alone further down is left as it was: it may be the next line's, printed nearer this one.
+ */
+export function sectionInWords(words: LineWords[]): { section: string | null; words: LineWords[] } {
+  let section: string | null = null;
+  const out = words.map((w) => {
+    const alone = w.after === 0 ? sectionName(w.text) : null;
+    const before = alone ? null : sectionBeforeWords(w.text);
+    section ??= alone ?? before?.name ?? null;
+    return alone ? { ...w, text: '' } : before ? { ...w, text: before.words } : w;
+  });
+  return { section, words: out };
 }
 
 /**

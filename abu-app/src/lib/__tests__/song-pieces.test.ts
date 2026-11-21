@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 
-import { barsBefore, songPieces, withKeyBefore, withNewLine, withoutLine, withoutTextLine, withRow, withRowPart, withWordsRow } from '../song-pieces';
+import { barsBefore, musicAtLine, sectionAbove, sectionOf, songPieces, withKeyBefore, withSectionBefore, withNewLine, withoutLine, withoutTextLine, withRow, withRowPart, withWordsRow } from '../song-pieces';
 
 const SONG = `title: Morning Song
 [Verse]
@@ -77,5 +77,47 @@ describe('who sings a row', () => {
     expect(rows.map((r) => r.part)).toEqual(['SoloB', null, 'A']);
     // Words have no part to change.
     expect(withRowPart(text, 0, 1, 'T')).toBe(text);
+  });
+});
+
+describe('Sections at a line of music', () => {
+  const TWO = 'S  d :r |\n\nS  m :f |\nW  Glo-ry';
+  it('starts a section at a line, above a key change there, and changes or takes it off', () => {
+    const second = () => songPieces(TWO).findIndex((p, i, all) => p.kind === 'music' && all.slice(0, i).some((q) => q.kind === 'music'));
+    const chorus = withSectionBefore(TWO, second(), 'Chorus');
+    expect(chorus).toBe('S  d :r |\n\n[Chorus]\nS  m :f |\nW  Glo-ry');
+    const pieces = songPieces(chorus);
+    const at = pieces.findIndex((p, i) => p.kind === 'music' && i > 0);
+    expect(sectionAbove(pieces, at)?.name).toBe('Chorus');
+    expect(sectionOf(pieces, at)).toBe('Chorus');
+    expect(withSectionBefore(chorus, at, 'Refrain')).toBe('S  d :r |\n\n[Refrain]\nS  m :f |\nW  Glo-ry');
+    expect(withSectionBefore(chorus, at, null)).toBe(TWO);
+    // Above a key change at the line.
+    const keyed = withKeyBefore(TWO, second(), 'F');
+    const k = songPieces(keyed).findIndex((p, i, all) => p.kind === 'music' && all.slice(0, i).some((q) => q.kind === 'music'));
+    expect(withSectionBefore(keyed, k, 'Chorus')).toBe('S  d :r |\n\n[Chorus]\nDoh is F\nS  m :f |\nW  Glo-ry');
+  });
+
+  it('tells a line carrying on a section from one starting it', () => {
+    const text = '[Verse]\nS  d :r |\n\nS  m :f |';
+    const pieces = songPieces(text);
+    const [first, next] = pieces.flatMap((p, i) => (p.kind === 'music' ? [i] : []));
+    expect(sectionAbove(pieces, first)?.name).toBe('Verse');
+    expect(sectionAbove(pieces, next)).toBeNull();
+    expect(sectionOf(pieces, next)).toBe('Verse');
+  });
+});
+
+describe('The line of music at a line of the text', () => {
+  it('is the one holding it, the next one below it, or the last one past the end', () => {
+    const text = 'title: Hymn\n[Verse]\nS  d :r |\nA  d :t1 |\n\n[Chorus]\nS  m :f |';
+    const pieces = songPieces(text);
+    const music = pieces.flatMap((p, i) => (p.kind === 'music' ? [i] : []));
+    expect(musicAtLine(pieces, 0)).toBe(music[0]); // the heading: the first line below it
+    expect(musicAtLine(pieces, 3)).toBe(music[0]); // its alto row
+    expect(musicAtLine(pieces, 5)).toBe(music[1]); // the [Chorus] line: the line it starts
+    expect(musicAtLine(pieces, 6)).toBe(music[1]);
+    expect(musicAtLine(pieces, 40)).toBe(music[1]);
+    expect(musicAtLine(songPieces('title: Empty'), 0)).toBe(-1);
   });
 });

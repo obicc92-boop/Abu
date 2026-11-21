@@ -7,7 +7,7 @@
  * checker only allows at the very start of a song, so the upbeat goes back
  * where it's sung, with its words.
  */
-import { keyFromSemitone, parseKey, parseSolfa, parseTempo, parseTime, splitWords } from '@/solfa';
+import { keyFromSemitone, parseKey, parseSolfa, parseTempo, parseTime, sectionLine, splitWords } from '@/solfa';
 
 import { noteColumns } from './line-text';
 
@@ -186,7 +186,7 @@ export function linesKeys(lines: { text: string; key?: string; left?: boolean }[
  * The lines as one song text, a blank line between lines of music, upbeats moved back. `keys`, the key each line
  * changes to at its start, if it does (`linesKeys`), goes on a line before it as sheets print it: \`Doh is F\`.
  */
-export function joinLines(lines: string[], time: string, keys: (string | undefined)[] = []): string {
+export function joinLines(lines: string[], time: string, keys: (string | undefined)[] = [], sections: (string | null | undefined)[] = []): string {
   const beats = parseTime(time)?.pulses ?? guessBeats(lines) ?? 4;
   // Marks held as stand-ins while bars and beats are counted and moved, and put back after.
   const held = holdMarks(lines);
@@ -202,7 +202,9 @@ export function joinLines(lines: string[], time: string, keys: (string | undefin
         .filter((r) => !r.part || barsOf(r.body).length)
         .map((r) => (r.part ? row(r.part, barsOf(r.body)) : `W  ${r.body}`))
         .join('\n');
-      return text && keys[i] ? `Doh is ${keys[i]}\n${held.back(text)}` : held.back(text);
+      const keyed = text && keys[i] ? `Doh is ${keys[i]}\n${held.back(text)}` : held.back(text);
+      // A section starting at the line ("[Chorus]"), above its key change.
+      return keyed && sections[i] ? `${sectionLine(sections[i]!)}\n${keyed}` : keyed;
     })
     .filter(Boolean)
     .join('\n\n');

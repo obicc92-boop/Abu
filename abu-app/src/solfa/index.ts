@@ -4,4 +4,5 @@ export { SYLLABLE_SEMITONES, SYLLABLE_PATTERN, parseNote, octaveOf, normalizePar
 export { parseSolfa, splitWords, parseTime, parseTempo } from './parse';
 export { dohMidi, partDohMidi, noteMidi, midiToHz, dohTimeline, dohAt, type DohPoint } from './pitch';
 export { DEFAULT_LEVEL, DYNAMICS, isTempo, readExpression, TEMPO_WORDS } from './expressions';
+export { SECTION_CHOICES, sectionLine, sectionName, takeSection } from './sections';
 export { isSign, orderLength, playOrder, readRepeat, repeatPlan, REPEAT_SPELLING, type Ending, type RepeatPlan, type RepeatProblem, type Segment } from './repeats';

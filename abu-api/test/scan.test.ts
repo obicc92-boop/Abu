@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ensureUser } from '../src/domain/groups';
 import { scanAllowance, useScan } from '../src/domain/scan';
 import { api as app } from '../src/index';
-import { CHECK_SYSTEM, checkLine, cleanPage, fixLine, keyName, keyOf, LINE_SCHEMA, LINE_SYSTEM, lineText, MARK_RULES, MARKS_SYSTEM, SIGN_FIX, readHeading, readLine, readLineWords, readMarks, readPage, readWords, rowsAnswer, tempoOf, tidyMarks, tidySlurs, timeOf, WORDS_MARKS_SYSTEM } from '../src/scan';
+import { CHECK_SYSTEM, checkLine, cleanPage, fixLine, keyName, keyOf, LINE_SCHEMA, LINE_SYSTEM, lineText, MARK_RULES, MARKS_SYSTEM, SIGN_FIX, readHeading, readLine, readLineWords, readMarks, readPage, readWords, rowsAnswer, sectionAnswer, sectionOf, tempoOf, tidyMarks, tidySlurs, timeOf, WORDS_LINE_SYSTEM, WORDS_MARKS_SYSTEM } from '../src/scan';
 import { call, ORIGIN, signUp } from './helpers';
 
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
@@ -453,5 +453,47 @@ describe('repeats and jumps', () => {
     expect(tidyMarks('{:||}d :r | {Dal Segno al fine}m :f | {dc} |')).toBe('{:|}d :r | {D.S. al Fine}m :f | {D.C.} |');
     expect(tidyMarks('{𝄋}d :r | {fine} {To Coda} {1st time}m |')).toBe('{segno}d :r | {Fine} {to coda} {1.}m |');
     expect(lineText({ rows: [{ part: 'S', notes: "{segno}d' :-.d' /d' :d' {:|}" }] }, ['S'])).toBe("S  {segno}d' :-.d' /d' :d' {:|} |");
+  });
+});
+
+describe('a section printed with a line', () => {
+  // Owner's report, 21 November 2026: scanning didn't find "chorus, verses, refrain".
+  it('every line reader is told to give it, and where it isn’t one', () => {
+    for (const system of [LINE_SYSTEM, CHECK_SYSTEM, WORDS_LINE_SYSTEM, WORDS_MARKS_SYSTEM]) {
+      expect(system).toContain('section\'s label written at the start of this line or just above it');
+      expect(system).toContain('one partway along the line or after its last notes isn\'t this line\'s, and Solo, Tutti or Unison isn\'t a section');
+    }
+    expect(LINE_SCHEMA.required).toContain('section');
+  });
+
+  it('comes from Claude as SolfaScores names it, and not when it names none', async () => {
+    const fetch = claudeReplies({ rows: [{ part: 'S', notes: 'd :r /m :f |', words: 'Glo-ry' }], doubts: [], key: '', section: 'CH' });
+    expect(await readLine(withKey, JPEG.buffer, 'image/jpeg', { parts: ['S'], time: '4/4' })).toEqual({ text: 'S  d :r /m :f |\nW  Glo-ry', doubts: [], section: 'Chorus' });
+    expect(JSON.parse(String(fetch.mock.calls[0][1]?.body)).output_config.format.schema.required).toContain('section');
+    claudeReplies({ rows: [{ part: 'S', notes: 'd :r |', words: '' }], doubts: [], key: '', section: '2nd Verse' });
+    expect((await checkLine(withKey, JPEG.buffer, 'image/jpeg', { parts: ['S'], draft: 'S  d :r |' })).section).toBe('Verse 2');
+    for (const said of ['', 'Solo', 'Tutti', 'Chorus of angels', undefined]) {
+      claudeReplies({ rows: [{ part: 'S', notes: 'd :r |', words: '' }], doubts: [], key: '', section: said });
+      expect([said, (await readLine(withKey, JPEG.buffer, 'image/jpeg', { parts: ['S'] })).section]).toEqual([said, undefined]);
+    }
+  });
+
+  it('comes with a line’s words from Opus, asked for in the schema', async () => {
+    const fetch = claudeReplies({ rows: [{ part: 'S', words: 'Glo-ry' }], key: '', section: 'REFRAIN' });
+    expect(await readLineWords(withKey, JPEG.buffer, 'image/jpeg', { parts: ['S'], notes: 'S  d :- |' })).toEqual({ words: [{ after: 0, text: 'Glo-ry' }], section: 'Refrain' });
+    expect(JSON.parse(String(fetch.mock.calls[0][1]?.body)).output_config.format.schema.required).toEqual(['rows', 'key', 'section']);
+  });
+
+  it('comes from Cloudflare’s reader on a row of its own before the rows, and stays out of them', async () => {
+    const { env: withAi, run } = cloudflare('```\n[Ref.]\nS  s1 | d :-.r /m :d |\nW  O come\n```');
+    const r = await fixLine(withAi, JPEG.buffer, 'image/jpeg', { parts: ['S'], time: '4/4', draft: 'S  s1 | d :r /m :d |' });
+    expect(r).toEqual({ text: 'S  s1 | d :-.r /m :d |\nW  O come', doubts: [], section: 'Refrain' });
+    const [, input] = run.mock.calls[0] as [string, { messages: { role: string; content: unknown }[] }];
+    expect(String(input.messages[0].content)).toContain('A section, if the line has one, goes first on a row of its own in square brackets: `[Chorus]`.');
+    // Only before the rows, and only a section.
+    expect(sectionAnswer('S  d :r |\n[Chorus]')).toBeUndefined();
+    expect(sectionAnswer('[Solo]\nS  d :r |')).toBeUndefined();
+    expect(sectionAnswer('S  d :r |')).toBeUndefined();
+    expect(['Verse 2', 'VERSE TWO', 'Coda', 'D.S.', 'x'].map(sectionOf)).toEqual(['Verse 2', 'Verse 2', 'Coda', undefined, undefined]);
   });
 });

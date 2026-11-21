@@ -455,3 +455,85 @@ describe('slurs underlined in a typed sheet', () => {
     expect(sheet(row('d :r :m :f :s :l :t :d :r :m'), [[at(0), at(29), 152]]).lines[0].text).not.toContain('(');
   });
 });
+
+describe('sections printed in a typed sheet', () => {
+  // Owner's report, 21 November 2026: scanning didn't find "chorus, verses, refrain".
+  const heading = [...typed('ALL HAIL', 200, 60, 20, 10), ...typed('Doh is G   Time 4/4', 106, 90)];
+  /** A line of two parts, four bars each, typed at `x` from `y` (the alto 14 points below). */
+  const lineOf = (y: number, before = '', x = 106) => [...typed(`${before}d :- |d :t | l :s |d :r`, x, y), ...typed(`${before ? ' '.repeat(before.length) : ''}s :- |l :s | m :m |s :t`, x, y + 14)];
+  const sections = (chars: PdfChar[]) => readTypedSheet([page([...heading, ...chars])]).lines.map((l) => l.section);
+
+  it('starts the line printed under a label on its own row, and leaves the label out of the words and the heading', () => {
+    const sheet = readTypedSheet([page([...heading, ...typed('REFRAIN', 106, 130), ...lineOf(150), ...typed('VERSE ONE:', 106, 200), ...lineOf(220)])]);
+    expect(sheet.lines.map((l) => l.section)).toEqual(['Refrain', 'Verse 1']);
+    expect(sheet.title).toBe('ALL HAIL');
+    expect(sheet.lines.map((l) => l.text).join('\n')).not.toMatch(/REFRAIN|VERSE/);
+    // Printed among the bar numbers over the line, or with who sings it.
+    expect(sections([...lineOf(150), ...typed('CHORUS  9   10   11   12', 106, 200), ...lineOf(220)])).toEqual([undefined, 'Chorus']);
+    expect(sections([...lineOf(150), ...typed('Verse 2  32   33   34', 106, 200), ...lineOf(220)])).toEqual([undefined, 'Verse 2']);
+    expect(sections([...lineOf(150), ...typed('Verse 3 (Male) *', 106, 200), ...lineOf(220)])).toEqual([undefined, 'Verse 3']);
+  });
+
+  it('reads a label printed before a line’s notes, and leaves it out of them', () => {
+    const sheet = readTypedSheet([page([...heading, ...lineOf(150), ...lineOf(200, 'CH ')])]);
+    expect(sheet.lines.map((l) => l.section)).toEqual([undefined, 'Chorus']);
+    expect(sheet.lines[1].text.split('\n')[0]).toBe('S  d :- | d :t | l :s | d :r |');
+    expect(sections([...lineOf(150, 'Ref. '), ...lineOf(200)])).toEqual(['Refrain', undefined]);
+  });
+
+  it('starts a section once where the sheet prints its label on every line of it', () => {
+    expect(sections([...lineOf(150), ...lineOf(200, 'CH '), ...lineOf(250, 'CH '), ...typed('Verse 2', 106, 300), ...lineOf(320), ...lineOf(370, 'CH ')])).toEqual([
+      undefined,
+      'Chorus',
+      undefined,
+      'Verse 2',
+      'Chorus',
+    ]);
+  });
+
+  it('reads a label before a row of words, with its colon, and leaves it out of the words', () => {
+    const sheet = readTypedSheet([page([...heading, ...lineOf(150), ...typed('d :- |d :t | l :s |d :r', 106, 200), ...typed('Refrain: Glo-ry to God', 106, 212), ...typed('s :- |l :s | m :m |s :t', 106, 226)])]);
+    expect(sheet.lines[1].section).toBe('Refrain');
+    expect(sheet.lines[1].text.split('\n')[1]).toBe('W  Glo-ry to God');
+  });
+
+  it('takes no section from a lyric, a label after the notes or over the middle of a line, or a direction', () => {
+    // A lyric that starts with the word, under the line or on a row of its own.
+    const lyric = readTypedSheet([page([...heading, ...typed('d :- |d :t | l :s |d :r', 106, 150), ...typed('Chorus of an-gels sing', 106, 162), ...typed('s :- |l :s | m :m |s :t', 106, 176)])]);
+    expect(lyric.lines[0].section).toBeUndefined();
+    expect(lyric.lines[0].text).toContain('W  Chorus of an-gels sing');
+    expect(sections([...lineOf(150), ...typed('Chorus of angels', 106, 200), ...lineOf(220)])).toEqual([undefined, undefined]);
+    // "CH" after the last notes says what's sung next.
+    expect(sections([...typed('d :- |d :t | l :s |d :r | CH', 106, 150), ...typed('s :- |l :s | m :m |s :t', 106, 164)])).toEqual([undefined]);
+    // Over the middle of the line, the section starts partway through it.
+    expect(sections([...lineOf(150), ...typed('Refrain', 200, 200), ...lineOf(220)])).toEqual([undefined, undefined]);
+    // Who sings, a direction in brackets, a jump, and "ref." in running text.
+    for (const label of ['Solo', 'Tutti', '(CHORUS)', 'D.S. Chorus', 'To Refrain', 'ref.']) expect([label, sections([...lineOf(150), ...typed(label, 106, 200), ...lineOf(220)])]).toEqual([label, [undefined, undefined]]);
+  });
+
+  it('starts a new line of music after a label over where the lines start', () => {
+    // Two lines set close together: without the label they'd read as one line of four parts.
+    expect(readTypedSheet([page([...heading, ...lineOf(150), ...lineOf(190)])]).lines).toHaveLength(1);
+    const sheet = readTypedSheet([page([...heading, ...lineOf(150), ...typed('CHORUS', 106, 177), ...lineOf(190)])]);
+    expect(sheet.lines.map((l) => [l.parts.length, l.section])).toEqual([
+      [2, undefined],
+      [2, 'Chorus'],
+    ]);
+  });
+
+  it('keeps a section’s upbeat at its start, and takes "CODA" over a line as its section and its sign', () => {
+    // One part in 2/4, the second line starting with the upbeat "s" that the first left room for.
+    const end = typed('d :r |m :- |r :', 106, 150);
+    const upbeat = typed('s |l :t |d :-', 106, 250);
+    // (With no label, the upbeat goes back to the line before, as the sheet means.)
+    expect(readTypedSheet([page([...heading, ...end, ...upbeat])]).lines.map((l) => l.text)).toEqual(['S  d :r | m :- | r :s |', 'S  l :t | d :- |']);
+    const sheet = readTypedSheet([page([...heading, ...end, ...typed('Verse 2', 106, 230), ...upbeat])]);
+    expect(sheet.lines.map((l) => [l.text, l.section])).toEqual([
+      ['S  d :r | m :- | r : |', undefined],
+      ['S  s | l :t | d :- |', 'Verse 2'],
+    ]);
+    const coda = readTypedSheet([page([...heading, ...lineOf(150), ...typed('CODA', 106, 200), ...lineOf(220)])]);
+    expect(coda.lines[1].section).toBe('Coda');
+    expect(coda.lines[1].text.split('\n')[0]).toBe('S  {coda}d :- | d :t | l :s | d :r |');
+  });
+});

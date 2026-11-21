@@ -159,6 +159,61 @@ export function withKeyBefore(text: string, piece: number, name: string): string
   return lines.join('\n');
 }
 
+/** The line of music (its piece) at a line of the text, or the next one after it (the last one, past the end); -1 with none. */
+export function musicAtLine(pieces: Piece[], line: number): number {
+  let last = -1;
+  for (let i = 0; i < pieces.length; i++) {
+    const p = pieces[i];
+    if (p.kind !== 'music') continue;
+    if (line < p.to) return i;
+    last = i;
+  }
+  return last;
+}
+
+/**
+ * The section that starts at a line of music (owner's request, 21 November 2026): its `[Chorus]` just above it,
+ * over a key change or a blank line if there's one between. Null when the line carries on the section before it.
+ */
+export function sectionAbove(pieces: Piece[], piece: number): Extract<Piece, { kind: 'section' }> | null {
+  for (let i = piece - 1; i >= 0; i--) {
+    const p = pieces[i];
+    if (p.kind === 'section') return p;
+    if (p.kind !== 'key' && p.kind !== 'blank') return null;
+  }
+  return null;
+}
+
+/** The section a line of music is in: the nearest one above it (its own, or one it carries on), or null. */
+export function sectionOf(pieces: Piece[], piece: number): string | null {
+  for (let i = piece - 1; i >= 0; i--) {
+    const p = pieces[i];
+    if (p.kind === 'section') return /^verses$/i.test(p.name) ? null : p.name;
+  }
+  return null;
+}
+
+/**
+ * The text with a section starting at a line of music (`[Chorus]` above it, and above a key change there), or with
+ * the one starting there taken off (`name` null), so the line carries on the section before it.
+ */
+export function withSectionBefore(text: string, piece: number, name: string | null): string {
+  const pieces = songPieces(text);
+  const p = pieces[piece];
+  if (p?.kind !== 'music') return text;
+  const lines = text.split('\n');
+  const own = sectionAbove(pieces, piece);
+  if (own) {
+    if (name) lines[own.line] = `[${name.trim()}]`;
+    else lines.splice(own.line, 1);
+    return lines.join('\n');
+  }
+  if (!name) return text;
+  const above = pieces[piece - 1];
+  lines.splice(above?.kind === 'key' ? above.line : p.from, 0, `[${name.trim()}]`);
+  return lines.join('\n');
+}
+
 /**
  * How many bars the lines of music before each one have, for numbering its bars on from them. Marks are left out
  * first: a repeat's `{:|}` isn't a bar line, and a mark alone between bar lines (`| {D.S.} |`) isn't a bar.

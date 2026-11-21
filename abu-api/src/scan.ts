@@ -16,7 +16,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 
 import { repeatMark } from '../../abu-app/src/scan/repeats';
-import { readExpression, TEMPO_WORDS } from '../../abu-app/src/solfa';
+import { readExpression, sectionName, TEMPO_WORDS } from '../../abu-app/src/solfa';
 import { AppError, badRequest } from './errors';
 
 /** The strong reader: reads a line from scratch, for lines the cheaper path can't get right. */
@@ -115,6 +115,7 @@ SolfaScores' format:
 - Octave marks: a mark above or raised after the note (¹, ', a small raised figure or tick) means an octave up: write \`d'\`. A mark below or lowered (₁, a small lowered figure or tick, a comma right after the note) means an octave down: write \`t1\`. Two octaves: \`d''\` and \`s2\`.
 - Bridge notes, where the key changes: a small note printed raised just before a note is that note's name in the old key. Write both joined by \`=\`, old first, each with its own octave marks: \`ˢd\` is \`s=d\`, \`ᵈ'f\` is \`d'=f\`, \`ᵐl₁\` is \`m=l1\`.
 - A new key written with this line, above it or at its start (\`Key F\`, \`Doh is F\`, \`(F)\`, a key in a box), is given as \`key\`: the note's letter with any sharp or flat (\`F\`, \`B♭\`, \`F♯\`). An empty string if none is written there (the key in the sheet's heading isn't one). Write the bridge notes as well, where there are any.
+- A section's label written at the start of this line or just above it (\`Chorus\`, \`CH\`, \`Refrain\`, \`Ref.\`, \`Verse 2\`, \`2nd Verse\`, \`Coda\`, \`Intro\`) is given as \`section\`, as written; it is neither notes nor words. An empty string if there's none there: one partway along the line or after its last notes isn't this line's, and Solo, Tutti or Unison isn't a section.
 - If the line begins with a column before its first bar line (an upbeat), write that column as the row's first bar: \`s | d :r /m :f |\`.
 - Every row has the same number of bars, lined up with the rows above and below. A bar with nothing in it for a part is written with its empty beats, e.g. \` : : : \` for 4 beats.
 ${MARK_RULES}
@@ -153,8 +154,9 @@ export const LINE_SCHEMA = {
       },
     },
     key: { type: 'string' },
+    section: { type: 'string' },
   },
-  required: ['rows', 'doubts', 'key'],
+  required: ['rows', 'doubts', 'key', 'section'],
   additionalProperties: false,
 };
 
@@ -166,7 +168,9 @@ export const WORDS_LINE_SYSTEM = `You copy the words (lyrics) of one line of mus
 
 For each part, in the order given, give the words printed under its row of notes, before the next part's row of notes; an empty string if there are none (on many sheets only the top part has words). On a sheet set in a table, a part's words are under its notes in every box: give them in order along the line. Write the words as syllables separated by spaces, with a hyphen after a syllable that runs on into the next (\`peo- ple\` is written \`peo-ple\`). Copy the words exactly as written, in whatever language, with their punctuation; never translate or correct them. The names of the notes (doh, re, mi) and the sol-fa itself are never words.
 
-Also give as \`key\` a new key written with this line, above it or at its start (\`Key F\`, \`Doh is F\`, \`(F)\`, a key in a box): the note's letter with any sharp or flat (\`F\`, \`B♭\`, \`F♯\`). An empty string if none is written there (the key in the sheet's heading isn't one), and never a key written in the words.`;
+Also give as \`key\` a new key written with this line, above it or at its start (\`Key F\`, \`Doh is F\`, \`(F)\`, a key in a box): the note's letter with any sharp or flat (\`F\`, \`B♭\`, \`F♯\`). An empty string if none is written there (the key in the sheet's heading isn't one), and never a key written in the words.
+
+And give as \`section\` a section's label written at the start of this line or just above it (\`Chorus\`, \`CH\`, \`Refrain\`, \`Ref.\`, \`Verse 2\`, \`Coda\`), as written, and not as words. An empty string if there's none there: one partway along the line or after its last notes isn't this line's, and Solo, Tutti or Unison isn't a section.`;
 
 export const WORDS_LINE_SCHEMA = {
   type: 'object',
@@ -181,8 +185,9 @@ export const WORDS_LINE_SCHEMA = {
       },
     },
     key: { type: 'string' },
+    section: { type: 'string' },
   },
-  required: ['rows', 'key'],
+  required: ['rows', 'key', 'section'],
   additionalProperties: false,
 };
 
@@ -210,8 +215,9 @@ export const WORDS_MARKS_SCHEMA = {
       },
     },
     key: { type: 'string' },
+    section: { type: 'string' },
   },
-  required: ['rows', 'key'],
+  required: ['rows', 'key', 'section'],
   additionalProperties: false,
 };
 
@@ -245,6 +251,8 @@ export interface LineReading {
   doubts: { part: string; bar: number }[];
   /** A new key written with the line ("F", "B♭"), if the reader saw one. */
   key?: string;
+  /** The section a label written at the line's start or just above it names ("Chorus", "Verse 2"), if the reader saw one. */
+  section?: string;
 }
 
 /**
@@ -257,6 +265,13 @@ export function keyName(raw: unknown): string | undefined {
   const acc = (m[2] ?? '').replace(/[-\s]/g, '').toLowerCase();
   return m[1].toUpperCase() + (acc === '#' || acc === '♯' || acc === 'sharp' ? '♯' : acc === 'b' || acc === '♭' || acc === 'flat' ? '♭' : '');
 }
+
+/**
+ * The section a reader gave for a line, as SolfaScores names it ("CH" is Chorus, "2nd Verse" Verse 2: sectionName in
+ * abu-app/src/solfa/sections.ts); undefined if it names none (owner's report, 21 November 2026: scanning didn't
+ * find "chorus, verses, refrain").
+ */
+export const sectionOf = (raw: unknown): string | undefined => sectionName(String(raw ?? '').slice(0, 40)) ?? undefined;
 
 /* ---------- Shaping the answers ---------- */
 
@@ -359,7 +374,7 @@ export function lineText(raw: { rows?: { part?: string; notes?: string; words?: 
  */
 const CLOUDFLARE = '@cf/mistralai/mistral-small-3.1-24b-instruct';
 
-const FIX_ANSWER = `Answer with only the corrected line: one row per part, in order, each as the part name, two spaces and the notes with their markings and slurs (for example \`S  s1 | d :-.r /m :d |\`), then a row \`W  \` and the words. No other text.`;
+const FIX_ANSWER = `Answer with only the corrected line: one row per part, in order, each as the part name, two spaces and the notes with their markings and slurs (for example \`S  s1 | d :-.r /m :d |\`), then a row \`W  \` and the words. A section, if the line has one, goes first on a row of its own in square brackets: \`[Chorus]\`. No other text.`;
 const WORDS_PROMPT = `This picture is one row of words (the lyrics) from a tonic sol-fa choir sheet. Copy the words exactly as printed, left to right, keeping hyphens between syllables. Leave out a part's name printed at the left edge (S, A, T, B, Soprano...) and bar numbers. Answer with only those words, nothing else. If there are no words, answer with nothing.`;
 
 /** Whether each reader can be used: the app tries them in this order. */
@@ -386,6 +401,17 @@ async function askCloudflare(env: Env, image: ArrayBuffer, type: ImageType, prom
     throw new AppError(503, 'The AI reader is busy or out of reach. Try again in a minute.');
   }
   return (out?.choices?.[0]?.message?.content ?? out?.response ?? '').trim();
+}
+
+/** The section Cloudflare's reader gave on a row of its own before the line's rows ("[Chorus]"), if any. */
+export function sectionAnswer(answer: string): string | undefined {
+  for (const raw of answer.split('\n')) {
+    const line = raw.trim().replace(/^`+|`+$/g, '');
+    const m = line.match(/^\[([^\]]+)\]$/);
+    if (m) return sectionOf(m[1]);
+    if (/^(Solo|Soprano|Alto|Tenor|Bass|S|A|T|B|W)\b/i.test(line)) return undefined;
+  }
+  return undefined;
 }
 
 /** Cloudflare's reader's answer, rows as "S  d :r |" and "W  words", as a line in SolfaScores' format. */
@@ -443,7 +469,8 @@ export async function fixLine(env: Env, image: ArrayBuffer, type: ImageType, opt
   const answer = await askCloudflare(env, image, type, prompt, `${CHECK_SYSTEM}\n\n${FIX_ANSWER}`, 2500);
   const text = rowsAnswer(answer, opts.parts);
   if (!text.trim()) throw new AppError(422, 'This line couldn’t be read. Check it by eye.');
-  return { text, doubts: [] };
+  const section = sectionAnswer(answer);
+  return { text, doubts: [], ...(section ? { section } : {}) };
 }
 
 /** A row of words, as printed (Cloudflare's reader): "All peo-ple that on earth". */
@@ -618,7 +645,7 @@ export async function readLine(env: Env, image: ArrayBuffer, type: ImageType, op
   ]
     .filter(Boolean)
     .join(' ');
-  const raw = (await ask(env, STRONG, LINE_SYSTEM, LINE_SCHEMA, image, type, prompt)) as { rows?: { part?: string; notes?: string; words?: string }[]; words?: string; doubts?: { part?: string; bar?: number }[]; key?: string };
+  const raw = (await ask(env, STRONG, LINE_SYSTEM, LINE_SCHEMA, image, type, prompt)) as { rows?: { part?: string; notes?: string; words?: string }[]; words?: string; doubts?: { part?: string; bar?: number }[]; key?: string; section?: string };
   return shapeReading(raw, opts.parts);
 }
 
@@ -633,10 +660,10 @@ export async function readLineWords(
   image: ArrayBuffer,
   type: ImageType,
   opts: { parts: string[]; notes: string; marks?: boolean },
-): Promise<{ words: { after: number; text: string }[]; key?: string; notes?: string }> {
+): Promise<{ words: { after: number; text: string }[]; key?: string; section?: string; notes?: string }> {
   const prompt = `Parts, top to bottom: ${opts.parts.join(', ')}. The line's notes as read:\n${opts.notes}`;
   const [system, schema] = opts.marks ? [WORDS_MARKS_SYSTEM, WORDS_MARKS_SCHEMA] : [WORDS_LINE_SYSTEM, WORDS_LINE_SCHEMA];
-  const raw = (await ask(env, STRONG, system, schema, image, type, prompt, 'low')) as { rows?: { part?: string; words?: string; notes?: string }[]; key?: string };
+  const raw = (await ask(env, STRONG, system, schema, image, type, prompt, 'low')) as { rows?: { part?: string; words?: string; notes?: string }[]; key?: string; section?: string };
   const words: { after: number; text: string }[] = [];
   (raw.rows ?? []).forEach((row, i) => {
     const at = opts.parts.indexOf(partOf(row.part ?? '') ?? '');
@@ -644,9 +671,10 @@ export async function readLineWords(
     if (text) words.push({ after: at >= 0 ? at : Math.min(i, opts.parts.length - 1), text });
   });
   const key = keyName(raw.key);
+  const section = sectionOf(raw.section);
   // With the marks asked for: the rows of notes back, marked (the app checks they're the notes it sent).
   const notes = opts.marks && raw.rows?.some((r) => r.notes?.trim()) ? markedRows(raw.rows, opts.parts) : '';
-  return { words, ...(key ? { key } : {}), ...(notes ? { notes } : {}) };
+  return { words, ...(key ? { key } : {}), ...(section ? { section } : {}), ...(notes ? { notes } : {}) };
 }
 
 /**
@@ -679,17 +707,19 @@ export async function checkLine(env: Env, image: ArrayBuffer, type: ImageType, o
   ]
     .filter(Boolean)
     .join(' ');
-  const raw = (await ask(env, CHEAP, CHECK_SYSTEM, LINE_SCHEMA, image, type, prompt)) as { rows?: { part?: string; notes?: string; words?: string }[]; words?: string; doubts?: { part?: string; bar?: number }[]; key?: string };
+  const raw = (await ask(env, CHEAP, CHECK_SYSTEM, LINE_SCHEMA, image, type, prompt)) as { rows?: { part?: string; notes?: string; words?: string }[]; words?: string; doubts?: { part?: string; bar?: number }[]; key?: string; section?: string };
   return shapeReading(raw, opts.parts);
 }
 
-function shapeReading(raw: { rows?: { part?: string; notes?: string; words?: string }[]; words?: string; doubts?: { part?: string; bar?: number }[]; key?: string }, parts: string[]): LineReading {
+function shapeReading(raw: { rows?: { part?: string; notes?: string; words?: string }[]; words?: string; doubts?: { part?: string; bar?: number }[]; key?: string; section?: string }, parts: string[]): LineReading {
   const key = keyName(raw.key);
+  const section = sectionOf(raw.section);
   return {
     text: lineText(raw, parts),
     doubts: (raw.doubts ?? [])
       .map((d) => ({ part: partOf(d.part ?? '') ?? '', bar: Math.round(Number(d.bar) || 0) }))
       .filter((d) => d.part && d.bar > 0),
     ...(key ? { key } : {}),
+    ...(section ? { section } : {}),
   };
 }

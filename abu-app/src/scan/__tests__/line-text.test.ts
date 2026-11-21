@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 
-import { alignedRows, barColumns, bestFree, changedShare, freeRepair, joinLine, keepsParts, namesNotWords, noteColumns, problemsByPart, splitLine, tidyNotes, tidyTitle, withBarLinesInStep, withBarsInStep, withBridgeNotes, withFullEmptyBars, withGapsAsBars, withHalfBarsAsBars, withoutNameColumn, withRestingEdges, withShortBarsJoined, withSpacedBeats, withWords, wordsAsSpaced, wordsOf, wordsPreferring, wordsUnderNotes } from '../line-text';
+import { alignedRows, barColumns, bestFree, changedShare, freeRepair, joinLine, keepsParts, namesNotWords, noteColumns, problemsByPart, sectionBeforeWords, sectionInWords, splitLine, tidyNotes, tidyTitle, withBarLinesInStep, withBarsInStep, withBridgeNotes, withFullEmptyBars, withGapsAsBars, withHalfBarsAsBars, withoutNameColumn, withRestingEdges, withShortBarsJoined, withSpacedBeats, withWords, wordsAsSpaced, wordsOf, wordsPreferring, wordsUnderNotes } from '../line-text';
 import { parseSolfa, splitWords } from '@/solfa';
 
 describe('tidyNotes', () => {
@@ -547,5 +547,29 @@ describe('slurs in round brackets', () => {
     expect(keepsParts(answer, reading)).toBe(true);
     expect(changedShare(answer, reading)).toBe(0);
     expect(bestFree([answer], passes('4/4'), 4)).toBe(answer);
+  });
+});
+
+describe('a section’s label read among a picture line’s words', () => {
+  // Owner's report, 21 November 2026: scanning didn't find "chorus, verses, refrain".
+  it('takes a row that’s only a label over the first part as the line’s section, and not words', () => {
+    const got = sectionInWords([
+      { after: 0, text: 'CHORUS' },
+      { after: 0, text: 'Glo-ry to God' },
+    ]);
+    expect(got.section).toBe('Chorus');
+    expect(withWords('S  d :r |\nA  m :f |', got.words)).toBe('S  d :r |\nW  Glo-ry to God\nA  m :f |');
+  });
+
+  it('takes a label with a colon before a row’s words, and keeps the words', () => {
+    expect(sectionBeforeWords('Refrain: Glo-ry to God')).toEqual({ name: 'Refrain', words: 'Glo-ry to God' });
+    expect(sectionBeforeWords('CHR:I know I know')).toEqual({ name: 'Chorus', words: 'I know I know' });
+    expect(sectionInWords([{ after: 1, text: 'Verse 2: O come' }])).toEqual({ section: 'Verse 2', words: [{ after: 1, text: 'O come' }] });
+  });
+
+  it('takes no section from a lyric, a label further down the line, or who sings', () => {
+    for (const words of [[{ after: 0, text: 'Chorus of an-gels sing' }], [{ after: 0, text: 'Lord: have mer-cy' }], [{ after: 0, text: 'Solo' }], [{ after: 3, text: 'CH' }]]) {
+      expect(sectionInWords(words)).toEqual({ section: null, words });
+    }
   });
 });

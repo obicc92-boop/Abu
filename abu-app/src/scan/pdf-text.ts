@@ -28,8 +28,9 @@
  * `pageText` takes what it needs from a pdf.js page; the rest is plain logic.
  * Positions are in PDF points, from the page's top left.
  */
-import { readExpression, TEMPO_WORDS } from '@/solfa';
+import { readExpression, sectionName, TEMPO_WORDS } from '@/solfa';
 
+import { sectionBeforeWords } from './line-text';
 import { isSign, repeatMark } from './repeats';
 
 
@@ -85,9 +86,10 @@ export interface TypedSheet {
   /**
    * Each line as SolfaScores text (S, A, T, B rows with W rows of words), with its parts and where it's printed;
    * `lined` is the same with the parts' bar lines lined up by where they're printed, when that differs; `key`,
-   * a new key printed at its start (see `keyPrinted`).
+   * a new key printed at its start (see `keyPrinted`); `section`, a section's label printed above it or before its first row
+   * ("CHORUS", "Ref.": `sectionName` in src/solfa/sections.ts).
    */
-  lines: { page: number; box: TypedLine['box']; parts: string[]; words: number; text: string; lined?: string; key?: string }[];
+  lines: { page: number; box: TypedLine['box']; parts: string[]; words: number; text: string; lined?: string; key?: string; section?: string }[];
   /** A staff score with sol-fa printed with it: its text is only part of the music. */
   staff: boolean;
 }
@@ -860,6 +862,8 @@ interface System {
   key?: { name: string; x: number };
   /** A tempo printed above it (after the heading), as printed: "Allegro", "M. 120". */
   tempo?: string;
+  /** The section a label printed above it or at its start names ("Chorus", "Verse 2"). */
+  section?: string;
 }
 
 /**
@@ -888,6 +892,105 @@ function keyPrinted(text: string, row: PdfChar[]): { name: string; x: number } |
   const word = m[0].slice(0, 3).toLowerCase();
   const at = ink.findIndex((c, i) => ink.slice(i, i + 3).map((g) => g.c).join('').toLowerCase() === word);
   return { name, x: at >= 0 ? ink[at].x0 : (ink[0]?.x0 ?? 0) };
+}
+
+/*
+ * Sections (owner's report, 21 November 2026: scanning didn't find "chorus, verses, refrain"). On the owner's typed
+ * sheets a section's label is printed three ways: on a row of its own over the line it starts ("VERSE ONE:",
+ * "Refrain", "CHORUS 1 2 3 4 5" over the bar numbers), before the line's first notes ("Ref. s :s :f", "VERSE 1
+ * :m1"), or before a row of words ("CHR: I know"). Printed over the middle of a line it starts there, which a line
+ * can't say, and after a line's last notes ("…:- | CH") it says what's sung next: neither is taken.
+ */
+
+/** A row's runs of characters set together (split at spaces and gaps), each with where it starts. */
+function tokensOf(row: PdfChar[], main: number): { text: string; x0: number }[] {
+  const out: { text: string; x0: number }[] = [];
+  let prev: PdfChar | null = null;
+  for (const c of row) {
+    if (c.c === ' ') {
+      prev = null;
+      continue;
+    }
+    if (!prev || c.x0 - prev.x1 > 0.28 * main) out.push({ text: '', x0: c.x0 });
+    out[out.length - 1].text += c.c;
+    prev = c;
+  }
+  return out;
+}
+
+/**
+ * The section a row printed on its own names ("CHORUS", "Verse 2", "VERSE ONE:", "REFRAIN 2x"), with where its
+ * label starts; null if the row has anything else. Bar numbers printed along it are left out ("CHORUS 1 2 3 4 5",
+ * "19. Refrain. 20. 21."): numbers in order, so a lone one by the label is its own ("Verse 1 32 33 34" is Verse 1).
+ * When a row has more than one label, the first is the line's.
+ */
+function sectionRow(row: PdfChar[], main: number): { name: string; x: number } | null {
+  const tokens = tokensOf(row, main);
+  const num = (t: string) => (/^\d{1,3}\.?$/.test(t) ? parseInt(t, 10) : null);
+  const nums = tokens.map((t) => num(t.text)).filter((n): n is number => n !== null);
+  const isBarNumber = (t: string) => {
+    const n = num(t);
+    return n !== null && (nums.includes(n - 1) || nums.includes(n + 1));
+  };
+  let found: { name: string; x: number } | null = null;
+  const labelled: string[] = [];
+  for (let i = 0; i < tokens.length; ) {
+    if (isBarNumber(tokens[i].text)) {
+      i++;
+      continue;
+    }
+    // A mark after the label ("*", "–") is nothing; before it, the row is something else ("- : / : CH").
+    if (!/[A-Za-z0-9]/.test(tokens[i].text)) {
+      if (!found) return null;
+      i++;
+      continue;
+    }
+    // A label starts with a capital ("ref." in running text is a direction: "47 ref. 48" sings the refrain there).
+    let name: string | null = null;
+    let taken = 0;
+    for (let k = Math.min(4, tokens.length - i); k >= 1 && !name && /^[A-Z]/.test(tokens[i].text); k--) {
+      const run = tokens.slice(i, i + k);
+      if (run.some((t) => isBarNumber(t.text))) continue;
+      name = sectionName(run.map((t) => t.text).join(' '));
+      taken = k;
+    }
+    if (!name) return null;
+    found ??= { name, x: tokens[i].x0 };
+    labelled.push(name.replace(/ \d+$/, ''));
+    i += taken;
+  }
+  // The same section named more than once is headings over columns of text ("Verse 1. Verse 2. Verse 3."), not a label.
+  return new Set(labelled).size < labelled.length ? null : found;
+}
+
+/**
+ * Whether a label printed at `x` is over where a line starts, in its first quarter: printed further along, its
+ * section starts partway through the line, which a line can't say. On the owner's typed samples (21 November
+ * 2026) the labels over a line's start were all in its first fifth, and one over a verse starting at a line's third
+ * bar a third of the way along.
+ */
+const overStart = (x: number, line: { x0: number; x1: number }) => x < line.x0 + 0.25 * (line.x1 - line.x0);
+
+/** A part's name printed before its row of notes ("S", "Alto:", "Bass"). */
+const PART_FIRST = /^(?:Solo|Soprano|Sop|Alto|Tenor|Ten|Bass|[SATB][12]?)[.:]?$/;
+
+/**
+ * The section a label printed at the start of a row of notes names ("Ref. s :s :f", "Bass Intro d :d", "VERSE 1
+ * :m1"), or null. A label starts with a capital, which notes never do.
+ */
+function sectionBeforeNotes(text: string): string | null {
+  const tokens = text
+    .replace(/^[\s¦|]+/, '')
+    .replace(/^([A-Za-z.]+):(?=\S)/, '$1: ')
+    .split(/\s+/)
+    .filter(Boolean);
+  const i = tokens.length > 1 && PART_FIRST.test(tokens[0]) ? 1 : 0;
+  if (!/^[A-Z]/.test(tokens[i] ?? '')) return null;
+  for (let k = Math.min(3, tokens.length - i); k >= 1; k--) {
+    const name = sectionName(tokens.slice(i, i + k).join(' '));
+    if (name) return name;
+  }
+  return null;
 }
 
 /** More than five rows of notes is several lines of music: split at ruled lines, or evenly. */
@@ -941,6 +1044,8 @@ function mergeUpbeats(systems: System[]): void {
     const pRows = prev.rows.flatMap(([k], i) => (k === 'n' ? [i] : []));
     const cRows = cur.rows.flatMap(([k], i) => (k === 'n' ? [i] : []));
     if (pRows.length !== cRows.length || !pRows.length) continue;
+    // A section starts with its upbeat, as its label is printed over it ("VERSE TWO:" over ": l1 :d | …").
+    if (cur.section && cur.section !== prev.section) continue;
     const firsts = cRows.map((i) => barsOf(cur.rows[i][1]));
     const lasts = pRows.map((i) => barsOf(prev.rows[i][1]));
     if (firsts.some((f, i) => f.length < 2 || !lasts[i].length)) continue;
@@ -1110,6 +1215,8 @@ export function readSystems(pages: PageText[]): { header: string[]; systems: Sys
   // Keys and tempos printed after the heading, with where they're printed: each goes to the line of music just below it.
   const keys: { name: string; x: number; y: number; page: number }[] = [];
   const tempos: { text: string; y: number; page: number }[] = [];
+  // Sections' labels, with where they're printed: each to the line it's printed over or beside.
+  const labels: { name: string; x: number; y: number; page: number }[] = [];
   pages.forEach((page, number) => {
     music += page.music;
     if (!page.chars.length) return;
@@ -1118,6 +1225,8 @@ export function readSystems(pages: PageText[]): { header: string[]; systems: Sys
     const lines = underlines(page).sort((a, b) => a[0] - b[0]);
     let cur: System | null = null;
     let lastY: number | null = null;
+    // A section's label over where the lines start has been passed: the next row of notes starts a line.
+    let newLine = false;
     const pageSystems: System[] = [];
     // Each system's rows of notes, written out once all its rows are known (the drawn lines depend on them all).
     const noteRows = new Map<System, { at: number; row: PdfChar[]; y: number; main: number }[]>();
@@ -1135,32 +1244,54 @@ export function readSystems(pages: PageText[]): { header: string[]; systems: Sys
       const jumps = jumpsRow(r, main);
       if (jumps?.length) {
         pageJumps.push({ y, jumps });
+        // "CODA" over a line is where the coda starts, as well as the sign a "To Coda" goes to.
+        const coda = sectionRow(r, main);
+        if (coda) labels.push({ ...coda, y, page: number });
         return;
       }
       const gap = lastY !== null ? y - lastY : 1e9;
       const ink = r.filter((c) => c.c !== ' ');
       const solfa = isSolfa(plain);
       if (cur && !solfa && ink.length <= 3 && main < 0.7 * cur.main) return; // a stray small figure
+      // A section's label on a row of its own ("CHORUS", "VERSE ONE:"): neither words nor the heading, but where
+      // the lines are cut it counts as a row of words would. Printed over where the lines start, the next row of
+      // notes starts a new line of music; printed further along ("Verse 1." over the middle of a line, between
+      // its rows), the line goes on.
+      const named = solfa ? null : sectionRow(r, main);
+      if (named) {
+        labels.push({ ...named, y, page: number });
+        if (cur && gap <= 2.6 * main) lastY = y;
+        else if (gap > 2.6 * main) cur = null;
+        if (cur && overStart(named.x, cur)) newLine = true;
+        return;
+      }
       // A key printed after the heading (the heading's is the song's): kept for the line below it, and not words.
       const keyHere = !solfa && (systems.length || pageSystems.length) ? keyPrinted(plain, whole) : null;
       if (keyHere) keys.push({ ...keyHere, y, page: number });
       const tempoHere = !solfa && (systems.length || pageSystems.length) ? tempoRow(plain) : '';
       if (tempoHere) tempos.push({ text: tempoHere, y, page: number });
       if (solfa) {
-        if (!cur || gap > 2.6 * main) {
+        if (!cur || gap > 2.6 * main || newLine) {
           cur = { rows: [], ys: [], main, page: number, x0: 1e9, x1: 0 };
           pageSystems.push(cur);
           noteRows.set(cur, []);
         }
         cur.x0 = Math.min(cur.x0, ink[0].x0);
         cur.x1 = Math.max(cur.x1, ink[ink.length - 1].x1);
+        // A section's label before the notes ("Ref. s :s"): `toAbu` leaves it out of them.
+        const before = sectionBeforeNotes(plain);
+        if (before) labels.push({ name: before, x: ink[0].x0, y, page: number });
         noteRows.get(cur)?.push({ at: cur.rows.length, row: r, y, main });
         cur.rows.push(['n', '']);
         cur.ys.push(y);
         lastY = y;
+        newLine = false;
       } else if (cur && gap <= 2.6 * main && WORDISH.test(plain) && !/^[\d\s]+$/.test(plain) && !TEMPO.test(plain) && !tempoHere) {
         if (!keyHere) {
-          cur.rows.push(['w', plain]);
+          // A section's label before the words ("Refrain: Hosanna"): the line's, and not words.
+          const before = sectionBeforeWords(plain);
+          if (before) labels.push({ name: before.name, x: ink[0].x0, y, page: number });
+          cur.rows.push(['w', before ? before.words : plain]);
           cur.ys.push(y);
         }
         lastY = y;
@@ -1208,6 +1339,18 @@ export function readSystems(pages: PageText[]): { header: string[]; systems: Sys
     const below = systems.filter((s) => s.page === t.page && firstNotes(s) > t.y).sort((a, b) => firstNotes(a) - firstNotes(b))[0];
     if (below && firstNotes(below) - t.y < 4 * below.main) below.tempo = t.text;
   }
+  // Each section's label to the line of music it's printed beside (at a row's start) or just above, if it's over
+  // where the line starts; the topmost wins. Beside means among its rows of notes: a label among rows of words under
+  // the last (verses printed under the music) isn't the line's.
+  const notesYs = (s: System) => s.ys.filter((_, i) => s.rows[i][0] === 'n');
+  for (const l of [...labels].sort((a, b) => a.page - b.page || a.y - b.y)) {
+    const onPage = systems.filter((s) => s.page === l.page);
+    const beside = onPage.find((s) => l.y >= Math.min(...notesYs(s)) - 0.3 * s.main && l.y <= Math.max(...notesYs(s)) + 0.3 * s.main);
+    const firstNotes = (s: System) => Math.min(...notesYs(s));
+    const below = onPage.filter((s) => firstNotes(s) > l.y).sort((a, b) => firstNotes(a) - firstNotes(b))[0];
+    const at = beside ?? (below && firstNotes(below) - l.y < 4 * below.main ? below : undefined);
+    if (at && !at.section && overStart(l.x, at)) at.section = l.name;
+  }
   const printed: TypedLine[] = systems.map((s) => ({
     page: s.page,
     box: [s.x0 - 14, Math.min(...s.ys) - 1.2 * s.main, s.x1 + 14, Math.max(...s.ys) + 0.7 * s.main],
@@ -1223,6 +1366,9 @@ export function readTypedSheet(pages: PageText[]): TypedSheet {
   const { key, time, tempo } = headerInfo(header);
   const title = header.find((h) => /[A-Za-z]{3}/.test(h))?.trim() ?? '';
   const lines = systems.map((s, i) => {
+    // A sheet that prints the label on every line of a section ("CH" before each line of the chorus) starts it
+    // once: a line labelled as the line before it carries on.
+    const section = s.section && s.section !== systems[i - 1]?.section ? s.section : undefined;
     const n = s.rows.filter(([k]) => k === 'n').length;
     const names = PARTS[n] ?? Array.from({ length: n }, (_, k) => `P${k + 1}`);
     const out: string[] = [];
@@ -1249,7 +1395,7 @@ export function readTypedSheet(pages: PageText[]): TypedSheet {
     // A printed key counts from the line's start, if it's printed over the line's first third and the line has no
     // bridge notes (which, where printed, say exactly where each part changes key).
     const key = s.key && s.key.x < s.x0 + 0.35 * (s.x1 - s.x0) && !text.includes('=') ? s.key.name : undefined;
-    return { page: s.page, box: printed[i].box, parts: names, words, text, ...(lined !== text ? { lined } : {}), ...(key ? { key } : {}) };
+    return { page: s.page, box: printed[i].box, parts: names, words, text, ...(lined !== text ? { lined } : {}), ...(key ? { key } : {}), ...(section ? { section } : {}) };
   });
   return { title, key, time, tempo, lines, staff: music > 50 };
 }

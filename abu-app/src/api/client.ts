@@ -163,6 +163,8 @@ export interface ScanLineReading {
   doubts: { part: string; bar: number }[];
   /** A new key written with the line ("F", "B♭"), if the reader saw one. */
   key?: string;
+  /** The section a label written at the line's start or just above it names ("Chorus", "Verse 2"), if the reader saw one. */
+  section?: string;
 }
 
 export type EventKind = 'service' | 'rehearsal' | 'concert';
@@ -410,7 +412,7 @@ export const api = {
   scanLineWords: (image: Blob, o: { parts: string[]; notes: string; marks?: boolean }) => {
     const q = new URLSearchParams({ parts: o.parts.join(','), notes: o.notes });
     if (o.marks) q.set('marks', '1');
-    return request<{ words: { after: number; text: string }[]; key?: string; notes?: string }>(`/scan/line-words?${q}`, { method: 'POST', body: image, headers: { 'Content-Type': 'image/jpeg' } });
+    return request<{ words: { after: number; text: string }[]; key?: string; section?: string; notes?: string }>(`/scan/line-words?${q}`, { method: 'POST', body: image, headers: { 'Content-Type': 'image/jpeg' } });
   },
   /** A line's rows (`notes`) back with the marks and slurs printed with them (a JPEG of the line): Cloudflare's reader, or Claude's with `by: 'claude'`. */
   scanMarks: (image: Blob, o: { parts: string[]; notes: string; by: 'cloudflare' | 'claude' }) => {

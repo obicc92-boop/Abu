@@ -42,13 +42,14 @@ import { AgainIcon, CameraIcon, CheckIcon, CloseIcon, FileIcon, PlusIcon, ScanIc
 import { LineRows } from '@/components/line-rows';
 import { PlayButton } from '@/components/player-controls';
 import { BarToolbar, type BarActions } from '@/components/score';
+import { SectionPicker, sectionLabel } from '@/components/section-picker';
 import { PhoneKeyboardBar, SolfaKeypad } from '@/components/solfa-keypad';
 import { Body, Button, Card, Chip, ErrorText, Kicker, MAX_WIDTH, Page, TopBar } from '@/components/ui';
 import { setScanDraft, takeCheckAgain } from '@/scan/draft';
 import { forgetScan, listScans, openScan, saveScan, type SavedScan } from '@/scan/saved';
 import { ago, titleFromFile } from '@/scan/unfinished';
 import { joinLines, linesKeys, timeFor, withTempo } from '@/scan/join';
-import { bestFree, changedShare, joinLine, keepsParts, namesNotWords, problemsByPart, splitLine, tidyNotes, tidyTitle, withBarsInStep, withWords, wordsOf, wordsPreferring, type LineRow, type LineWords } from '@/scan/line-text';
+import { bestFree, changedShare, joinLine, keepsParts, namesNotWords, problemsByPart, sectionInWords, splitLine, tidyNotes, tidyTitle, withBarsInStep, withWords, wordsOf, wordsPreferring, type LineRow, type LineWords } from '@/scan/line-text';
 import { withAiMarks, withWordsAndMarks } from '@/scan/ai-marks';
 import { readSetting, writeSetting } from '@/lib/storage';
 import { placeCursor } from '@/lib/field-cursor';
@@ -139,6 +140,12 @@ interface Line {
    * read), or set by the person. Bridge notes in its rows change key where they are.
    */
   key?: string;
+  /**
+   * The section starting at this line ("Chorus", "Verse 2"; owner's request, 21 November 2026): printed above it or
+   * before its first row, as a reader found it, or set by the person; saved as `[Chorus]` above it. Null when the
+   * person took one a reader found off.
+   */
+  section?: string | null;
 }
 
 /** A line as an unfinished scan keeps it: everything but its picture (kept apart) and the canvas it was read from. */
@@ -345,14 +352,14 @@ function Scanner() {
    * read): Cloudflare's reader reads handwritten words poorly (owner's call, 20 November 2026). The app's words
    * stay under a part Opus gave none for, and all of them if it can't be asked.
    */
-  const withOpusWords = async (line: Line, text: string, ai: Readers, passes: (t: string) => boolean): Promise<{ text: string; key?: string }> => {
+  const withOpusWords = async (line: Line, text: string, ai: Readers, passes: (t: string) => boolean): Promise<{ text: string; key?: string; section?: string }> => {
     if (!line.handwritten || !ai.anthropic) return { text };
     try {
       const notes = joinLine(splitLine(text).filter((r) => r.part));
       // With the marks and slurs too, in the same call, when they're wanted: kept only if its notes are the line's.
       const r = await api.scanLineWords(line.blob, { parts: line.parts, notes, marks: marksAi });
       // (A new key with the line, read now or before, means its bridge notes are real: never taken for a misread segno.)
-      return { text: withWordsAndMarks(text, r, passes, !!(line.key || r.key)), key: r.key };
+      return { text: withWordsAndMarks(text, r, passes, !!(line.key || r.key)), key: r.key, section: r.section };
     } catch {
       return { text };
     }
@@ -380,20 +387,30 @@ function Scanner() {
    * one already, or bridge notes, which say exactly where each part changes key.
    */
   const keyFrom = (line: Line, text: string, key?: string): Partial<Line> => (key && !line.key && !text.includes('=') ? { key } : {});
+  /**
+   * The section a reader found printed at the line's start or just above it ("Chorus", "Verse 2"; owner's report,
+   * 21 November 2026: scanning didn't find "chorus, verses, refrain"): kept unless the line has one already (a
+   * typed PDF's, or one the person set or took off).
+   */
+  const sectionFrom = (line: Line, section?: string | null): Partial<Line> => (section && line.section === undefined ? { section } : {});
 
   const readOne = async (line: Line, head: Heading, songTime: string, ai: Readers, again = false): Promise<string> => {
     const passes = (t: string) => splitLine(t).some((r) => r.part && r.text.trim()) && !parseSolfa(t, { time: songTime }).errors.length;
-    let own = withWords(line.draft, line.wordTexts);
+    // A section's label read as the line's words (a row that's only "CHORUS" over the first part, or "Refrain:"
+    // before a row's words): the line's section, found with no AI, and not words.
+    const printed = sectionInWords(line.wordTexts);
+    const wordTexts = printed.words;
+    let own = withWords(line.draft, wordTexts);
     // Free repairs first: bar lines every part lost put back in step; the parts' bar lines lined up as
     // printed; a column of part names read as notes, beat marks left out, parts resting through an upbeat.
     const beats = parseTime(songTime)?.pulses ?? 4;
-    if (!passes(own)) own = bestFree([own, ...(line.lined ? [withWords(line.lined, line.wordTexts)] : [])], passes, beats);
+    if (!passes(own)) own = bestFree([own, ...(line.lined ? [withWords(line.lined, wordTexts)] : [])], passes, beats);
     // Bar lines every part lost alike go back, at the same beats in every part, even when the line still
     // fails for something else (only bar lines move): the person and the AIs then start from bars in step.
     if (!passes(own)) own = withBarsInStep(own, beats) ?? own;
     if (!again && passes(own)) {
-      const { text, key } = line.handwritten ? await withOpusWords(line, own, ai, passes) : { text: await typedMarks(line, own, ai, passes), key: undefined };
-      update(line.id, { status: 'read', text, checked: false, ...keyFrom(line, text, key) });
+      const { text, key, section } = line.handwritten ? await withOpusWords(line, own, ai, passes) : { text: await typedMarks(line, own, ai, passes), key: undefined, section: undefined };
+      update(line.id, { status: 'read', text, checked: false, ...keyFrom(line, text, key), ...sectionFrom(line, section ?? printed.section) });
       return text;
     }
     update(line.id, { status: 'reading', error: undefined });
@@ -406,13 +423,17 @@ function Scanner() {
     if (ai.anthropic) tries.push(['strong', () => api.scanLine(line.blob, opts)]);
     let problem = '';
     let opusWords: LineWords[] = [];
+    let opusSection: string | undefined;
     for (const [via, ask] of tries) {
       try {
         const r = await ask();
         // Opus reads handwritten words far better than Cloudflare's reader: its words are kept, and the app's only
         // under a part it gave none for (owner's call, 20 November 2026). A correction keeps the app's words.
-        if (via === 'strong') opusWords = wordsOf(r.text);
-        let text = withWords(r.text, via === 'strong' ? wordsPreferring(opusWords, line.wordTexts) : line.wordTexts);
+        if (via === 'strong') {
+          opusWords = wordsOf(r.text);
+          opusSection = r.section;
+        }
+        let text = withWords(r.text, via === 'strong' ? wordsPreferring(opusWords, wordTexts) : wordTexts);
         // An answer that only lacks what the free repairs mend (a part's rest through an upbeat left out) is mended
         // as the app's own readings are: Opus read a boxed sheet's first line right but for the tenor's empty upbeat.
         if (!passes(text)) text = bestFree([text], passes, beats);
@@ -423,20 +444,21 @@ function Scanner() {
         if (passes(text) && keepsParts(text, draft) && !(corrected && changedShare(text, draft) > 0.2)) {
           // (Not when the person asked again: the words may be theirs.)
           let key = r.key;
-          if (corrected && !again) ({ text, key = r.key } = await withOpusWords(line, text, ai, passes));
-          update(line.id, { status: 'read', text, doubts: r.doubts, checked: false, via, ...keyFrom(line, text, key) });
+          let section = r.section;
+          if (corrected && !again) ({ text, key = r.key, section = r.section } = await withOpusWords(line, text, ai, passes));
+          update(line.id, { status: 'read', text, doubts: r.doubts, checked: false, via, ...keyFrom(line, text, key), ...sectionFrom(line, section ?? printed.section) });
           return text;
         }
       } catch (e) {
         if (e instanceof ApiError && e.status === 429) {
-          update(line.id, { status: draft.trim() ? 'read' : 'failed', text: draft, error: e.message });
+          update(line.id, { status: draft.trim() ? 'read' : 'failed', text: draft, error: e.message, ...sectionFrom(line, printed.section) });
           throw e;
         }
         problem = (e as Error).message;
       }
     }
     // Nothing better: the line keeps the app's own reading, for the person to fix, with Opus's words if it read
-    // the line (its notes weren't kept, but its words are still the best read).
+    // the line (its notes weren't kept, but its words, and the section it saw, are still the best read).
     const mine = again ? draft : own;
     const text = opusWords.length ? withWords(mine, wordsPreferring(opusWords, wordsOf(mine))) : mine;
     update(line.id, {
@@ -444,6 +466,7 @@ function Scanner() {
       text,
       checked: false,
       error: text.trim() ? undefined : problem || 'This line couldn’t be read. Type it in, or leave it out.',
+      ...sectionFrom(line, opusSection ?? printed.section),
     });
     return text;
   };
@@ -464,7 +487,7 @@ function Scanner() {
       if (more) setNote(`Only the first ${MAX_PAGES} pages are read at a time.`);
       const found: Line[] = [];
       let head: Heading = { title: '', composer: '', key: '', time: '', tempo: '' };
-      const add = async (p: number, box: Box, l: { parts: string[]; words: number; wordRows?: FoundLine['wordRows']; text?: string; lined?: string; draft?: string; key?: string }) => {
+      const add = async (p: number, box: Box, l: { parts: string[]; words: number; wordRows?: FoundLine['wordRows']; text?: string; lined?: string; draft?: string; key?: string; section?: string }) => {
         const cut = await cutLine(pages[p], box);
         const text = l.text ?? '';
         const wordRows = l.wordRows ?? [];
@@ -488,6 +511,7 @@ function Scanner() {
           checked: false,
           skipped: false,
           ...(l.key ? { key: l.key } : {}),
+          ...(l.section ? { section: l.section } : {}),
         });
       };
 
@@ -618,9 +642,33 @@ function Scanner() {
     // left out before it).
     const left = (l: Line) => l.skipped || !l.text.trim();
     const keys = linesKeys(lines.map((l) => ({ text: l.text, key: l.key, left: left(l) })), doh, time);
-    const kept = lines.flatMap((l, i) => (left(l) ? [] : [{ id: l.id, text: l.text, key: keys[i].change }]));
-    // The tempo printed in the heading starts the song's text (`tempo: Andante. M. 70`).
-    const solfa = withTempo(joinLines(kept.map((l) => l.text), time, kept.map((l) => l.key)), heading.tempo);
+    // Each kept line's section: a left-out line's goes on to the next kept line (as a key does), and one the lines
+    // before are in already isn't written again (readers see one line at a time: "CH" before every chorus line).
+    let carried: string | null = null;
+    let running: string | null = null;
+    const sections = new Map<string, string | null>();
+    for (const l of lines) {
+      if (left(l)) {
+        if (l.section) carried = l.section;
+        continue;
+      }
+      const own = l.section === null ? null : (l.section ?? carried);
+      carried = null;
+      sections.set(l.id, own && own !== running ? own : null);
+      if (own) running = own;
+    }
+    const kept = lines.flatMap((l, i) => (left(l) ? [] : [{ id: l.id, text: l.text, key: keys[i].change, section: sections.get(l.id) ?? null }]));
+    // The tempo printed in the heading starts the song's text (`tempo: Andante. M. 70`); each section's name is
+    // above its first line (`[Chorus]`).
+    const solfa = withTempo(
+      joinLines(
+        kept.map((l) => l.text),
+        time,
+        kept.map((l) => l.key),
+        kept.map((l) => l.section),
+      ),
+      heading.tempo,
+    );
     setScanDraft({
       title: tidyTitle(heading.title) || titleFromFile(chosen[0]?.name),
       composer: heading.composer,
@@ -1025,6 +1073,10 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
   const lineDoh = keys[current]?.start ?? doh;
   const newKey = line.key && keys[current] && keys[current].start !== keys[current].from ? (parseKey(line.key)?.name ?? keyFromSemitone(keys[current].start).name) : null;
   const [pickingKey, setPickingKey] = useState(false);
+  // The section starting at this line (owner's request, 21 November 2026): as a reader found it, or as set here;
+  // without one, the line carries on the section of the lines before it.
+  const [pickingSection, setPickingSection] = useState(false);
+  const carriesOn = line.section ? null : ([...lines.slice(0, current)].reverse().find((l) => !l.skipped && l.section)?.section ?? null);
   const parsed = useMemo(() => parseSolfa(line.text, { time, key: lineDoh }), [line.text, time, lineDoh]);
   const empty = !rows.some((r) => r.part && r.text.trim());
   // It plays even with a bar that doesn't add up (owner's request, 21 November 2026), as best it can: hearing it
@@ -1100,11 +1152,24 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
     update(line.id, { text: joinLine(next), checked: false });
   };
   const go = (i: number) => setCurrent(Math.max(0, Math.min(lines.length - 1, i)));
+  /**
+   * On from this line to the next one still to check, after it or else before it; to saving when there's none left
+   * (owner's report, 21 November 2026: a scan carried on with every line checked had to be stepped through to the
+   * end before it could be saved).
+   */
+  const onward = () => {
+    const toCheck = (l: Line, i: number) => i !== current && !l.checked && !l.skipped;
+    const after = lines.findIndex((l, i) => i > current && toCheck(l, i));
+    const next = after >= 0 ? after : lines.findIndex(toCheck);
+    if (next >= 0) go(next);
+    else onFinish();
+  };
   const looksRight = () => {
     update(line.id, { checked: true, skipped: false });
-    if (current === lines.length - 1) onFinish();
-    else go(current + 1);
+    onward();
   };
+  // Every line checked or left out: saving is a tap away from any line.
+  const allDone = lines.every((l) => l.checked || l.skipped);
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right', 'bottom']}>
@@ -1142,6 +1207,7 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
           <Text style={styles.muted}>
             {checked} of {lines.length} checked
           </Text>
+          <Button small kind={allDone ? 'primary' : 'ghost'} label={allDone ? 'Ready to save ›' : 'Finish ›'} onPress={onFinish} accessibilityLabel={allDone ? 'Every line is checked: go to saving' : 'Finish checking: go to saving'} />
         </View>
         <ScrollView horizontal contentContainerStyle={styles.dots} showsHorizontalScrollIndicator={false}>
           {lines.map((l, i) => {
@@ -1314,7 +1380,30 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
               </Text>
               <Text style={styles.toolText}>{line.key ? `Key ${line.key} from here` : 'Key change'}</Text>
             </Pressable>
+            <Pressable
+              onPress={() => setPickingSection(!pickingSection)}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: pickingSection }}
+              style={[styles.tool, (pickingSection || !!line.section) && styles.toolOn]}
+            >
+              <Text style={styles.toolGlyph} aria-hidden>
+                §
+              </Text>
+              <Text style={styles.toolText}>{sectionLabel(line.section ?? null, carriesOn)}</Text>
+            </Pressable>
           </View>
+          {pickingSection ? (
+            <View style={[styles.pad, { paddingTop: 0 }]}>
+              <SectionPicker
+                current={line.section ?? null}
+                carriesOn={carriesOn}
+                onPick={(name) => {
+                  update(line.id, { section: name, checked: false });
+                  setPickingSection(false);
+                }}
+              />
+            </View>
+          ) : null}
           {pickingKey ? (
             <View style={[styles.pad, { paddingTop: 0, gap: 8 }]}>
               <Text style={styles.small}>Does the sheet change key where this line starts? Tap the new doh.</Text>
@@ -1361,7 +1450,7 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
               onPress={() => (current === 0 ? (router.canGoBack() ? router.back() : router.replace('/songs')) : go(current - 1))}
               style={{ minWidth: 92 }}
             />
-            <Button label={line.skipped ? 'Next line' : 'Looks right'} onPress={line.skipped ? () => (current === lines.length - 1 ? onFinish() : go(current + 1)) : looksRight} style={{ flex: 1 }} />
+            <Button label={line.skipped ? 'Next line' : 'Looks right'} onPress={line.skipped ? onward : looksRight} style={{ flex: 1 }} />
           </View>
         )}
       </View>

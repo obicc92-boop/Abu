@@ -10,7 +10,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, Text, View, type TextInputInstance, type ViewInstance } from 'react-native';
 
 import type { Selection } from '@/lib/solfa-keys';
-import { barsBefore, musicPiece, musicText, songPieces, withNewLine, withoutLine, withoutTextLine, withRow, withRowPart, withWordsRow, type Piece } from '@/lib/song-pieces';
+import { barsBefore, musicPiece, musicText, sectionAbove, sectionOf, songPieces, withNewLine, withoutLine, withoutTextLine, withRow, withRowPart, withSectionBefore, withWordsRow, type Piece } from '@/lib/song-pieces';
 import { tidyNotes } from '@/scan/line-text';
 import type { BarSpan } from '@/score/bars';
 import { parseSolfa, partName } from '@/solfa';
@@ -20,6 +20,7 @@ import { fonts, partColor } from '@/theme/tokens';
 import { CheckIcon, CloseIcon, PlusIcon } from './icons';
 import { LineRows } from './line-rows';
 import { PartSheet } from './part-sheet';
+import { SectionPicker, sectionLabel } from './section-picker';
 import { BarToolbar, type BarActions } from './score';
 import { Button, Chip } from './ui';
 
@@ -41,7 +42,7 @@ type Music = Extract<Piece, { kind: 'music' }>;
 /**
  * One line of music open to write in, inside the score where its bars were: what's just above it in the text (a
  * section's name, a key change as "Doh is F ×"), its rows, and what can be done to it (words under a part, change
- * a row's part, remove the line, Done).
+ * a row's part, the section starting at it, remove the line, Done).
  */
 export function SongLine({
   text,
@@ -94,6 +95,10 @@ export function SongLine({
   const before: Piece[] = [];
   for (let j = k - 1; j >= 0 && pieces[j].kind !== 'music'; j--) before.unshift(pieces[j]);
   const [removing, setRemoving] = useState(false);
+  // The section starting at the line (owner's request, 21 November 2026), being chosen.
+  const [sectioning, setSectioning] = useState(false);
+  const own = k >= 0 ? sectionAbove(pieces, k) : null;
+  const carriesOn = own || k < 0 ? null : sectionOf(pieces, k);
   // A row whose part is being changed (its colour tapped, or Change part).
   const [partOf, setPartOf] = useState<number | null>(null);
   // A bar number tapped, to play what's written.
@@ -120,7 +125,7 @@ export function SongLine({
     <View ref={box} style={styles.open}>
       {before.map((b) =>
         b.kind === 'section' ? (
-          <Text key={`section-${b.line}`} style={styles.section}>
+          <Text key={`section-${b.line}`} style={styles.section} onPress={() => setSectioning(true)} accessibilityRole="button" accessibilityLabel={`Section ${b.name}. Change`}>
             {b.name}
           </Text>
         ) : b.kind === 'key' ? (
@@ -178,6 +183,12 @@ export function SongLine({
             <Text style={styles.actionText}>Change part</Text>
           </Pressable>
         ) : null}
+        <Pressable onPress={() => setSectioning(!sectioning)} accessibilityRole="button" accessibilityState={{ expanded: sectioning }} style={styles.action}>
+          <Text style={styles.actionGlyph} aria-hidden>
+            §
+          </Text>
+          <Text style={styles.actionText}>{sectionLabel(own?.name ?? null, carriesOn)}</Text>
+        </Pressable>
         <Pressable onPress={() => setRemoving(true)} accessibilityRole="button" style={styles.action}>
           <CloseIcon color={colors.link} size={12} />
           <Text style={styles.actionText}>Remove this line</Text>
@@ -187,6 +198,16 @@ export function SongLine({
           <Text style={styles.doneText}>Done</Text>
         </Pressable>
       </View>
+      {sectioning ? (
+        <SectionPicker
+          current={own?.name ?? null}
+          carriesOn={carriesOn}
+          onPick={(name) => {
+            onChange(withSectionBefore(text, k, name));
+            setSectioning(false);
+          }}
+        />
+      ) : null}
       {removing ? (
         <View style={styles.confirm}>
           <Text style={styles.confirmText}>Remove line {n} and everything in it?</Text>
@@ -256,6 +277,7 @@ const useStyles = makeStyles((colors) => ({
   actions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 14, rowGap: 4 },
   action: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 4 },
   actionText: { fontFamily: fonts.bold, fontSize: 13, color: colors.link },
+  actionGlyph: { fontFamily: fonts.heavy, fontSize: 14, lineHeight: 16, color: colors.link },
   done: { marginLeft: 'auto', borderRadius: 999, borderWidth: 1.5, borderColor: colors.line, paddingHorizontal: 12, minHeight: 32, backgroundColor: colors.card },
   doneText: { fontFamily: fonts.bold, fontSize: 13, color: colors.ink },
   dot: { width: 9, height: 9, borderRadius: 4.5 },

@@ -27,14 +27,14 @@ import { useSongPlayer } from '@/audio/use-song-player';
 import { PlayButton, Stepper } from '@/components/player-controls';
 import { Score, type BarActions } from '@/components/score';
 import { SolfaCheck } from '@/components/solfa-check';
-import { keysJustTouched, PhoneKeyboardBar, SolfaKeypad, type KeyPlace } from '@/components/solfa-keypad';
+import { keysJustTouched, PhoneKeyboardBar, SolfaKeypad, type KeyPlace, type SectionPlace } from '@/components/solfa-keypad';
 import { AddLine, SongLine, type ActiveRow } from '@/components/song-rows';
 import { keepCursor, placeCursor } from '@/lib/field-cursor';
 import { applyKey, keyChangePlace, songLowMarksShown, songLowMarksTyped, withKeyChange, type Key, type Selection } from '@/lib/solfa-keys';
 import { ChevronIcon } from '@/components/icons';
 import { Body, Button, Card, Chip, ErrorText, Field, Kicker, Loading, Page, Steps, TopBar } from '@/components/ui';
 import { clearNewSong, hasMusic, isFirstPageOpen, NEW_SONG_PARTS, newSong, setNewSong, WRITE_STEPS, type NewSong } from '@/lib/new-song';
-import { musicPiece, songPieces, withKeyBefore, withNewLine, withRow } from '@/lib/song-pieces';
+import { musicAtLine, musicPiece, sectionAbove, sectionOf, songPieces, withKeyBefore, withNewLine, withRow, withSectionBefore } from '@/lib/song-pieces';
 import { barAt, lineBeats, lineOfBar, musicLines, rangeLabel, songBars } from '@/score/bars';
 import { TAG_GROUPS } from '@/lib/tags';
 import { useUndo } from '@/lib/undo';
@@ -231,6 +231,34 @@ function Editor({ song, draft, pasted, written, startBar }: { song?: Song; draft
       setSolfa(withKeyBefore(solfa, at, name));
     },
   };
+  // A section, writing as text (owner's request, 21 November 2026): "Section" on the keypad picks the one starting
+  // at the lines of music the cursor is in, written above them as `[Chorus]`. (In rows, the open line has its own.)
+  const musicAtCursor = () => {
+    const pieces = songPieces(solfa);
+    return { pieces, k: musicAtLine(pieces, solfa.slice(0, sel.start).split('\n').length - 1) };
+  };
+  const section = {
+    where: (): SectionPlace => {
+      const { pieces, k } = musicAtCursor();
+      const own = k >= 0 ? sectionAbove(pieces, k) : null;
+      return {
+        line: Math.max(1, pieces.slice(0, k + 1).filter((p) => p.kind === 'music').length),
+        current: own?.name ?? null,
+        carriesOn: own || k < 0 ? null : sectionOf(pieces, k),
+      };
+    },
+    pick: (name: string | null) => {
+      const { k } = musicAtCursor();
+      if (k < 0) return;
+      const next = withSectionBefore(solfa, k, name);
+      if (next === solfa) return;
+      // The cursor stays on its note: moved by the line put in, or taken out, above it.
+      let at = 0;
+      while (at < next.length && next[at] === solfa[at]) at++;
+      const shift = (i: number) => (i >= at ? Math.max(at, i + next.length - solfa.length) : i);
+      write({ text: next, sel: { start: shift(sel.start), end: shift(sel.end) } });
+    },
+  };
   const withKeys = writing && !keyboard;
   const [from, setFrom] = useState<string | null>(defaultFrom);
   // Who can see it (owner's request, 21 November 2026): a new song starts with its group's members, or with only
@@ -418,7 +446,7 @@ function Editor({ song, draft, pasted, written, startBar }: { song?: Song; draft
       footer={
         asText ? (
           withKeys ? (
-            <SolfaKeypad parts keyChange={keyChange} onKey={pressKey} onUndo={undoLast} canUndo={undo.canUndo} onKeyboard={() => switchKeys(true)} onDone={stopWriting} />
+            <SolfaKeypad parts keyChange={keyChange} section={section} onKey={pressKey} onUndo={undoLast} canUndo={undo.canUndo} onKeyboard={() => switchKeys(true)} onDone={stopWriting} />
           ) : writing && keyboard ? (
             <PhoneKeyboardBar onSolfaKeys={() => switchKeys(false)} onDone={stopWriting} />
           ) : writing ? undefined : (
