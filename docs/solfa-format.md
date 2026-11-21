@@ -19,6 +19,7 @@ document.
 | Half beat | `s.l` (two notes in one beat) | `.` splits a beat in two |
 | Quarter beat | `d.,r` or `r,r` | `,` splits a half beat in two |
 | Hold (continue the note) | `-` | `-` |
+| Slur (notes sung to one syllable) | An underline or a curve under the notes, e.g. `m'.d'` underlined | Brackets around them: `(m'.d')`, `(s :f |m)`. They can run across beats and bar lines. The notes after the first take no syllable of their own, so the words stay with the right notes |
 | Rest (silence) | An empty beat, e.g. `| : : |` | An empty beat, or `x` |
 | High octave | `d¹`, `d'` | `d'` (also accepts `d¹`) |
 | Low octave | `t₁`, `t1`, `s,` | `t1` (also accepts `t₁`) |

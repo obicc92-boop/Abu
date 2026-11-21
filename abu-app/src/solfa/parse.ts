@@ -379,6 +379,10 @@ export function parseSolfa(text: string, options: ParseOptions = {}): ParsedSong
       const onsets: NoteEvent[] = [];
       let beat = start;
       let last: NoteEvent | null = null;
+      // Inside a slur (brackets around notes, as a sheet's underline or curve): its notes after the first share
+      // the first's syllable (owner's request, 21 November 2026: slurs are needed to read sol-fa). It can run
+      // across beats and bar lines.
+      let slur: 'none' | 'first' | 'in' = 'none';
 
       bars.forEach((beats, bi) => {
         starts.push(beat);
@@ -420,15 +424,28 @@ export function parseSolfa(text: string, options: ParseOptions = {}): ParsedSong
               }
             }
             qs.forEach((q, qi) => {
-              const tok = q.trim();
+              const raw = q.trim();
+              const opens = raw.startsWith('(');
+              const closes = raw.endsWith(')');
+              const tok = raw.replace(/^\(+/, '').replace(/\)+$/, '').trim();
+              if (opens) slur = 'first';
+              // The slur's notes after its first: under it. Closing after this one.
+              const under = (): boolean => {
+                const now = slur === 'in';
+                if (slur === 'first') slur = 'in';
+                if (closes) slur = 'none';
+                return now;
+              };
               const d = hd / qs.length;
               const at = beat + hi * hd + qi * d;
               if (tok === '' || tok === '-') {
                 if (last && Math.abs(last.start + last.dur - at) < EPS) last.dur += d;
+                if (closes) slur = 'none';
                 return;
               }
               if (tok === 'x') {
                 last = null;
+                if (closes) slur = 'none';
                 return;
               }
               if (tok.includes('=')) {
@@ -443,7 +460,7 @@ export function parseSolfa(text: string, options: ParseOptions = {}): ParsedSong
                   last = null;
                   return;
                 }
-                last = { start: at, dur: d, deg: to.degree, oct: to.octave, text: tok, bar: n };
+                last = { start: at, dur: d, deg: to.degree, oct: to.octave, text: tok, bar: n, ...(under() ? { slurred: true } : {}) };
                 result.events[p].push(last);
                 onsets.push(last);
                 bridges.push({ part: p, beat: at, from, to, text: tok, bar: n, line });
@@ -455,7 +472,7 @@ export function parseSolfa(text: string, options: ParseOptions = {}): ParsedSong
                 last = null;
                 return;
               }
-              last = { start: at, dur: d, deg: note.degree, oct: note.octave, text: tok, bar: n };
+              last = { start: at, dur: d, deg: note.degree, oct: note.octave, text: tok, bar: n, ...(under() ? { slurred: true } : {}) };
               result.events[p].push(last);
               onsets.push(last);
             });
@@ -473,7 +490,9 @@ export function parseSolfa(text: string, options: ParseOptions = {}): ParsedSong
         const ly: Record<number, string> = (sec.lyrics[p] = {});
         sec.words[p] = words;
         let wi = 0;
-        for (const o of onsets) {
+        // A note under a slur shares the syllable before it.
+        const sung = onsets.filter((o) => !o.slurred);
+        for (const o of sung) {
           if (wi >= words.length) break;
           const w = words[wi++];
           if (w === '-' || w === '_') continue;
@@ -481,10 +500,10 @@ export function parseSolfa(text: string, options: ParseOptions = {}): ParsedSong
           const b = Math.floor(o.start + EPS);
           ly[b] = ly[b] ? `${ly[b]} ${w}` : w;
         }
-        if (words.length > onsets.length && (own || !sharedWarned)) {
+        if (words.length > sung.length && (own || !sharedWarned)) {
           if (!own) sharedWarned = true;
           warnings.push({
-            message: `${partName(p)}${rs.name ? ` in ${rs.name}` : ''}: ${words.length} syllables for ${onsets.length} notes. Some words won’t show.`,
+            message: `${partName(p)}${rs.name ? ` in ${rs.name}` : ''}: ${words.length} syllables for ${sung.length} notes. Some words won’t show.`,
             part: p,
           });
         }

@@ -637,3 +637,35 @@ describe('musical markings', () => {
     ]);
   });
 });
+
+describe('slurs', () => {
+  const sung = (song: ReturnType<typeof parseSolfa>) => song.events.S.map((e) => [e.text, e.lyric ?? '', !!e.slurred]);
+
+  it('give the notes under a slur one syllable, as a sheet’s underline does', () => {
+    const song = parseSolfa('time: 2/4\nS  d :r |(m.d) :(r.s) |d :- |\nW  give thanks to Thee, O Lord');
+    expect(song.errors).toEqual([]);
+    expect(sung(song)).toEqual([
+      ['d', 'give', false],
+      ['r', 'thanks', false],
+      ['m', 'to', false],
+      ['d', '', true],
+      ['r', 'Thee,', false],
+      ['s', '', true],
+      ['d', 'O', false],
+    ]);
+    // Brackets aren't beats: the bars add up as before.
+    expect(song.bars).toBe(3);
+  });
+
+  it('can run across beats and bar lines', () => {
+    const song = parseSolfa('time: 2/4\nS  (s :f |m) :r |d :- |\nW  A-men, a-men');
+    expect(song.errors).toEqual([]);
+    expect(sung(song)).toEqual([
+      ['s', 'A-', false],
+      ['f', '', true],
+      ['m', '', true],
+      ['r', 'men,', false],
+      ['d', 'a-', false],
+    ]);
+  });
+});

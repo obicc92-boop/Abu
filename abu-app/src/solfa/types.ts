@@ -25,6 +25,11 @@ export interface NoteEvent {
   bar: number;
   /** Lyric syllable sung on this note, if any. */
   lyric?: string;
+  /**
+   * Under a slur from the note before (written in brackets: `(m'.d')`, as sheets underline them): sung to the
+   * same syllable, so it takes none of its own.
+   */
+  slurred?: boolean;
 }
 
 export interface Section {
