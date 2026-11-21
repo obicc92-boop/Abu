@@ -1037,6 +1037,7 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right', 'bottom']}>
       <ScrollView contentContainerStyle={[styles.body, keypad && { paddingBottom: KEYPAD_ROOM }]} keyboardShouldPersistTaps="handled">
         <TopBar
+          back
           title="Check the reading"
           subtitle={`Line ${current + 1} of ${lines.length} · page ${line.page} · saved as you go`}
           right={
@@ -1247,7 +1248,15 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
           <PhoneKeyboardBar onSolfaKeys={() => switchKeys(false)} onDone={leaveRow} />
         ) : (
           <View style={styles.footerInner}>
-            <Button kind="ghost" label="Back" onPress={() => go(current - 1)} disabled={current === 0} style={{ minWidth: 92 }} />
+            {/* Back a line; on the first, out of checking (owner's report, 21 November 2026: it did nothing there).
+                The scan is saved as it goes, so it waits under "Carry on where you left off". */}
+            <Button
+              kind="ghost"
+              label="Back"
+              accessibilityLabel={current === 0 ? 'Back: leave checking, it’s saved' : 'Back to the line before'}
+              onPress={() => (current === 0 ? (router.canGoBack() ? router.back() : router.replace('/songs')) : go(current - 1))}
+              style={{ minWidth: 92 }}
+            />
             <Button label={line.skipped ? 'Next line' : 'Looks right'} onPress={line.skipped ? () => (current === lines.length - 1 ? onFinish() : go(current + 1)) : looksRight} style={{ flex: 1 }} />
           </View>
         )}
