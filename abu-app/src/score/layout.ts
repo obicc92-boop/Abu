@@ -6,7 +6,7 @@
  *
  * Pure module: no React.
  */
-import { dohTimeline, octaveOf, SYLLABLE_PATTERN, type ExpressionKind, type ParsedSong } from '@/solfa';
+import { dohTimeline, normalizePart, octaveOf, SYLLABLE_PATTERN, type ExpressionKind, type ParsedSong } from '@/solfa';
 
 export interface ScoreCell {
   /** Absolute beat this column plays on. */
@@ -17,6 +17,11 @@ export interface ScoreCell {
   barStart: boolean;
   /** A hold ("-") or a rest (""): drawn faint. */
   hold: boolean;
+  /**
+   * A beat this part doesn't have, where another part's bar is longer (in a line that doesn't add up): left blank,
+   * so the parts' bar lines stay in step.
+   */
+  pad?: boolean;
 }
 
 export interface LyricSegment {
@@ -115,24 +120,26 @@ export interface LayoutOptions {
    * open to edit in the song editor goes there). With `from` and `to` the same, lines only break there.
    */
   skip?: { from: number; to: number } | null;
+  /** All of each section on one line (a line of music written in rows: LineRows), fitted as with `maxChars`. */
+  oneLine?: boolean;
 }
 
 /** Narrowest column, in characters: a lone "d" gets the same room as "s.l". */
 const MIN_COLUMN = 3;
 
 export function layoutScore(song: ParsedSong, opts: LayoutOptions = {}): ScoreSystem[] {
-  const { maxChars } = opts;
+  const { maxChars, oneLine } = opts;
   const maxBeats = opts.maxBeats ?? (maxChars ? Infinity : 12);
   // Fitted to a width, nothing stretches a line to give a beat's colon room beside a busy beat ("s,f.m,r"), so
   // each column has a character more than its notes.
-  const gutter = maxChars ? 1 : 0;
+  const gutter = maxChars || oneLine ? 1 : 0;
+  const sections = sectionBars(song);
   const systems: ScoreSystem[] = [];
   // Where each key change starts (for one part, where that part changes).
   const changes = dohTimeline(song, 0, opts.only ?? undefined).slice(1);
 
   song.sections.forEach((sec, si) => {
-    const first = sec.order[0];
-    const bars = sec.bars[first];
+    const { lens } = sections[si];
     const rows = opts.only && sec.order.includes(opts.only) ? [opts.only] : sec.order;
     const lyricsFrom = (p: string): string | null => {
       if (sec.lyrics[p]) return p;
@@ -140,8 +147,8 @@ export function layoutScore(song: ParsedSong, opts: LayoutOptions = {}): ScoreSy
       return null;
     };
     // The beat each bar starts on, and where the last one ends.
-    const barStarts = [sec.start];
-    for (const bar of bars) barStarts.push(barStarts[barStarts.length - 1] + bar.length);
+    const barStarts = [sections[si].start];
+    for (const len of lens) barStarts.push(barStarts[barStarts.length - 1] + len);
 
     /** Bars `from` up to (not including) `to` as one line of the score; its slurs are added once the lines are chosen. */
     const line = (from: number, to: number): Omit<ScoreSystem, 'id' | 'heading'> => {
@@ -152,11 +159,14 @@ export function layoutScore(song: ParsedSong, opts: LayoutOptions = {}): ScoreSy
         const cells: ScoreCell[] = [];
         let b = start;
         for (let bi = from; bi < to; bi++) {
-          (sec.bars[p][bi] ?? []).forEach((text, k) => {
+          const beats = sec.bars[p][bi] ?? [];
+          // Its beats, and blanks where another part's bar is longer (only in a song that doesn't add up).
+          for (let k = 0; k < Math.max(beats.length, lens[bi]); k++) {
+            const text = beats[k] ?? '';
             const bare = text.replace(SLUR_RE, '');
-            cells.push({ beat: b, text, barStart: k === 0, hold: bare === '-' || bare === '' });
+            cells.push({ beat: b, text, barStart: k === 0, hold: bare === '-' || bare === '', ...(k >= beats.length ? { pad: true } : {}) });
             b += 1;
-          });
+          }
         }
         const lp = lyricsFrom(p);
         return { part: p, cells, lyrics: lp ? lyricSegments(sec.lyrics[lp], start, n) : null, marks: marksOn(song, p, start, n), hairpins: [], slurs: [] };
@@ -167,18 +177,23 @@ export function layoutScore(song: ParsedSong, opts: LayoutOptions = {}): ScoreSy
 
     // The bars laid out, in runs that no line crosses: those before the beats left out, and those after.
     const { skip } = opts;
-    const runs: [number, number][] = [[0, bars.length]];
+    const count = lens.length;
+    const runs: [number, number][] = [[0, count]];
     if (skip) {
-      const before = barStarts.slice(0, bars.length).filter((b) => b < skip.from - 1e-6).length;
-      const after = barStarts.slice(0, bars.length).findIndex((b) => b >= skip.to - 1e-6);
-      runs.splice(0, 1, [0, before], [after < 0 ? bars.length : Math.max(before, after), bars.length]);
+      const before = barStarts.slice(0, count).filter((b) => b < skip.from - 1e-6).length;
+      const after = barStarts.slice(0, count).findIndex((b) => b >= skip.to - 1e-6);
+      runs.splice(0, 1, [0, before], [after < 0 ? count : Math.max(before, after), count]);
     }
     // Parts with a slur still open at the end of the line before, so it runs on from the next line's start.
     const slurOpen: Record<string, boolean> = {};
     for (const [first, end] of runs) {
-      const lines = maxChars
-        ? linesByRoom(end - first, barStarts.slice(first), (a, b) => line(first + a, first + b), maxChars, maxBeats)
-        : linesByBeats(bars.slice(first, end), maxBeats);
+      const lines = oneLine
+        ? end > first
+          ? [end - first]
+          : []
+        : maxChars
+          ? linesByRoom(end - first, barStarts.slice(first), (a, b) => line(first + a, first + b), maxChars, maxBeats)
+          : linesByBeats(lens.slice(first, end), maxBeats);
       let from = first;
       for (const count of lines) {
         const made = line(from, from + count);
@@ -243,14 +258,67 @@ function addHairpins(song: ParsedSong, systems: ScoreSystem[]): void {
  * Bars on each line, by count: as many as `maxBeats` holds of the longest bar,
  * spread evenly so a bar is never left alone on the last line (scoreHTML's rule).
  */
-function linesByBeats(bars: string[][], maxBeats: number): number[] {
-  if (!bars.length) return [];
-  const barLen = Math.max(1, ...bars.map((b) => b.length));
+function linesByBeats(lens: number[], maxBeats: number): number[] {
+  if (!lens.length) return [];
+  const barLen = Math.max(1, ...lens);
   const fit = Math.max(1, Math.floor(maxBeats / barLen));
-  const per = Math.ceil(bars.length / Math.ceil(bars.length / fit));
+  const per = Math.ceil(lens.length / Math.ceil(lens.length / fit));
   const lines: number[] = [];
-  for (let i = 0; i < bars.length; i += per) lines.push(Math.min(per, bars.length - i));
+  for (let i = 0; i < lens.length; i += per) lines.push(Math.min(per, lens.length - i));
   return lines;
+}
+
+/**
+ * Each section's first beat and its bars' lengths, as the score lays them out: as its first part has them. In a
+ * song that doesn't add up (a line being checked or written), each bar is as long as its longest part's, every
+ * part's bars are there, and the sections follow one another, so the parts' bar lines stay in step where their
+ * beats don't. A song that plays is laid out on the beats it plays.
+ */
+export function sectionBars(song: ParsedSong): { start: number; lens: number[] }[] {
+  const widen = song.errors.length > 0;
+  let at = 0;
+  return song.sections.map((sec) => {
+    const first = sec.bars[sec.order[0]] ?? [];
+    const count = widen ? Math.max(first.length, ...sec.order.map((p) => sec.bars[p]?.length ?? 0)) : first.length;
+    const lens = Array.from({ length: count }, (_, bi) => (widen ? Math.max(0, ...sec.order.map((p) => sec.bars[p]?.[bi]?.length ?? 0)) : first[bi].length));
+    const start = widen ? at : sec.start;
+    at = start + lens.reduce((a, b) => a + b, 0);
+    return { start, lens };
+  });
+}
+
+/** One line of music laid out as a line of the score, its rows matched to the rows it's written in (LineRows). */
+export interface RowsLine {
+  system: ScoreSystem;
+  /** For each row of the line: the row of the text it shows (a part's notes), and the row of words under it, if any. */
+  notesRow: number[];
+  wordsRow: (number | null)[];
+}
+
+/**
+ * A line of music written in rows (Check the reading, the song editor's open line) as one line of the score, in
+ * the order its rows are written: a row with no notes yet (a part just added, or a second row of a part) is an
+ * empty row there, to tap and write in, and a part with an empty row of words under it has its words line, empty.
+ */
+export function rowsLine(song: ParsedSong, rows: readonly { part: string | null }[]): RowsLine {
+  const [laid] = layoutScore(song, { oneLine: true });
+  const base: ScoreSystem = laid ?? { id: 'line', heading: null, start: 0, beats: 0, widths: [], rows: [], keys: [], marks: [], hairpins: [] };
+  const used = new Set<ScoreRow>();
+  const notesRow: number[] = [];
+  const wordsRow: (number | null)[] = [];
+  const lineRows: ScoreRow[] = [];
+  rows.forEach((r, i) => {
+    if (!r.part) return;
+    const part = normalizePart(r.part);
+    const found = base.rows.find((x) => x.part === part && !used.has(x));
+    const words = rows[i + 1] && !rows[i + 1].part ? i + 1 : null;
+    const row: ScoreRow = found ?? { part, cells: [], lyrics: null, marks: [], hairpins: [], slurs: [] };
+    if (found) used.add(found);
+    lineRows.push(words !== null && !row.lyrics ? { ...row, lyrics: [] } : row);
+    notesRow.push(i);
+    wordsRow.push(words);
+  });
+  return { system: { ...base, rows: lineRows }, notesRow, wordsRow };
 }
 
 /**

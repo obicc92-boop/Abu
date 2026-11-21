@@ -8,6 +8,8 @@
 import { barsBefore, type Piece } from '@/lib/song-pieces';
 import type { ParsedSong } from '@/solfa';
 
+import { sectionBars } from './layout';
+
 export interface BarSpan {
   bar: number;
   /** Its first beat, and the beat after its last, from the start of the song. */
@@ -15,17 +17,53 @@ export interface BarSpan {
   to: number;
 }
 
-/** Each bar of the song in order, by its section's first part (as the score lays them out). */
+/** Each bar of the song in order, as the score lays them out (src/score/layout.ts, `sectionBars`). */
 export function songBars(song: ParsedSong): BarSpan[] {
   const bars: BarSpan[] = [];
-  for (const sec of song.sections) {
-    let at = sec.start;
-    for (const bar of sec.bars[sec.order[0]] ?? []) {
-      bars.push({ bar: bars.length + 1, from: at, to: at + bar.length });
-      at += bar.length;
+  for (const { start, lens } of sectionBars(song)) {
+    let at = start;
+    for (const len of lens) {
+      bars.push({ bar: bars.length + 1, from: at, to: at + len });
+      at += len;
     }
   }
   return bars;
+}
+
+/** What comes between two beats in a row of notes: a beat mark or a bar line. */
+const BETWEEN = /[:/¦|‖]/;
+
+/**
+ * Where beat `k` (from 0) starts in a row of notes as written ("m :- /m :m | r :d"), to put the cursor there: after
+ * the beat mark or bar line before it, and its spaces. Each beat mark or bar line is one step (an empty beat
+ * between two is a rest); an opening bar line isn't. Marks in braces are passed over whole. Past the last beat,
+ * the end of the row.
+ */
+export function beatOffset(text: string, k: number): number {
+  let i = 0;
+  const spaces = () => {
+    while (i < text.length && text[i] === ' ') i++;
+  };
+  spaces();
+  if (text[i] === '|' || text[i] === '‖') {
+    i++;
+    spaces();
+  }
+  for (let beat = 0; beat < k; ) {
+    if (i >= text.length) return text.length;
+    const c = text[i];
+    if (c === '{') {
+      const close = text.indexOf('}', i);
+      i = close > i ? close + 1 : i + 1;
+      continue;
+    }
+    i++;
+    if (BETWEEN.test(c)) {
+      beat++;
+      spaces();
+    }
+  }
+  return i;
 }
 
 /** The bar a beat is in. */

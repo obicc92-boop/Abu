@@ -107,10 +107,13 @@ export function readExpression(inner: string): Omit<Expression, 'part' | 'beat'>
   return null;
 }
 
-/** "andante m.70" → "Andante M. 70": a tempo mark as sheets print it. */
+/**
+ * "andante m.70" → "Andante M. 70": a tempo mark as sheets print it, its first word capitalised and the rest as
+ * written ("Allegro con brio", not "Allegro Con Brio").
+ */
 function tidyTempo(text: string): string {
   return text
-    .replace(/\b([a-z])/g, (c) => c.toUpperCase())
+    .replace(/^([a-z])/, (c) => c.toUpperCase())
     .replace(/\bM\.?\s*M?\.?\s*=?\s*(\d{2,3})/i, 'M. $1')
     .replace(/♩\s*=?\s*(\d{2,3})/, '♩ = $1');
 }

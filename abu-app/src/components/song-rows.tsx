@@ -30,6 +30,9 @@ export interface ActiveRow {
   value: string;
 }
 
+/** A line with nothing in it yet, read. */
+const EMPTY = parseSolfa('');
+
 /** Parts a new line of music can have, in the order sheets print them. */
 const PART_CHOICES = ['Solo', 'S', 'A', 'T', 'B'];
 
@@ -140,8 +143,7 @@ export function SongLine({
           rows={p.rows}
           editing={here ? { row: here.row, value: here.value } : null}
           keyboard={keyboard}
-          errors={check?.errors ?? []}
-          beatsPerBar={check?.beatsPerBar ?? 4}
+          parsed={check ?? EMPTY}
           firstBar={firstBar}
           label={`line ${n}`}
           placeholder={(r) => (r.part ? 'Tap to write' : 'Words')}
@@ -244,8 +246,8 @@ export function AddLine({ text, onAdd }: { text: string; onAdd(next: string, lin
 const useStyles = makeStyles((colors) => ({
   open: { gap: 8 },
   hint: { fontFamily: fonts.body, fontSize: 13.5, lineHeight: 19, color: colors.muted },
-  // The line runs to the card's edges, as on Check the reading.
-  line: { marginHorizontal: -16 },
+  // The line drawn as the score's lines above and below it.
+  line: {},
   section: { fontFamily: fonts.heavy, fontSize: 11, letterSpacing: 0.9, textTransform: 'uppercase', color: colors.accent, marginTop: 2 },
   other: { fontFamily: fonts.mono, fontSize: 13, color: colors.muted },
   keyRow: { flexDirection: 'row' },

@@ -1161,33 +1161,35 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
               <ErrorText message={line.error ?? 'This line couldn’t be read.'} />
             </View>
           ) : null}
-          <LineRows
-            rows={rows}
-            editing={editing && editing.id === line.id ? { row: editing.row, value: editing.value } : null}
-            keyboard={keyboard}
-            errors={parsed.errors}
-            beatsPerBar={parsed.beatsPerBar}
-            label={`line ${current + 1}`}
-            onStart={(i, shown) => {
-              setEditing({ id: line.id, row: i, value: shown });
-              setKeyboard(false);
-            }}
-            onType={(i, typed) => {
-              setEditing({ id: line.id, row: i, value: typed });
-              setRow(i, typed);
-            }}
-            onSelection={setSel}
-            onLeave={(i) => setEditing((e) => (e && e.row === i ? null : e))}
-            onField={(i, f) => {
-              inputs.current[i] = f;
-            }}
-            scroller={reading}
-            onScroll={(e) => follow('reading', e)}
-            onWidths={(w) => (readingWidths.current = w)}
-            onPart={(i) => setPartRow(i)}
-            onBar={canPlay ? (bar) => setPicked((p) => (p?.id === line.id && p.bar === bar ? null : { id: line.id, bar })) : undefined}
-            pickedBar={pickedBar?.bar ?? null}
-          />
+          <View style={styles.rowsPad}>
+            <LineRows
+              rows={rows}
+              editing={editing && editing.id === line.id ? { row: editing.row, value: editing.value } : null}
+              keyboard={keyboard}
+              parsed={parsed}
+              activeBeat={player.beat}
+              label={`line ${current + 1}`}
+              onStart={(i, shown) => {
+                setEditing({ id: line.id, row: i, value: shown });
+                setKeyboard(false);
+              }}
+              onType={(i, typed) => {
+                setEditing({ id: line.id, row: i, value: typed });
+                setRow(i, typed);
+              }}
+              onSelection={setSel}
+              onLeave={(i) => setEditing((e) => (e && e.row === i ? null : e))}
+              onField={(i, f) => {
+                inputs.current[i] = f;
+              }}
+              scroller={reading}
+              onScroll={(e) => follow('reading', e)}
+              onWidths={(w) => (readingWidths.current = w)}
+              onPart={(i) => setPartRow(i)}
+              onBar={canPlay ? (bar) => setPicked((p) => (p?.id === line.id && p.bar === bar ? null : { id: line.id, bar })) : undefined}
+              pickedBar={pickedBar?.bar ?? null}
+            />
+          </View>
           {pickedBar && canPlay ? (
             <View style={styles.pad}>
               <BarToolbar bar={pickedBar} actions={barActions} onClose={() => setPicked(null)} />
@@ -1418,6 +1420,8 @@ const useStyles = makeStyles((colors) => ({
   dotText: { fontFamily: fonts.bold, fontSize: 12.5, color: colors.ink },
   flush: { padding: 0, gap: 0, overflow: 'hidden' },
   pad: { paddingHorizontal: 14, paddingVertical: 10 },
+  // The line as the score draws it, on its own card, inset as the score's lines are.
+  rowsPad: { paddingHorizontal: 10 },
   playBox: { alignItems: 'center', gap: 3, maxWidth: 96 },
   playingNow: { fontFamily: fonts.bold, fontSize: 11.5, lineHeight: 14, color: colors.ink, textAlign: 'center' },
   iconOnly: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.sand },

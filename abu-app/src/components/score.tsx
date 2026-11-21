@@ -6,7 +6,7 @@ import { songBars, type BarSpan } from '@/score/bars';
 import { displayBeat, layoutScore, type ScoreCell, type ScoreHairpin, type ScoreSlur, type ScoreSystem } from '@/score/layout';
 import { isTempo, KEY_NAMES, mod12, partName, type ExpressionKind, type ParsedSong } from '@/solfa';
 import { makeStyles, useColors, useTheme } from '@/theme/theme';
-import { fonts, lightColors, partColor, partInk, partLetter, type Palette } from '@/theme/tokens';
+import { darkColors, fonts, lightColors, partColor, partInk, partLetter, type Palette } from '@/theme/tokens';
 
 import { AgainIcon, CloseIcon, PencilIcon } from './icons';
 
@@ -21,9 +21,18 @@ interface Look {
   heading: string;
   /** Behind a bar that's been tapped. */
   picked: string;
+  /** A bar that doesn't add up (a line being checked or written): its wash, its line, and its count of beats. */
+  danger: string;
+  dangerTint: string;
+  onDanger: string;
+  /** Under a part whose bars don't match the others'. */
+  warnLine: string;
   /** A dark background: parts' colours in their lighter shades. */
   dark: boolean;
 }
+
+/** Colours a score in the player looks only to check or write a line: Perform's looks take them from the app's. */
+const checkColours = (c: Palette) => ({ danger: c.danger, dangerTint: c.dangerTint, onDanger: c.onDanger, warnLine: c.warnLine });
 
 /**
  * Colours from the prototype's player and Perform (dark and light) styles; the
@@ -32,8 +41,8 @@ interface Look {
  */
 const PERFORM_LOOKS: Record<'dark' | 'light', Look> = {
   // Bars can't be tapped in Perform: `picked` is never drawn there.
-  dark: { system: '#241914', faint: '#7D6A60', barline: '#5A4A42', lyric: '#BFAEA5', heading: '#E2B25A', picked: '#241914', dark: true },
-  light: { system: lightColors.sand, faint: '#A8968C', barline: '#BFAEA5', lyric: '#3A2B24', heading: '#7A4F00', picked: lightColors.sand, dark: false },
+  dark: { system: '#241914', faint: '#7D6A60', barline: '#5A4A42', lyric: '#BFAEA5', heading: '#E2B25A', picked: '#241914', ...checkColours(darkColors), dark: true },
+  light: { system: lightColors.sand, faint: '#A8968C', barline: '#BFAEA5', lyric: '#3A2B24', heading: '#7A4F00', picked: lightColors.sand, ...checkColours(lightColors), dark: false },
 };
 
 /** The player's look: the app's own palette (its look, light or dark). */
@@ -44,8 +53,17 @@ const playerLook = (c: Palette, dark: boolean): Look => ({
   lyric: c.muted,
   heading: c.accent,
   picked: c.accentTint,
+  ...checkColours(c),
   dark,
 });
+
+/** The player's look in the app's light or dark: for a line of music drawn as the score draws it (LineRows). */
+export function useScoreLook(): Look {
+  const { scheme, colors } = useTheme();
+  return useMemo(() => playerLook(colors, scheme === 'dark'), [colors, scheme]);
+}
+
+export type { Look as ScoreLook };
 
 /**
  * What can be done from a bar that's tapped (owner's request, 21 November 2026: "easily choose from where they
@@ -289,6 +307,22 @@ const useToolStyles = makeStyles((colors) => ({
   toolOff: { opacity: 0.45 },
   toolText: { fontFamily: fonts.bold, fontSize: 12.5, color: colors.ink },
   close: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  // A bar's number over a line written in rows, to tap: a pill with a play mark.
+  numberPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    height: 22,
+    paddingHorizontal: 7,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.card,
+  },
+  numberPicked: { borderColor: colors.accent, backgroundColor: colors.accentTint },
+  numberText: { fontFamily: fonts.bold, fontSize: 11, color: colors.muted },
+  numberTextPicked: { color: colors.accent },
+  numberPlain: { paddingLeft: 2 },
 }));
 
 interface SystemProps {
@@ -307,6 +341,29 @@ interface SystemProps {
   picked: number | null;
   canEdit: boolean;
   onBar(bar: number, action?: string): void;
+  /**
+   * A line of music written in rows (LineRows, on Check the reading and in the song editor): a tap on a row's
+   * notes or words starts writing there (the row, the beat tapped, and whether it was the words), and on its
+   * colour changes who sings it.
+   */
+  onCell?(row: number, beat: number, words: boolean): void;
+  onEdge?(row: number): void;
+  /** What an empty row of notes says, and an empty row of words. */
+  placeholders?: { notes: string; words: string };
+  /** Bars that don't add up, row by row (see RowFlags). */
+  flags?: (RowFlags | null)[];
+  /** The bars' numbers over the line: the first one's, the one picked, and, to make them pills to tap (to play from a bar), what a tap does. */
+  numbers?: { first: number; picked: number | null; onBar?(bar: number): void } | null;
+  /** For a screen reader: which line ("line 2"). */
+  label?: string;
+}
+
+/** A row's bars that don't add up, as the checker found them (src/scan/bar-check.ts). */
+export interface RowFlags {
+  /** Each one's place among the row's bars (from 0), and its beats when they're the problem. */
+  bars: { index: number; beats: number | null }[];
+  /** The part as a whole doesn't match the others (more or fewer bars or beats). */
+  whole: boolean;
 }
 
 /** A screen reader's ways to act on a bar without its row of buttons. */
@@ -317,7 +374,11 @@ const BAR_ACTIONS = [
 ];
 
 /** One line of the score. Memoised: only the line being played re-renders each beat. */
-const System = memo(function System({ system, activeBeat, silent, palette, size, big, transpose, maxChars, charWidth, bars, picked, canEdit, onBar }: SystemProps) {
+const System = memo(function System(props: SystemProps) {
+  const { system, activeBeat, silent, palette, size, big, transpose, maxChars, charWidth, bars, picked, canEdit, onBar } = props;
+  const { onCell, onEdge, placeholders, flags, numbers, label } = props;
+  const toolStyles = useToolStyles();
+  const colors = useColors();
   const { widths, start } = system;
   const need = widths.reduce((a, b) => a + b, 0);
   const lyricSize = big ? size * 0.72 : 9.5;
@@ -332,8 +393,47 @@ const System = memo(function System({ system, activeBeat, silent, palette, size,
     ...system.keys.map((k) => ({ beat: k.beat, text: `Doh is ${KEY_NAMES[mod12(k.semitone + transpose)]}`, style: [styles.keyMark, { color: palette.heading }] })),
     ...system.marks.map((m) => ({ beat: m.beat, text: m.text, style: markLook(m.kind, palette.heading, palette) })),
   ];
+  // The bars' starts, by the row with the most of them (the parts' bars are lined up), for numbering them.
+  const barStarts = system.rows.map((r) => r.cells.flatMap((c, i) => (c.barStart ? [i] : []))).reduce((a, b) => (b.length > a.length ? b : a), [] as number[]);
   const lines = (
     <>
+      {numbers && barStarts.length ? (
+        // Each bar's number, to tap (to play from it, play it or loop it), in a pill with a play mark.
+        <View style={[styles.line, styles.numbersLine]}>
+          <View style={{ width: edge.width + edge.gap }} />
+          {widthsSpan(widths, 0, barStarts[0]) > 0 ? <View style={{ flex: widthsSpan(widths, 0, barStarts[0]) }} /> : null}
+          {barStarts.map((at, k) => {
+            const bar = numbers.first + k;
+            const on = numbers.picked === bar;
+            const { onBar: tap } = numbers;
+            return (
+              <View key={at} style={{ flex: Math.max(1, widthsSpan(widths, at, barStarts[k + 1] ?? widths.length)), minWidth: 0, alignItems: 'flex-start' }}>
+                {tap ? (
+                  <Pressable
+                    onPress={() => tap(bar)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Bar ${bar}`}
+                    accessibilityHint="Shows Play from here, Play this bar and Loop this bar"
+                    accessibilityState={{ selected: on }}
+                    hitSlop={6}
+                    style={[toolStyles.numberPill, on && toolStyles.numberPicked]}
+                  >
+                    <Text style={[toolStyles.numberText, on && toolStyles.numberTextPicked]}>{bar}</Text>
+                    <Svg width={7} height={8} viewBox="0 0 7 8">
+                      <Path d="M0.5 0.5v7l6-3.5z" fill={on ? colors.accent : colors.muted} />
+                    </Svg>
+                  </Pressable>
+                ) : (
+                  // Just its number, where the line can't play.
+                  <Text style={[toolStyles.numberText, toolStyles.numberPlain]} aria-hidden>
+                    {bar}
+                  </Text>
+                )}
+              </View>
+            );
+          })}
+        </View>
+      ) : null}
       {lineMarks.length || system.hairpins.length ? (
         <MarkLine
           marks={lineMarks}
@@ -345,8 +445,9 @@ const System = memo(function System({ system, activeBeat, silent, palette, size,
           lead={<View style={{ width: edge.width + edge.gap }} />}
         />
       ) : null}
-      {system.rows.map((row) => {
+      {system.rows.map((row, ri) => {
         const missing = widths.slice(row.cells.length).reduce((a, b) => a + b, 0);
+        const flag = flags?.[ri] ?? null;
         const ink = partInk(row.part, palette.dark);
         // On a dark background, the edge is the part's lighter shade too, so it stands out as well as its notes.
         const color = palette.dark ? ink : partColor(row.part);
@@ -354,12 +455,18 @@ const System = memo(function System({ system, activeBeat, silent, palette, size,
         const twin = shared.includes(partColor(row.part));
         const slurs = row.slurs.length ? slurCells(row.slurs) : null;
         return (
-          <View key={row.part} style={[styles.partRow, faint && styles.faint]}>
-            <View
-              accessible
-              accessibilityLabel={partName(row.part)}
-              style={[styles.edge, { width: edge.width, marginRight: edge.gap, backgroundColor: color }]}
-            />
+          <View key={`${row.part}:${ri}`} style={[styles.partRow, faint && styles.faint]}>
+            {onEdge ? (
+              <Pressable
+                onPress={() => onEdge(ri)}
+                accessibilityRole="button"
+                accessibilityLabel={`${partName(row.part)}${label ? `, ${label}` : ''}: change who sings it`}
+                hitSlop={{ top: 0, bottom: 0, left: 10, right: 6 }}
+                style={[styles.edge, { width: edge.width, marginRight: edge.gap, backgroundColor: color }]}
+              />
+            ) : (
+              <View accessible accessibilityLabel={partName(row.part)} style={[styles.edge, { width: edge.width, marginRight: edge.gap, backgroundColor: color }]} />
+            )}
             <View style={styles.partBody}>
               {row.marks.length || row.hairpins.length ? (
                 // The part's own markings (p, f, sfz, cresc., dolce) and hairpins, just above its notes, in its colour.
@@ -380,7 +487,8 @@ const System = memo(function System({ system, activeBeat, silent, palette, size,
                   }
                 />
               ) : null}
-              <View style={styles.line}>
+              <View style={[styles.line, flag?.whole && [styles.wholeFlag, { borderBottomColor: palette.warnLine }]]}>
+                {flag?.bars.length ? <BarFlags row={row} flag={flag} widths={widths} palette={palette} /> : null}
                 {twin ? <Text style={[styles.twin, { color: ink, fontSize: big ? 11 : 9 }]}>{partLetter(row.part)}</Text> : null}
                 {row.cells.map((cell, i) => (
                   <Cell
@@ -394,9 +502,17 @@ const System = memo(function System({ system, activeBeat, silent, palette, size,
                     size={size}
                     big={big}
                     slur={slurs?.[i]}
+                    onPress={onCell ? () => onCell(ri, cell.beat, false) : undefined}
                   />
                 ))}
-                {missing > 0 ? <View style={{ flex: missing }} /> : null}
+                {!row.cells.length && placeholders && onCell ? (
+                  // A row with no notes yet: tap to write in it.
+                  <Pressable onPress={() => onCell(ri, start, false)} accessible={false} style={[styles.placeholderBox, { flex: Math.max(1, missing) }]}>
+                    <Text style={[styles.placeholder, { color: palette.faint, fontSize: size * 0.9, lineHeight: Math.round(size * 1.36) }]}>{placeholders.notes}</Text>
+                  </Pressable>
+                ) : missing > 0 ? (
+                  <View style={{ flex: missing }} />
+                ) : null}
               </View>
               {row.lyrics ? (
                 <View style={styles.line}>
@@ -404,17 +520,30 @@ const System = memo(function System({ system, activeBeat, silent, palette, size,
                     const from = seg.beat - start;
                     const flex = widths.slice(from, from + seg.span).reduce((a, b) => a + b, 0);
                     const now = !!seg.text && activeBeat >= seg.beat && activeBeat < seg.beat + seg.span;
-                    return (
+                    const text = (
+                      <Text
+                        numberOfLines={1}
+                        style={[styles.lyric, { color: palette.lyric, fontSize: lyricSize, lineHeight: lyricSize * 1.35 }, now && [styles.lyricNow, { color: ink }]]}
+                      >
+                        {seg.text}
+                      </Text>
+                    );
+                    return onCell ? (
+                      <Pressable key={seg.beat} onPress={() => onCell(ri, seg.beat, true)} accessible={false} style={[styles.lyricBox, { flex }]}>
+                        {text}
+                      </Pressable>
+                    ) : (
                       <View key={seg.beat} style={[styles.lyricBox, { flex }, big && { paddingBottom: 6 }]}>
-                        <Text
-                          numberOfLines={1}
-                          style={[styles.lyric, { color: palette.lyric, fontSize: lyricSize, lineHeight: lyricSize * 1.35 }, now && [styles.lyricNow, { color: ink }]]}
-                        >
-                          {seg.text}
-                        </Text>
+                        {text}
                       </View>
                     );
                   })}
+                  {!row.lyrics.length && placeholders && onCell ? (
+                    // An empty row of words: tap to write them.
+                    <Pressable onPress={() => onCell(ri, start, true)} accessible={false} style={[styles.lyricBox, { flex: 1 }]}>
+                      <Text style={[styles.lyric, styles.placeholder, { color: palette.faint, fontSize: lyricSize, lineHeight: lyricSize * 1.35 }]}>{placeholders.words}</Text>
+                    </Pressable>
+                  ) : null}
                 </View>
               ) : null}
             </View>
@@ -637,9 +766,11 @@ interface CellProps {
   big: boolean;
   /** A slur under this cell's notes, if any. */
   slur?: CellSlur;
+  /** Tapped to write in its row (a line of music written in rows). */
+  onPress?(): void;
 }
 
-function Cell({ cell, flex, active, ink, now, palette, size, big, slur }: CellProps) {
+function Cell({ cell, flex, active, ink, now, palette, size, big, slur, onPress }: CellProps) {
   const note = (
     <Text
       numberOfLines={1}
@@ -654,16 +785,18 @@ function Cell({ cell, flex, active, ink, now, palette, size, big, slur }: CellPr
     </Text>
   );
   const line = [styles.slurLine, { backgroundColor: ink }];
-  return (
-    <View
-      style={[
-        styles.cell,
-        { flex },
-        big && { paddingVertical: 4 },
-        cell.barStart && [styles.barStart, { borderLeftColor: palette.barline }],
-        active && [styles.cellNow, { backgroundColor: now }],
-      ]}
-    >
+  const box = [
+    styles.cell,
+    { flex },
+    big && { paddingVertical: 4 },
+    cell.barStart && [styles.barStart, { borderLeftColor: palette.barline }],
+    active && [styles.cellNow, { backgroundColor: now }],
+  ];
+  // A beat the part doesn't have (its bar is short of the others'): left blank, keeping the bar lines in step.
+  const inner = cell.pad ? (
+    <Text style={[styles.note, { fontSize: size, lineHeight: Math.round(size * 1.36) }]}> </Text>
+  ) : (
+    <>
       {cell.barStart ? null : <Text style={[styles.colon, { color: palette.faint, fontSize: size * 0.96 }]}>:</Text>}
       {slur ? (
         // As sol-fa sheets show a slur: a line in the part's colour under the notes, running on through the
@@ -681,9 +814,55 @@ function Cell({ cell, flex, active, ink, now, palette, size, big, slur }: CellPr
       ) : (
         note
       )}
+    </>
+  );
+  // Tapped to write in its row: the screen reader writes in the row's own field instead.
+  return onPress ? (
+    <Pressable onPress={onPress} accessible={false} style={box}>
+      {inner}
+    </Pressable>
+  ) : (
+    <View style={box}>{inner}</View>
+  );
+}
+
+/** Width of columns `from` up to `to`, in note characters. */
+const widthsSpan = (widths: number[], from: number, to: number) => widths.slice(Math.max(0, from), Math.max(0, to)).reduce((a, b) => a + b, 0);
+
+/**
+ * Behind a row's notes, each bar that doesn't add up as the checker found it: washed and underlined, with its
+ * count of beats at its start when they're the problem (as Check the reading has always marked them).
+ */
+function BarFlags({ row, flag, widths, palette }: { row: ScoreSystem['rows'][number]; flag: RowFlags; widths: number[]; palette: Look }) {
+  const starts = row.cells.flatMap((c, i) => (c.barStart ? [i] : []));
+  const boxes: ReactNode[] = [];
+  let at = 0;
+  for (const b of [...flag.bars].sort((x, y) => x.index - y.index)) {
+    const from = starts[b.index];
+    if (from === undefined || from < at) continue;
+    const to = starts[b.index + 1] ?? row.cells.length;
+    if (widthsSpan(widths, at, from) > 0) boxes.push(<View key={`gap-${b.index}`} style={{ flex: widthsSpan(widths, at, from) }} />);
+    boxes.push(
+      <View key={b.index} style={[styles.flagged, { flex: Math.max(1, widthsSpan(widths, from, to)), backgroundColor: palette.dangerTint, borderBottomColor: palette.danger }]}>
+        {b.beats !== null ? (
+          <View style={[styles.flagBeats, { backgroundColor: palette.danger }]}>
+            <Text style={[styles.flagBeatsText, { color: palette.onDanger }]}>{b.beats}</Text>
+          </View>
+        ) : null}
+      </View>,
+    );
+    at = to;
+  }
+  if (widthsSpan(widths, at, widths.length) > 0) boxes.push(<View key="rest" style={{ flex: widthsSpan(widths, at, widths.length) }} />);
+  return (
+    <View style={[StyleSheet.absoluteFill, styles.line]} aria-hidden importantForAccessibility="no-hide-descendants">
+      {boxes}
     </View>
   );
 }
+
+/** One line of the score, as it draws it: also for a line of music written in rows (src/components/line-rows.tsx). */
+export const ScoreLine = System;
 
 const styles = StyleSheet.create({
   score: { gap: 10 },
@@ -726,6 +905,14 @@ const styles = StyleSheet.create({
   markGradual: { fontFamily: fonts.body, fontStyle: 'italic' },
   markTempo: { fontFamily: fonts.bold, fontStyle: 'italic' },
   unseen: { opacity: 0 },
+  numbersLine: { minHeight: 26, alignItems: 'center', marginBottom: 1 },
+  wholeFlag: { borderBottomWidth: 2 },
+  flagged: { borderBottomWidth: 2, borderRadius: 3 },
+  // Over the bar's opening bar line, clear of its first note.
+  flagBeats: { position: 'absolute', top: -6, left: -7, minWidth: 13, height: 12, borderRadius: 6, paddingHorizontal: 3, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
+  flagBeatsText: { fontFamily: fonts.heavy, fontSize: 9.5, lineHeight: 12 },
+  placeholderBox: { minWidth: 0, justifyContent: 'center', paddingVertical: 2, paddingLeft: 2 },
+  placeholder: { fontFamily: fonts.body, fontStyle: 'italic' },
   pickedBar: { borderRadius: 6 },
   /** A wedge's room: from its beat's column, a little short of the column it reaches (an italic f leans back). */
   wedgeBox: { minWidth: 0, justifyContent: 'center' },
