@@ -175,3 +175,60 @@ export function ChevronIcon({ size = 18, color }: IconProps) {
     </Svg>
   );
 }
+
+/** The profile's settings rows (src/app/(tabs)/me.tsx). */
+export function MoonIcon({ size = 20, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" {...line(color)} />
+    </Svg>
+  );
+}
+
+export function StageIcon({ size = 20, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d="M4 4.5h16v11H4z M12 15.5V20 M8 20h8 M8 8.5h8 M8 11.5h5" {...line(color)} />
+    </Svg>
+  );
+}
+
+export function DownloadIcon({ size = 20, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d="M12 4v11 M7.5 10.5 12 15l4.5-4.5 M5 20h14" {...line(color)} />
+    </Svg>
+  );
+}
+
+export function PhoneIcon({ size = 20, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d="M8 3h8a1.5 1.5 0 0 1 1.5 1.5v15A1.5 1.5 0 0 1 16 21H8a1.5 1.5 0 0 1-1.5-1.5v-15A1.5 1.5 0 0 1 8 3z M11 18h2" {...line(color)} />
+    </Svg>
+  );
+}
+
+export function MailIcon({ size = 20, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d="M4 6h16v12H4z M4.5 7l7.5 6 7.5-6" {...line(color)} />
+    </Svg>
+  );
+}
+
+export function LockIcon({ size = 20, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d="M7.5 11V8a4.5 4.5 0 0 1 9 0v3 M5.5 11h13v9h-13z" {...line(color)} />
+    </Svg>
+  );
+}
+
+export function SignOutIcon({ size = 20, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d="M14 4h5v16h-5 M9.5 8 5.5 12l4 4 M5.5 12H15" {...line(color)} />
+    </Svg>
+  );
+}
