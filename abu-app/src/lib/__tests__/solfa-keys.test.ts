@@ -127,6 +127,27 @@ describe('musical markings from the Marks key', () => {
     expect(type(['erase'], 'd }').text).toBe('d ');
   });
 
+  it('writes the hairpins, accel. and the directions too, each read as the sheet means it', () => {
+    const row = 'd :r | m :f |';
+    const marks: [string, string, string, string | null][] = [
+      ['{<}', 'cresc', '<', 'S'],
+      ['{>}', 'dim', '>', 'S'],
+      ['{accel}', 'accel', 'accel.', null],
+      ['{Maestoso}', 'direction', 'Maestoso', 'S'],
+      ['{dolce}', 'direction', 'dolce', 'S'],
+      ['{legato}', 'direction', 'legato', 'S'],
+      ['{con moto}', 'direction', 'con moto', 'S'],
+    ];
+    for (const [mark, kind, text, part] of marks) {
+      const written = applyKey(row, at(row, 'm'), ins(mark));
+      expect(written).toEqual({ text: `d :r | ${mark}m :f |`, sel: { start: 7 + mark.length, end: 7 + mark.length } });
+      const read = parseSolfa(`time: 2/4\nS  ${written.text}`);
+      expect([read.errors, read.warnings]).toEqual([[], []]);
+      // On the m, the bar's first beat: beat 2 of the song. Tempo is for every part.
+      expect(read.expressions.map((e) => [e.kind, e.text, e.part, e.beat])).toEqual([[kind, text, part, 2]]);
+    }
+  });
+
   it('is read on the note it was written before, in the song editor’s text too', () => {
     const song = 'time: 2/4\nS  d :r |m :f |\nA  d :d |d :d |';
     const written = applyKey(song, at(song, 'f |'), ins('{p}'));

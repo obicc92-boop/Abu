@@ -10,6 +10,7 @@
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Pressable, Text, View, type ViewInstance } from 'react-native';
+import Svg, { Polyline } from 'react-native-svg';
 
 import { type Key } from '@/lib/solfa-keys';
 import { KEY_NAMES } from '@/solfa';
@@ -53,8 +54,8 @@ interface Marking {
   label: string;
   /** What a screen reader says. */
   said: string;
-  /** Dynamics and accents in bold italic, gradual changes in italic, tempo words in bold. */
-  face: 'loud' | 'italic' | 'tempo';
+  /** Dynamics and accents in bold italic, gradual changes in italic, tempo words in bold; a hairpin drawn. */
+  face: 'loud' | 'italic' | 'tempo' | 'hairpin';
 }
 const DYNAMICS: Marking[] = [
   ['pp', 'pianissimo'],
@@ -64,18 +65,29 @@ const DYNAMICS: Marking[] = [
   ['f', 'forte'],
   ['ff', 'fortissimo'],
 ].map(([text, said]) => ({ insert: `{${text}}`, label: text, said, face: 'loud' }));
+/** Each word beside its hairpin, the wedge a sheet draws for it (written where the wedge starts). */
 const CHANGES: Marking[] = [
   { insert: '{cresc}', label: 'cresc.', said: 'crescendo, getting louder', face: 'italic' },
+  { insert: '{<}', label: '<', said: 'Hairpin, getting louder', face: 'hairpin' },
   { insert: '{dim}', label: 'dim.', said: 'diminuendo, getting softer', face: 'italic' },
+  { insert: '{>}', label: '>', said: 'Hairpin, getting softer', face: 'hairpin' },
   { insert: '{sfz}', label: 'sfz', said: 'sforzando, one note accented', face: 'loud' },
 ];
 const TEMPO_CHANGES: Marking[] = [
   { insert: '{rit}', label: 'rit.', said: 'ritardando, slowing down', face: 'italic' },
+  { insert: '{accel}', label: 'accel.', said: 'accelerando, getting faster', face: 'italic' },
   { insert: '{a tempo}', label: 'a tempo', said: 'a tempo, back to speed', face: 'italic' },
 ];
 const TEMPOS: Marking[] = ['Largo', 'Adagio', 'Andante', 'Moderato', 'Allegro'].map((word) => ({ insert: `{${word}}`, label: word, said: word, face: 'tempo' }));
-/** Beats a minute, written as sheets print a metronome mark: `{M. 72}`. */
+/** Beats a minute, written as sheets print a metronome mark: `{M. 72}`. Behind More, with the directions. */
 const METRONOME = [60, 72, 84, 96, 108, 120];
+/** Directions shown as printed, changing nothing in the sound: behind More, to keep the panel short. */
+const DIRECTIONS: Marking[] = [
+  { insert: '{Maestoso}', label: 'Maestoso', said: 'Maestoso, majestically', face: 'tempo' },
+  { insert: '{dolce}', label: 'dolce', said: 'dolce, sweetly', face: 'italic' },
+  { insert: '{legato}', label: 'legato', said: 'legato, smoothly', face: 'italic' },
+  { insert: '{con moto}', label: 'con moto', said: 'con moto, with movement', face: 'italic' },
+];
 
 /** When the keys were last touched: a field's blur just then isn't the person leaving it (unless it was Done). */
 let lastTouch = 0;
@@ -230,42 +242,71 @@ export function SolfaKeypad({
 
 /**
  * The musical markings, in place of the keys: one tapped is written at the cursor (lib/solfa-keys.ts puts it
- * before the note the cursor is in) and the keys come back. Each group is named over its keys.
+ * before the note the cursor is in) and the keys come back. Each group is named over its keys; the directions
+ * and the metronome (usually written once, at the song's start) are behind More, so the panel is about as tall
+ * as the keys.
  */
 function MarksPanel({ onPick, onCancel }: { onPick(text: string): void; onCancel(): void }) {
   const styles = useStyles();
+  const [more, setMore] = useState(false);
   const keys = (marks: Marking[]) =>
     marks.map((m) => <KeyButton key={m.insert} label={m.label} face={m.face} onPress={() => onPick(m.insert)} accessibilityLabel={m.said} />);
+  if (more) {
+    return (
+      <>
+        <View style={styles.group}>
+          <Text style={styles.groupName}>Directions, shown as printed</Text>
+          <View style={styles.row}>{keys(DIRECTIONS)}</View>
+        </View>
+        <View style={styles.group}>
+          <Text style={styles.groupName}>Metronome ♩ =</Text>
+          <View style={styles.row}>
+            {METRONOME.map((n) => (
+              <KeyButton key={n} label={String(n)} onPress={() => onPick(`{M. ${n}}`)} accessibilityLabel={`Metronome, ${n} beats a minute`} />
+            ))}
+          </View>
+        </View>
+        <View style={styles.row}>
+          <KeyButton label="Back" onPress={() => setMore(false)} accessibilityLabel="Back to the marks" word small />
+          <KeyButton label="Cancel" onPress={onCancel} word small />
+        </View>
+      </>
+    );
+  }
   return (
     <>
       <View style={styles.group}>
         <Text style={styles.groupName}>Dynamics</Text>
         <View style={styles.row}>{keys(DYNAMICS)}</View>
       </View>
-      <View style={styles.row}>
-        <View style={[styles.group, { flex: CHANGES.length }]}>
-          <Text style={styles.groupName}>Changes</Text>
-          <View style={styles.row}>{keys(CHANGES)}</View>
-        </View>
-        <View style={[styles.group, { flex: TEMPO_CHANGES.length }]}>
-          <Text style={styles.groupName}>Tempo</Text>
-          <View style={styles.row}>{keys(TEMPO_CHANGES)}</View>
-        </View>
-      </View>
-      <View style={styles.row}>{keys(TEMPOS)}</View>
       <View style={styles.group}>
-        <Text style={styles.groupName}>Metronome ♩ =</Text>
-        <View style={styles.row}>
-          {METRONOME.map((n) => (
-            <KeyButton key={n} label={String(n)} onPress={() => onPick(`{M. ${n}}`)} accessibilityLabel={`Metronome, ${n} beats a minute`} />
-          ))}
+        <Text style={styles.groupName}>Changes</Text>
+        <View style={styles.row}>{keys(CHANGES)}</View>
+      </View>
+      <View style={styles.group}>
+        <Text style={styles.groupName}>Tempo</Text>
+        <View style={styles.rows}>
+          <View style={styles.row}>{keys(TEMPO_CHANGES)}</View>
+          <View style={styles.row}>{keys(TEMPOS)}</View>
         </View>
       </View>
       <View style={[styles.row, styles.marksFoot]}>
         <Text style={styles.marksHint}>Put the cursor just before the note it starts on.</Text>
+        <KeyButton label="More…" onPress={() => setMore(true)} accessibilityLabel="More marks: directions such as dolce, and the metronome" word small />
         <KeyButton label="Cancel" onPress={onCancel} word small />
       </View>
     </>
+  );
+}
+
+/** A hairpin as a sheet draws it: a long thin wedge, opening (getting louder) or closing (getting softer). */
+function Hairpin({ opening }: { opening: boolean }) {
+  const colors = useColors();
+  const points = opening ? '30,2 2,8 30,14' : '2,2 30,8 2,14';
+  return (
+    <Svg width={32} height={16} viewBox="0 0 32 16">
+      <Polyline points={points} fill="none" stroke={colors.ink} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
   );
 }
 
@@ -332,9 +373,13 @@ function KeyButton({
       accessibilityLabel={accessibilityLabel ?? (caption ? `${String(label)} ${caption}` : String(label))}
       style={({ pressed }) => [styles.key, note && styles.noteKey, narrow && styles.narrowKey, small && styles.smallKey, done && styles.doneKey, on && styles.onKey, pressed && styles.pressed]}
     >
-      <Text style={[styles.label, note && styles.noteLabel, narrow && styles.narrowLabel, (done || word) && styles.doneLabel, face && styles[`${face}Label`], color ? { color } : null]}>
-        {label}
-      </Text>
+      {face === 'hairpin' ? (
+        <Hairpin opening={label === '<'} />
+      ) : (
+        <Text style={[styles.label, note && styles.noteLabel, narrow && styles.narrowLabel, (done || word) && styles.doneLabel, face && styles[`${face}Label`], color ? { color } : null]}>
+          {label}
+        </Text>
+      )}
       {caption ? <Text style={[styles.caption, narrow && styles.narrowCaption, color ? { color } : null]}>{caption}</Text> : null}
     </Pressable>
   );
@@ -381,6 +426,7 @@ const useStyles = makeStyles((colors) => ({
   tempoLabel: { fontFamily: fonts.bold, fontSize: 12.5, lineHeight: 16 },
   /** A group of markings with its name over its keys. */
   group: { gap: 2 },
+  rows: { gap: 5 },
   groupName: { fontFamily: fonts.bold, fontSize: 11, lineHeight: 13, color: colors.muted, paddingHorizontal: 2 },
   marksFoot: { alignItems: 'center' },
   marksHint: { flex: 2.6, fontFamily: fonts.body, fontSize: 12, lineHeight: 16, color: colors.muted, paddingHorizontal: 2 },
