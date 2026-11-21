@@ -22,6 +22,7 @@ import { applyKey, keyChangePlace, songLowMarksShown, songLowMarksTyped, withKey
 import { Body, Button, Card, Chip, ErrorText, Field, Kicker, Loading, Page, TopBar } from '@/components/ui';
 import { musicPiece, songPieces, withKeyBefore, withRow } from '@/lib/song-pieces';
 import { TAG_GROUPS } from '@/lib/tags';
+import { takePastedDraft } from '@/lib/paste-draft';
 import { clearScanDraft, scanDraft, type ScanDraft } from '@/scan/draft';
 import { tidyNotes } from '@/scan/line-text';
 import { forgetScan } from '@/scan/saved';
@@ -41,7 +42,8 @@ B  d1:- /f1:s1 | l1:m1 /d1:s1 | d1:- /- :-  |`;
 
 export default function SongEditorScreen() {
   const { id, from } = useLocalSearchParams<{ id?: string; from?: string }>();
-  const [draft] = useState(() => (from === 'scan' && !id ? scanDraft() : null));
+  // A song from a scan, or pasted on the Add a song screen (src/app/create.tsx).
+  const [draft] = useState(() => (id ? null : from === 'scan' ? scanDraft() : from === 'paste' ? takePastedDraft() : null));
   const { status } = useSession();
   const existing = useQuery({ queryKey: ['song', id], queryFn: () => api.song(id!), enabled: !!id });
   if (status === 'signedOut') return <Redirect href={{ pathname: '/auth', params: { mode: 'sign-in' } }} />;
@@ -53,10 +55,10 @@ export default function SongEditorScreen() {
       </Page>
     );
   }
-  return <Editor song={existing.data} draft={draft} />;
+  return <Editor song={existing.data} draft={draft} pasted={from === 'paste'} />;
 }
 
-function Editor({ song, draft }: { song?: Song; draft: ScanDraft | null }) {
+function Editor({ song, draft, pasted }: { song?: Song; draft: ScanDraft | null; pasted: boolean }) {
   const styles = useStyles();
   const colors = useColors();
   const s = useSession();
@@ -246,7 +248,7 @@ function Editor({ song, draft }: { song?: Song; draft: ScanDraft | null }) {
     >
       <TopBar
         back
-        title={editing ? 'Edit song' : draft ? 'Save the scanned song' : 'Add a song'}
+        title={editing ? 'Edit song' : draft && !pasted ? 'Save the scanned song' : 'Add a song'}
         subtitle={editing ? song!.title : draft ? 'Check the title, key and time, then save.' : 'Type or paste the sol-fa; it’s checked as you type.'}
       />
       {!editing && !draft && Platform.OS === 'web' ? (

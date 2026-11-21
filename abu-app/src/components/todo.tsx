@@ -74,7 +74,7 @@ export function LeaderTodo({ group }: { group: MyGroup }) {
       <View style={styles.quick}>
         {leader ? <Button small kind="ghost" label={`Plan a ${kindNoun(group.type, 'service')}`} onPress={() => router.push('/event-editor')} /> : null}
         <Button small kind="ghost" label="Post a notice" onPress={() => router.push('/group')} />
-        <Button small kind="ghost" label="Add a song" onPress={() => router.push('/song-editor')} />
+        <Button small kind="ghost" label="Add a song" onPress={() => router.push('/create')} />
       </View>
     </Card>
   );

@@ -1,5 +1,6 @@
 /**
- * The five tabs: Home, Songs, Schedule, Group, Me (docs/app-plan.md).
+ * The five tabs: Home, Songs, Schedule, Group, Me (docs/app-plan.md), in a bar like Suno's with Add a song's
+ * "+" in the middle (src/components/tab-bar.tsx).
  * Without a group, Schedule reads "Setlists" and Group reads "Groups".
  * People who are neither signed in nor looking around go to the welcome screen.
  */
@@ -7,9 +8,9 @@ import { Redirect, Tabs } from 'expo-router';
 import { View } from 'react-native';
 
 import { CalendarIcon, HomeIcon, PeopleIcon, PersonIcon, SongsIcon } from '@/components/icons';
+import { TabBar } from '@/components/tab-bar';
 import { useSession } from '@/state/session';
 import { useColors } from '@/theme/theme';
-import { fonts } from '@/theme/tokens';
 
 export default function TabsLayout() {
   const colors = useColors();
@@ -19,16 +20,7 @@ export default function TabsLayout() {
 
   const personal = !group || group.type === 'personal';
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: colors.ink,
-        tabBarInactiveTintColor: colors.muted,
-        tabBarStyle: { backgroundColor: colors.card, borderTopColor: colors.line, height: 70, paddingTop: 6, paddingBottom: 12 },
-        tabBarLabelStyle: { fontFamily: fonts.bold, fontSize: 11.5, lineHeight: 15 },
-        sceneStyle: { backgroundColor: colors.sand },
-      }}
-    >
+    <Tabs tabBar={(props) => <TabBar {...props} />} screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: colors.sand } }}>
       <Tabs.Screen name="index" options={{ title: 'Home', tabBarIcon: ({ color }) => <HomeIcon color={color} /> }} />
       <Tabs.Screen name="songs" options={{ title: 'Songs', tabBarIcon: ({ color }) => <SongsIcon color={color} /> }} />
       <Tabs.Screen name="schedule" options={{ title: personal ? 'Setlists' : 'Schedule', tabBarIcon: ({ color }) => <CalendarIcon color={color} /> }} />
