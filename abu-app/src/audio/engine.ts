@@ -24,7 +24,7 @@ import {
   type LoudnessCurve,
   type TempoCurve,
 } from './expression-curve';
-import { NOTE_SHAPES, nearestSample, sounds, type Instrument, type LoadedInstrument, type SoundLibrary } from './instruments';
+import { NOTE_SHAPES, sampleFor, sounds, type Instrument, type LoadedInstrument, type SoundLibrary } from './instruments';
 import type { AudioContextLike, GainNodeLike } from './types';
 
 /** How often the scheduler runs. */
@@ -537,7 +537,8 @@ export class SongPlayer {
   }
 
   /**
-   * One note from a recording: the nearest recorded note, played faster or slower for its pitch (and in tune), from
+   * One note from a recording: the nearest recorded note (the choir's for the part's voice: women's for sopranos and
+   * altos, men's for tenors and basses), played faster or slower for its pitch (and in tune), from
    * after the decoder's silence, through an envelope into the part's gain, so the mix, the dynamics, the tempo's
    * lengths and transposing work as for the synth. A held note of the strings or choir repeats the recording's loop.
    * `len` and `shape` are as for `voice`: given an `attack`, it's slurred from the note before, so it comes in
@@ -547,7 +548,7 @@ export class SongPlayer {
    */
   private recording(part: string, inst: LoadedInstrument, midi: number, t: number, len: number, shape: NoteShape): void {
     const c = this.ctx!;
-    const s = nearestSample(inst.samples, midi);
+    const s = sampleFor(inst, part, midi);
     const own = NOTE_SHAPES[inst.name];
     const { peak = 1, end = peak } = shape;
     const attack = shape.attack ?? own.attack;

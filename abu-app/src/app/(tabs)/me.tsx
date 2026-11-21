@@ -689,7 +689,8 @@ function LookPreview({ sides }: { sides: Palette[] }) {
 
 /**
  * The player's sound (owner's request, 21 November 2026): the synth, or a recorded piano, strings or choir, each
- * downloaded once when chosen and kept on the phone. Every player follows it from its next note.
+ * downloaded once when chosen and kept on the phone (and, until the owner has compared them, the first choir as
+ * "Choir (old)"). Every player follows it from its next note.
  */
 function SoundChoices({ chosen }: { chosen: Instrument }) {
   const styles = useStyles();
@@ -746,9 +747,11 @@ function About() {
       {/* The recorded sounds' credits, as their licences ask (public/sounds/LICENSES.txt has them in full). */}
       <Text style={styles.aboutText}>
         Sounds: Piano: Salamander Grand Piano V3 by Alexander Holm, CC BY 3.0 (https://creativecommons.org/licenses/by/3.0/),
-        https://archive.org/details/SalamanderGrandPianoV3. Trimmed, converted to mono and re-encoded. Choir: Fluid (R3)
-        SoundFont, Copyright (c) 2000-2002, 2008 Frank Wen, MIT licence. Strings: public domain recordings. The licences
-        in full: solfascores.com/sounds/LICENSES.txt
+        https://archive.org/details/SalamanderGrandPianoV3. Trimmed, converted to mono and re-encoded. Choir: VocalSet (J.
+        Wilkins, P. Seetharaman, A. Wahl, B. Pardo), via epic-choir by thepok, CC BY 4.0
+        (https://creativecommons.org/licenses/by/4.0/), https://doi.org/10.5281/zenodo.1442513. Trimmed, looped, converted
+        to mono and re-encoded. Choir (old): Fluid (R3) SoundFont, Copyright (c) 2000-2002, 2008 Frank Wen, MIT licence.
+        Strings: public domain recordings. The licences in full: solfascores.com/sounds/LICENSES.txt
       </Text>
     </View>
   );

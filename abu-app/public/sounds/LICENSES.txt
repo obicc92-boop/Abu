@@ -1,8 +1,9 @@
 SolfaScores instrument sounds
 =============================
 
-These recordings play the songs when "Piano", "Strings" or "Choir" is chosen
-under Me > Settings > Sound. How they were made: abu-app/scripts/sounds/README.md.
+These recordings play the songs when "Piano", "Strings", "Choir" or "Choir (old)"
+is chosen under Me > Settings > Sound. How they were made:
+abu-app/scripts/sounds/README.md.
 
 
 Piano (piano/)
@@ -21,8 +22,34 @@ Recordings released under CC0 1.0 (public domain dedication), so no credit is
 needed. Trimmed, looped, converted to mono and re-encoded.
 
 
-Choir (choir/)
---------------
+Choir (choir/women/, choir/men/)
+--------------------------------
+
+Choir samples derived from VocalSet (Wilkins, Seetharaman, Wahl, Pardo 2018),
+CC BY 4.0, https://doi.org/10.5281/zenodo.1442513 - epic-choir by thepok.
+
+  VocalSet: Wilkins, J., Prem Seetharaman, Alison Wahl, & Bryan Pardo. (2018).
+  VocalSet: A Singing Voice Dataset (Version 1.2) [Dataset]. Zenodo.
+  https://doi.org/10.5281/zenodo.1442513
+  Licence: Creative Commons Attribution 4.0 International (CC BY 4.0),
+  https://creativecommons.org/licenses/by/4.0/
+
+  epic-choir v1.0 by thepok, https://github.com/thepok/epic-choir, an SATB
+  vowel choir made from VocalSet's singers, also under CC BY 4.0.
+
+Changes made here, from epic-choir's "ah" samples at mf (the altos' and the
+sopranos' for the women's set, the basses' and the tenors' for the men's):
+twelve notes chosen, every 4 semitones; each trimmed to where the singers come
+in, or, where the pitch was still moving (many open with a slide from the scale
+they were cut from), to where it has settled, with a short fade-in; left and
+right mixed to mono; looped, with a crossfade baked in; resampled to 32 kHz;
+levels set for each note and the tuning measured; encoded as MP3. The player
+re-pitches each note for the notes between. No endorsement by the VocalSet
+authors or by thepok is implied.
+
+
+Choir (old) (choir-old/)
+------------------------
 
 Choir: Fluid (R3) SoundFont, Copyright (c) 2000-2002, 2008 Frank Wen, MIT
 licence. The "Ahh Choir" samples, mixed to mono, resampled and re-encoded.

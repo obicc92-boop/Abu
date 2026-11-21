@@ -493,14 +493,27 @@ describe('SongPlayer playing recorded instruments', () => {
     expect(held.loopStart).toBeCloseTo(noteFile('strings/A4.mp3').loopStart! + DELAY, 6);
     expect(held.loopEnd).toBeCloseTo(noteFile('strings/A4.mp3').loopEnd! + DELAY, 6);
 
-    const choir = setup('S  d :- |', { time: '2/4', key: 7 }, sounds);
+    // The choir: the sopranos' G4 from the women's F♯4, the tenors' (sung an octave lower, G3) from the men's F♯3.
+    const choir = setup('S  d :- |\nT  d :- |', { time: '2/4', key: 7 }, sounds);
     await sounds.library.load(asCtx(choir.ctx), 'choir');
     choir.player.setInstrument('choir');
     await choir.player.play();
-    const [sung] = choir.ctx.sources;
-    const gb4 = noteFile('choir/Gb4.mp3');
-    expect(sung.buffer!.file).toBe('choir/Gb4.mp3');
+    const [sung, tenor] = choir.ctx.sources;
+    const gb4 = noteFile('choir/women/Gb4.mp3');
+    const gb3 = noteFile('choir/men/Gb3.mp3');
+    expect([sung.buffer!.file, tenor.buffer!.file]).toEqual(['choir/women/Gb4.mp3', 'choir/men/Gb3.mp3']);
     expect(sung.playbackRate.value).toBeCloseTo(2 ** ((67 - 66 + (gb4.cents ?? 0) / 100) / 12), 9);
+    expect(tenor.playbackRate.value).toBeCloseTo(2 ** ((55 - 54 + (gb3.cents ?? 0) / 100) / 12), 9);
+    expect(sung.loop && tenor.loop).toBe(true);
+    expect(tenor.loopStart).toBeCloseTo(gb3.loopStart! + DELAY, 6);
+    expect((tenor.to[0] as FakeGain).to[0]).toBe(choir.ctx.gains[2]); // into the tenors' gain
+
+    // The old choir, while it's kept: one set for every part.
+    const old = setup('S  d :- |\nT  d :- |', { time: '2/4', key: 7 }, sounds);
+    await sounds.library.load(asCtx(old.ctx), 'choir-old');
+    old.player.setInstrument('choir-old');
+    await old.player.play();
+    expect(old.ctx.sources.map((s) => s.buffer!.file)).toEqual(['choir-old/Gb4.mp3', 'choir-old/Gb3.mp3']);
   });
 
   it('plays the synth until the recordings are ready, then the recordings', async () => {

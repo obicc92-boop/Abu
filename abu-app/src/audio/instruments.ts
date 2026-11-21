@@ -1,7 +1,9 @@
 /**
  * The player's sounds (owner's request, 21 November 2026: free sounds, "one piano sound and strings and choir
  * sounds", chosen in settings): the synth as before, or recordings of a piano, strings or a choir (public/sounds,
- * built by scripts/sounds; credits in public/sounds/LICENSES.txt and Me's footer). A recorded instrument downloads
+ * built by scripts/sounds; credits in public/sounds/LICENSES.txt and Me's footer). The choir has a women's and a
+ * men's recording of each note (owner's choice, 21 November 2026, from demos): each part sings with its own
+ * (`partVoice`, `sampleFor`). A recorded instrument downloads
  * once, when it's chosen or when a song first plays with it, and the service worker keeps it on the phone
  * (scripts/offline-build.mjs). Until it's ready, or if it can't download (no data the first time), the synth plays,
  * so playing never waits.
@@ -10,11 +12,14 @@ import { API_URL } from '@/api/config';
 
 import type { AudioBufferLike, AudioContextLike } from './types';
 
-export type Instrument = 'synth' | 'piano' | 'strings' | 'choir';
+export type Instrument = 'synth' | 'piano' | 'strings' | 'choir' | 'choir-old';
 export type Recorded = Exclude<Instrument, 'synth'>;
 
 /** Bump when the files in public/sounds change, so phones fetch them again rather than play the copies they kept. */
-export const SOUNDS_VERSION = 1;
+export const SOUNDS_VERSION = 2;
+
+/** The size of public/sounds/manifest.json, which every recorded instrument downloads. */
+const MANIFEST_BYTES = 10_809;
 
 export interface InstrumentInfo {
   name: Instrument;
@@ -23,12 +28,17 @@ export interface InstrumentInfo {
   bytes: number;
 }
 
-/** In the order Me shows them. The sizes are checked against public/sounds by a test. */
+/**
+ * In the order Me shows them. The sizes are checked against public/sounds by a test. "Choir (old)" is the first
+ * choir (FluidR3's), kept for now so the owner can hear both in the app; once they confirm the new one, remove it here,
+ * in NOTE_SHAPES, its files (public/sounds/choir-old), its part of the manifest and of LICENSES.txt, and Me's credit.
+ */
 export const INSTRUMENTS: readonly InstrumentInfo[] = [
   { name: 'synth', label: 'Synth', bytes: 0 },
-  { name: 'piano', label: 'Piano', bytes: 455_616 + 7_308 + 7_922 },
-  { name: 'strings', label: 'Strings', bytes: 352_800 + 7_308 + 7_922 },
-  { name: 'choir', label: 'Choir', bytes: 241_056 + 6_264 + 7_922 },
+  { name: 'piano', label: 'Piano', bytes: 455_616 + 7_308 + MANIFEST_BYTES },
+  { name: 'strings', label: 'Strings', bytes: 352_800 + 7_308 + MANIFEST_BYTES },
+  { name: 'choir', label: 'Choir', bytes: 204_336 + 6_264 + MANIFEST_BYTES },
+  { name: 'choir-old', label: 'Choir (old)', bytes: 241_056 + 6_264 + MANIFEST_BYTES },
 ];
 
 /**
@@ -39,6 +49,7 @@ export const NOTE_SHAPES: Readonly<Record<Recorded, { attack: number; release: n
   piano: { attack: 0.005, release: 0.3 },
   strings: { attack: 0.02, release: 0.25 },
   choir: { attack: 0.02, release: 0.2 },
+  'choir-old': { attack: 0.02, release: 0.2 },
 };
 
 export const isInstrument = (v: unknown): v is Instrument => INSTRUMENTS.some((i) => i.name === v);
@@ -61,10 +72,15 @@ export interface Sample {
   loop: { start: number; end: number } | null;
 }
 
+/** Who sings a choir's recording: the choir has one set of women's and one of men's. */
+export type Voice = 'women' | 'men';
+
 export interface LoadedInstrument {
   name: Recorded;
   /** By the note they were recorded at. */
   samples: Sample[];
+  /** The choir's: the same notes split by who sings them, each by the note it was recorded at. */
+  voices?: Partial<Record<Voice, Sample[]>>;
 }
 
 /** The recording to play a note with: the nearest; of two as near, the one above (played lower sounds more natural). */
@@ -76,6 +92,37 @@ export function nearestSample(samples: readonly Sample[], midi: number): Sample 
     if (d < bd || (d === bd && s.midi > best.midi)) best = s;
   }
   return best;
+}
+
+/**
+ * Who sings a part with the choir: women for sopranos and altos (S, A, S1, A2…, and their solos SoloS, SoloA), men
+ * for tenors and basses (T, B, T1, B2…, SoloT, SoloB). Null for a part of no fixed voice: a plain Solo, or a part
+ * named otherwise.
+ */
+export function partVoice(part: string): Voice | null {
+  const solo = part.match(/^solo\s*([satb])$/i);
+  const p = solo ? solo[1] : part;
+  if (/^[sa]\d*$/i.test(p)) return 'women';
+  if (/^[tb]\d*$/i.test(p)) return 'men';
+  return null;
+}
+
+/**
+ * The recording to play a part's note with. A choir's women's and men's recordings go to their parts (`partVoice`); a
+ * part of no fixed voice takes whichever voice has a recording nearer the note (the women's, of two as near). Other
+ * instruments: the nearest recording.
+ */
+export function sampleFor(inst: LoadedInstrument, part: string, midi: number): Sample {
+  const women = inst.voices?.women?.length ? inst.voices.women : null;
+  const men = inst.voices?.men?.length ? inst.voices.men : null;
+  if (!women && !men) return nearestSample(inst.samples, midi);
+  const voice = partVoice(part);
+  if (voice === 'women' && women) return nearestSample(women, midi);
+  if (voice === 'men' && men) return nearestSample(men, midi);
+  const w = women && nearestSample(women, midi);
+  const m = men && nearestSample(men, midi);
+  if (!w || !m) return (w ?? m)!;
+  return Math.abs(m.midi - midi) < Math.abs(w.midi - midi) ? m : w;
 }
 
 /** Where the click is in click-<rate>.mp3, before the decoder adds its silence. */
@@ -96,6 +143,8 @@ export function decoderDelay(click: AudioBufferLike): number | null {
 /** public/sounds/manifest.json, as scripts/sounds/build.mjs writes it. */
 interface ManifestNote {
   midi: number;
+  /** The choir's: who sings it. */
+  voice?: Voice;
   file: string;
   gain?: number;
   cents?: number;
@@ -213,7 +262,11 @@ export class SoundLibrary {
         loop: n.loopStart !== undefined && n.loopEnd !== undefined ? { start: n.loopStart + delay, end: n.loopEnd + delay } : null,
       })),
     );
-    return { name, samples: samples.sort((a, b) => a.midi - b.midi) };
+    const byNote = (list: Sample[]) => [...list].sort((a, b) => a.midi - b.midi);
+    if (!set.notes.some((n) => n.voice)) return { name, samples: byNote(samples) };
+    // The choir: its women's and men's recordings apart too (`sampleFor`).
+    const of = (v: Voice) => byNote(samples.filter((_, i) => set.notes[i].voice === v));
+    return { name, samples: byNote(samples), voices: { women: of('women'), men: of('men') } };
   }
 
   private readManifest(): Promise<Manifest> {

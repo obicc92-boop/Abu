@@ -8,15 +8,18 @@ import {
   INSTRUMENTS,
   isInstrument,
   nearestSample,
+  partVoice,
+  sampleFor,
   sizeText,
   SoundLibrary,
   SOUNDS_VERSION,
+  type LoadedInstrument,
   type Sample,
 } from '../instruments';
 import type { AudioBufferLike, AudioContextLike } from '../types';
 
 const SOUNDS = join(__dirname, '../../../public/sounds');
-type Note = { midi: number; file: string; bytes: number; seconds: number; gain: number; cents?: number; loopStart?: number; loopEnd?: number };
+type Note = { midi: number; voice?: string; file: string; bytes: number; seconds: number; gain: number; cents?: number; loopStart?: number; loopEnd?: number };
 const manifest = JSON.parse(readFileSync(join(SOUNDS, 'manifest.json'), 'utf8')) as Record<string, { sampleRate: number; click: string; notes: Note[]; totalBytes: number }>;
 
 /** A decoded buffer: `x` as its samples, or silence `seconds` long. */
@@ -78,6 +81,32 @@ describe('nearestSample', () => {
   });
 });
 
+describe('the choir’s voices', () => {
+  it('gives sopranos and altos the women, tenors and basses the men, and a part of no fixed voice neither', () => {
+    expect(['S', 'A', 'S1', 'A2', 'SoloS', 'SoloA'].map(partVoice)).toEqual(Array(6).fill('women'));
+    expect(['T', 'B', 'T1', 'B2', 'SoloT', 'SoloB'].map(partVoice)).toEqual(Array(6).fill('men'));
+    expect(['Solo', 'Keys', 'Descant'].map(partVoice)).toEqual([null, null, null]);
+  });
+
+  it('plays each part’s note from its own voice’s recordings, and a part of no fixed voice by its pitch', () => {
+    const women = [58, 62, 66, 70, 74, 78].map(sample);
+    const men = [46, 50, 54, 58, 62, 66].map(sample);
+    const choir: LoadedInstrument = { name: 'choir', samples: [...women, ...men], voices: { women, men } };
+    // A tenor's and an alto's E4: the men's F♯4 and the women's F♯4 (of D4 and F♯4, the one above).
+    expect(sampleFor(choir, 'T', 64)).toBe(men[5]);
+    expect(sampleFor(choir, 'A', 64)).toBe(women[2]);
+    expect(sampleFor(choir, 'SoloB', 40)).toBe(men[0]); // a bass's low E, from their lowest
+    expect(sampleFor(choir, 'S1', 81)).toBe(women[5]); // a soprano's high A, from their highest
+    // No fixed voice: whichever voice has a recording nearer; the women's of two as near.
+    expect(sampleFor(choir, 'Solo', 43)).toBe(men[0]);
+    expect(sampleFor(choir, 'Solo', 72)).toBe(women[4]);
+    expect(sampleFor(choir, 'Keys', 58)).toBe(women[0]);
+    // Any other instrument: the nearest of all.
+    const piano: LoadedInstrument = { name: 'piano', samples: [39, 42].map(sample) };
+    expect(sampleFor(piano, 'T', 41).midi).toBe(42);
+  });
+});
+
 describe('decoderDelay', () => {
   it('finds the click and says how much silence the decoder put first', () => {
     expect(decoderDelay(buffer('c', { x: click(0.0345) }))).toBeCloseTo(0.0345, 4);
@@ -103,15 +132,34 @@ describe('the sounds in public/sounds', () => {
       expect(set.totalBytes).toBe(files);
       expect(i.bytes).toBe(files + statSync(join(SOUNDS, set.click)).size + manifestBytes);
     }
-    expect(INSTRUMENTS.map((i) => `${i.label} ${i.bytes ? sizeText(i.bytes) : ''}`.trim())).toEqual(['Synth', 'Piano 470 KB', 'Strings 370 KB', 'Choir 260 KB']);
+    expect(INSTRUMENTS.map((i) => `${i.label} ${i.bytes ? sizeText(i.bytes) : ''}`.trim())).toEqual([
+      'Synth',
+      'Piano 470 KB',
+      'Strings 370 KB',
+      'Choir 220 KB',
+      'Choir (old) 260 KB',
+    ]);
   });
 
   it('cover the parts’ range, with loops where the sound holds on', () => {
     for (const [name, set] of Object.entries(manifest)) {
-      const midis = set.notes.map((n) => n.midi);
-      expect(midis).toEqual([...midis].sort((a, b) => a - b));
-      expect(midis[0]).toBeLessThanOrEqual(40); // a bass's low E♭ or E
-      expect(midis[midis.length - 1]).toBeGreaterThanOrEqual(81); // a soprano's high A
+      const voiced = name === 'choir';
+      const groups = voiced ? ['women', 'men'].map((v) => set.notes.filter((n) => n.voice === v)) : [set.notes];
+      for (const notes of groups) {
+        const midis = notes.map((n) => n.midi);
+        expect(midis).toEqual([...midis].sort((a, b) => a - b));
+      }
+      if (voiced) {
+        // Every 4 semitones: the men from a bass's A♯2 (a low E is played 6 lower) to a tenor's F♯4, the women from an
+        // alto's A♯3 to a soprano's F♯5 (a high A is played 3 higher).
+        const [women, men] = groups.map((g) => g.map((n) => n.midi));
+        expect(women.length + men.length).toBe(set.notes.length);
+        expect([men[0], men[men.length - 1], women[0], women[women.length - 1]]).toEqual([46, 66, 58, 78]);
+      } else {
+        const midis = set.notes.map((n) => n.midi);
+        expect(midis[0]).toBeLessThanOrEqual(40); // a bass's low E♭ or E
+        expect(midis[midis.length - 1]).toBeGreaterThanOrEqual(81); // a soprano's high A
+      }
       for (const n of set.notes) {
         expect(n.gain).toBeGreaterThan(0);
         if (name === 'piano') expect(n.loopStart).toBeUndefined();
@@ -119,11 +167,13 @@ describe('the sounds in public/sounds', () => {
       }
     }
     expect(manifest.choir.notes.some((n) => n.cents)).toBe(true);
-    expect(Object.keys(manifest).sort()).toEqual(['choir', 'piano', 'strings']);
+    expect(manifest['choir-old'].notes.some((n) => n.cents)).toBe(true);
+    expect(Object.keys(manifest).sort()).toEqual(['choir', 'choir-old', 'piano', 'strings']);
   });
 
   it('knows its own names', () => {
     expect(isInstrument('piano')).toBe(true);
+    expect(isInstrument('choir-old')).toBe(true);
     expect(isInstrument('synth')).toBe(true);
     expect(isInstrument('organ')).toBe(false);
     expect(isInstrument(null)).toBe(false);
@@ -157,11 +207,26 @@ describe('SoundLibrary', () => {
     expect(fetched).toHaveLength(2 + manifest.strings.notes.length + manifest.piano.notes.length);
   });
 
-  it('tunes the choir’s recordings by their cents', async () => {
+  it('tunes the choirs’ recordings by their cents', async () => {
+    const { library, ctx } = fakeSounds();
+    for (const name of ['choir', 'choir-old'] as const) {
+      const choir = await library.load(ctx, name);
+      const flat = manifest[name].notes.find((n) => n.cents)!;
+      const s = choir!.samples.find((x) => (x.buffer as AudioBufferLike & { file: string }).file === flat.file)!;
+      expect(s.tune).toBeCloseTo(flat.cents! / 100, 9);
+    }
+  });
+
+  it('keeps the choir’s women’s and men’s recordings apart, by the note they were recorded at', async () => {
     const { library, ctx } = fakeSounds();
     const choir = await library.load(ctx, 'choir');
-    const flat = manifest.choir.notes.find((n) => n.cents)!;
-    expect(choir!.samples.find((s) => s.midi === flat.midi)!.tune).toBeCloseTo(flat.cents! / 100, 9);
+    const notes = manifest.choir.notes;
+    const files = (list: Sample[]) => list.map((s) => (s.buffer as AudioBufferLike & { file: string }).file);
+    expect(files(choir!.voices!.women!)).toEqual(notes.filter((n) => n.voice === 'women').map((n) => n.file));
+    expect(files(choir!.voices!.men!)).toEqual(notes.filter((n) => n.voice === 'men').map((n) => n.file));
+    expect(choir!.samples).toHaveLength(notes.length);
+    expect(choir!.samples.map((s) => s.midi)).toEqual([...notes.map((n) => n.midi)].sort((a, b) => a - b));
+    expect((await library.load(ctx, 'choir-old'))!.voices).toBeUndefined();
   });
 
   it('gives up for now when it can’t download, and tries again the next time', async () => {
