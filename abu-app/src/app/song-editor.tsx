@@ -224,7 +224,9 @@ function Editor({ song, draft, pasted, written, startBar }: { song?: Song; draft
   const text = useDeferredValue(solfa);
   const parsed = useMemo(() => parseSolfa(text, { time, key: doh }), [text, time, doh]);
   const empty = !text.trim();
-  const canPlay = !empty && parsed.errors.length === 0;
+  // It plays even while some bars don't add up (owner's screenshot, 21 November 2026: Play from here greyed out on a
+  // scanned song with a bar left to fix), as best it can, as the song's page does for a song saved anyway.
+  const canPlay = !empty;
   const player = useSongPlayer(canPlay ? parsed : null, doh);
   const bars = useMemo(() => songBars(parsed), [parsed]);
   // The open line goes in the score where its bars are (or would be, for a line just added).
@@ -496,7 +498,10 @@ function Editor({ song, draft, pasted, written, startBar }: { song?: Song; draft
               />
             ) : null}
             <Text style={[styles.playNote, !!playing && styles.playNow]} numberOfLines={2}>
-              {playing ?? (canPlay ? 'Tap a bar to play from it, play it, loop it or change it.' : 'Fix the bars marked in red to play it. Tap a bar to change it.')}
+              {playing ??
+                (parsed.errors.length
+                  ? 'Bars in red don’t add up yet: it plays them as best it can.'
+                  : 'Tap a bar to play from it, play it, loop it or change it.')}
             </Text>
             {playing ? <Button small kind="ghost" label="Stop" onPress={player.stop} /> : null}
           </View>
@@ -508,6 +513,7 @@ function Editor({ song, draft, pasted, written, startBar }: { song?: Song; draft
             song={parsed}
             activeBeat={player.beat}
             barActions={barActions}
+            flagProblems
             open={
               openLine !== null && openBeats && !asText
                 ? {

@@ -976,7 +976,9 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
   const [pickingKey, setPickingKey] = useState(false);
   const parsed = useMemo(() => parseSolfa(line.text, { time, key: lineDoh }), [line.text, time, lineDoh]);
   const empty = !rows.some((r) => r.part && r.text.trim());
-  const canPlay = !empty && !parsed.errors.length;
+  // It plays even with a bar that doesn't add up (owner's request, 21 November 2026), as best it can: hearing it
+  // helps find the misread note.
+  const canPlay = !empty;
   const player = useSongPlayer(canPlay ? parsed : null, lineDoh);
   // A bar's number tapped (owner's request, 21 November 2026): play from it, play it or loop it, as on the score.
   // Kept with its line, so another line starts with none picked.

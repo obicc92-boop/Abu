@@ -4,7 +4,7 @@ import Svg, { Line, Path } from 'react-native-svg';
 
 import { songBars, type BarSpan } from '@/score/bars';
 import { displayBeat, layoutScore, type ScoreCell, type ScoreHairpin, type ScoreRepeats, type ScoreSlur, type ScoreSystem } from '@/score/layout';
-import { isTempo, KEY_NAMES, mod12, partName, type ExpressionKind, type ParsedSong } from '@/solfa';
+import { isTempo, KEY_NAMES, mod12, normalizePart, partName, type ExpressionKind, type ParsedSong } from '@/solfa';
 import { makeStyles, useColors, useTheme } from '@/theme/theme';
 import { darkColors, fonts, lightColors, partColor, partInk, partLetter, type Palette } from '@/theme/tokens';
 
@@ -107,6 +107,11 @@ interface ScoreProps {
   barActions?: BarActions | null;
   /** A line of music open to edit (the song editor), drawn in place of its bars: the beats they take, and it. */
   open?: { from: number; to: number; node: ReactNode } | null;
+  /**
+   * Mark each part's bars that don't add up, as Check the reading does (the song editor; owner's screenshot,
+   * 21 November 2026: "Fix the bars marked in red" with none to be seen).
+   */
+  flagProblems?: boolean;
 }
 
 /**
@@ -115,7 +120,7 @@ interface ScoreProps {
  * a letter that could be read as a note, with a key to the colours on top.
  * Layout comes from src/score/layout.ts (a port of scoreHTML in the prototype).
  */
-export function Score({ song, activeBeat, silent, only, maxBeats, onActiveLine, theme = 'player', size = 12.5, transpose = 0, mine = null, barActions, open }: ScoreProps) {
+export function Score({ song, activeBeat, silent, only, maxBeats, onActiveLine, theme = 'player', size = 12.5, transpose = 0, mine = null, barActions, open, flagProblems = false }: ScoreProps) {
   const { scheme, colors } = useTheme();
   const big = theme !== 'player';
   const shown = only && song.parts.includes(only) ? [only] : song.parts;
@@ -142,6 +147,20 @@ export function Score({ song, activeBeat, silent, only, maxBeats, onActiveLine, 
     [tappable, systems, bars],
   );
   const [picked, setPicked] = useState<number | null>(null);
+  // The bars that don't add up, each line's rows marked where they are (by the bar's place among the line's bars).
+  const flagsOf = useMemo(() => {
+    const bad = new Set(song.errors.flatMap((e) => (e.part && e.bar ? [`${normalizePart(e.part)} ${e.bar}`] : [])));
+    if (!flagProblems || !bad.size) return null;
+    const flags: Record<string, (RowFlags | null)[]> = {};
+    for (const s of systems) {
+      const own = bars.filter((b) => b.from >= s.start - 1e-6 && b.from < s.start + s.beats - 1e-6);
+      flags[s.id] = s.rows.map((row) => {
+        const marked = own.flatMap((b, index) => (bad.has(`${normalizePart(row.part)} ${b.bar}`) ? [{ index, beats: null }] : []));
+        return marked.length ? { bars: marked, whole: false } : null;
+      });
+    }
+    return flags;
+  }, [flagProblems, song.errors, systems, bars]);
   const pickedBar = tappable && picked !== null ? Object.values(barsOf).flat().find((b) => b.bar === picked) : undefined;
   // The latest actions, for a screen reader's action on a bar (the lines don't draw again for a new set of them).
   const actions = useRef(barActions);
@@ -215,6 +234,7 @@ export function Score({ song, activeBeat, silent, only, maxBeats, onActiveLine, 
                 picked={here?.bar ?? null}
                 canEdit={!!barActions?.edit}
                 onBar={onBar}
+                flags={flagsOf?.[s.id]}
               />
               {here && barActions ? <BarToolbar bar={here} actions={barActions} onClose={() => setPicked(null)} /> : null}
             </View>
