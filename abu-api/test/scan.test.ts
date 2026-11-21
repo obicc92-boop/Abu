@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ensureUser } from '../src/domain/groups';
 import { scanAllowance, useScan } from '../src/domain/scan';
-import app from '../src/index';
+import { api as app } from '../src/index';
 import { CHECK_SYSTEM, checkLine, cleanPage, fixLine, keyName, keyOf, LINE_SCHEMA, LINE_SYSTEM, lineText, MARK_RULES, MARKS_SYSTEM, SIGN_FIX, readHeading, readLine, readLineWords, readMarks, readPage, readWords, rowsAnswer, tempoOf, tidyMarks, tidySlurs, timeOf, WORDS_MARKS_SYSTEM } from '../src/scan';
 import { call, ORIGIN, signUp } from './helpers';
 

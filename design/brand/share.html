@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+<head>
+<!-- The link-preview picture (abu-app/public/share/solfascores.jpg): what WhatsApp and other apps show for a
+     solfascores.com link (owner's request, 21 November 2026). The welcome screen's night, the app icon, the name and
+     a tagline, all centred, so a square crop still shows the icon and name. Open in Chrome at 1200×630 and save
+     a screenshot as JPEG at quality 88 (about 50 KB: WhatsApp skips large pictures). -->
+<meta charset="utf-8" />
+<style>
+  @font-face { font-family: Marcellus; src: url('../../abu-app/node_modules/@expo-google-fonts/marcellus/400Regular/Marcellus_400Regular.ttf'); }
+  @font-face { font-family: Figtree; font-weight: 500; src: url('../../abu-app/node_modules/@expo-google-fonts/figtree/500Medium/Figtree_500Medium.ttf'); }
+  html, body { margin: 0; }
+  body {
+    width: 1200px; height: 630px; overflow: hidden; position: relative;
+    background:
+      radial-gradient(circle 900px at 96% -22%, rgba(240, 106, 44, 0.55), rgba(240, 106, 44, 0)),
+      radial-gradient(circle 620px at 12% 128%, rgba(226, 69, 122, 0.32), rgba(226, 69, 122, 0)),
+      #18181b;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-family: Figtree, sans-serif;
+  }
+  .motif { position: absolute; inset: 0; opacity: 0.10; }
+  .icon { width: 196px; height: 196px; border-radius: 44px; overflow: hidden; box-shadow: 0 18px 48px rgba(0,0,0,0.45); position: relative; }
+  .icon img { width: 100%; height: 100%; display: block; }
+  .name { font-family: Marcellus, serif; font-size: 92px; line-height: 1; color: #F4F4F5; margin-top: 34px; letter-spacing: 0.5px; position: relative; }
+  .tag { font-weight: 500; font-size: 34px; color: #C4C4CA; margin-top: 22px; position: relative; }
+</style>
+</head>
+<body>
+  <svg class="motif" width="1200" height="630">
+    <defs>
+      <pattern id="beats" width="56" height="56" patternUnits="userSpaceOnUse">
+        <circle cx="14" cy="11" r="2.6" fill="#fff" /><circle cx="14" cy="19" r="2.6" fill="#fff" />
+        <circle cx="42" cy="39" r="2.6" fill="#fff" /><circle cx="42" cy="47" r="2.6" fill="#fff" />
+      </pattern>
+      <radialGradient id="clear" cx="50%" cy="50%" r="60%">
+        <stop offset="0.35" stop-color="#000" /><stop offset="1" stop-color="#fff" />
+      </radialGradient>
+      <mask id="m"><rect width="1200" height="630" fill="url(#clear)" /></mask>
+    </defs>
+    <rect width="1200" height="630" fill="url(#beats)" mask="url(#m)" />
+  </svg>
+  <div class="icon"><img src="icon.svg" /></div>
+  <div class="name">SolfaScores</div>
+  <div class="tag">Learn your part in tonic sol-fa.</div>
+</body>
+</html>

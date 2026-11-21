@@ -9,8 +9,9 @@
   "assets": {
     "directory": "../abu-app/dist",
     "binding": "ASSETS",
-    // Only the API runs Worker code; pages and files are served directly.
-    "run_worker_first": ["/api/*"],
+    // Only the API and shared links' pages (a song's, an invite's: their link previews, src/share.ts) run Worker code;
+    // other pages and files are served directly.
+    "run_worker_first": ["/api/*", "/song/*", "/join"],
     // /song/old100 serves song/old100.html
     "html_handling": "auto-trailing-slash",
     // The web app is a single-page app: any other path loads it, and its router takes over.

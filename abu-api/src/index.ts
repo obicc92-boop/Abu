@@ -1,6 +1,7 @@
 /**
  * The "abu" Worker. Pages and files of the web app are served straight from
- * static assets (see wrangler.jsonc); only /api/* runs this code.
+ * static assets (see wrangler.jsonc); only /api/* runs this code, and the pages
+ * of shared links (a song's, an invite's), which get their own preview (src/share.ts).
  *
  * Every signed-in route goes through src/domain, which checks who may do what.
  */
@@ -77,6 +78,7 @@ import { newId } from './domain/access';
 import { scanAllowance, useScan } from './domain/scan';
 import { checkImage, checkLine, cloudflareReady, fixLine, partOf, readHeading, readLine, readLineWords, readMarks, readPage, readWords, scanningReady, scanReaders } from './scan';
 import { AppError, badRequest, notFound } from './errors';
+import { sitePage } from './share';
 
 type App = { Bindings: Env; Variables: { userId: string } };
 
@@ -675,4 +677,13 @@ app.onError((err, c) => {
   return c.json({ error: 'Something went wrong. Try again.' }, 500);
 });
 
-export default app;
+/** The API alone (tests call it with their own bindings). */
+export { app as api };
+
+export default {
+  fetch(request, env, ctx) {
+    const { pathname } = new URL(request.url);
+    if (pathname === '/api' || pathname.startsWith('/api/')) return app.fetch(request, env, ctx);
+    return sitePage(request, env);
+  },
+} satisfies ExportedHandler<Env>;

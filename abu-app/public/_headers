@@ -18,3 +18,7 @@
 # rebuilt, so phones can keep them.
 /sounds/*
   Cache-Control: public, max-age=31536000, immutable
+
+# The link-preview picture (design/brand/share.html). Apps that show previews keep their own copy for a while anyway.
+/share/*
+  Cache-Control: public, max-age=86400
