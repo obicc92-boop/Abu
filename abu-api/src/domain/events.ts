@@ -200,7 +200,7 @@ export async function addToOrder(
   input: { songId: string; section?: string; position?: number; note?: string },
 ): Promise<OrderItem> {
   await requireOrderEditor(db, await groupOfEvent(db, eventId), me);
-  await getSong(db, input.songId);
+  await getSong(db, input.songId, me);
   const last = await db.prepare('select max(position) as p from event_items where event_id = ?').bind(eventId).first<{ p: number | null }>();
   const id = newId();
   try {

@@ -25,7 +25,7 @@ const addDays = (day: string, n: number) => new Date(Date.parse(`${day}T00:00:00
 
 /** Count one play-through (the player calls this at the end of a song), on the day it was played. */
 export async function recordPlay(db: D1Database, me: string, songId: string, day?: string): Promise<Practice> {
-  await getSong(db, songId);
+  await getSong(db, songId, me);
   await db.batch([
     db
       .prepare(
@@ -42,7 +42,7 @@ export async function recordPlay(db: D1Database, me: string, songId: string, day
 
 /** "I know my part" on or off. */
 export async function setKnowsPart(db: D1Database, me: string, songId: string, knows: boolean): Promise<void> {
-  await getSong(db, songId);
+  await getSong(db, songId, me);
   await db
     .prepare(
       `insert into practice (user_id, song_id, knows_part) values (?, ?, ?)

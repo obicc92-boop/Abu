@@ -149,3 +149,79 @@ describe('Practice', () => {
     expect((await send('/songs/grace/plays', 'POST', undefined)).status).toBe(401);
   });
 });
+
+describe('Who can see a song', () => {
+  const ids = async (cookie: string | undefined) => (await send<Song[]>('/songs', 'GET', cookie)).body.map((s) => s.id);
+
+  it('only me: whoever shared it, nobody else, signed in or out, the song, the list or its sheet', async () => {
+    const { emeka, adaeze, tobi } = await choir();
+    const mine = (await send<Song & { audience: string }>('/songs', 'POST', tobi.cookie, { title: 'My own draft', solfa: GOOD, audience: 'me' })).body;
+    expect(mine.audience).toBe('me');
+    expect(await ids(tobi.cookie)).toContain(mine.id);
+    for (const other of [emeka.cookie, adaeze.cookie, undefined]) {
+      expect(await ids(other)).not.toContain(mine.id);
+      expect((await send(`/songs/${mine.id}`, 'GET', other)).status).toBe(404);
+    }
+    // Its sheet too, and not kept by shared caches.
+    const pdf = new TextEncoder().encode('%PDF-1.4 mine');
+    expect((await call(`/songs/${mine.id}/sheet`, { method: 'PUT', cookie: tobi.cookie, headers: { 'content-type': 'application/pdf' }, body: pdf })).status).toBe(200);
+    const own = await call(`/songs/${mine.id}/sheet`, { cookie: tobi.cookie });
+    expect(own.status).toBe(200);
+    expect(own.headers.get('cache-control')).toMatch(/^private/);
+    expect((await call(`/songs/${mine.id}/sheet`)).status).toBe(404);
+    expect((await call(`/songs/${mine.id}/sheet`, { cookie: emeka.cookie })).status).toBe(404);
+    // Nobody else can play it, save it or put it in an order.
+    expect((await send(`/songs/${mine.id}/plays`, 'POST', adaeze.cookie)).status).toBe(404);
+  });
+
+  it('my group: its members, not others; it needs the group', async () => {
+    const { emeka, adaeze, tobi, group } = await choir();
+    expect((await send('/songs', 'POST', emeka.cookie, { title: 'No group', solfa: GOOD, audience: 'group' })).status).toBe(400);
+    const ours = (await send<Song>('/songs', 'POST', emeka.cookie, { title: 'Our anthem', solfa: GOOD, shared_from_group: group.id, audience: 'group' })).body;
+    expect(await ids(adaeze.cookie)).toContain(ours.id);
+    expect((await send(`/songs/${ours.id}`, 'GET', adaeze.cookie)).status).toBe(200);
+    expect(await ids(tobi.cookie)).not.toContain(ours.id);
+    expect((await send(`/songs/${ours.id}`, 'GET', tobi.cookie)).status).toBe(404);
+    expect((await send(`/songs/${ours.id}`, 'GET', undefined)).status).toBe(404);
+  });
+
+  it('everyone, and the default for an app that doesn’t say; nonsense is refused', async () => {
+    const { emeka, tobi } = await choir();
+    const open = (await send<Song & { audience: string }>('/songs', 'POST', emeka.cookie, { title: 'For all', solfa: GOOD })).body;
+    expect(open.audience).toBe('everyone');
+    expect(await ids(undefined)).toContain(open.id);
+    expect(await ids(tobi.cookie)).toContain(open.id);
+    expect((await send('/songs', 'POST', emeka.cookie, { title: 'Odd', solfa: GOOD, audience: 'friends' })).status).toBe(400);
+  });
+
+  it('a private song a leader puts in the repertoire or a song order is seen by that group', async () => {
+    const { emeka, adaeze, tobi, group } = await choir();
+    const draft = (await send<Song>('/songs', 'POST', emeka.cookie, { title: 'Leader’s arrangement', solfa: GOOD, audience: 'me' })).body;
+    expect((await send(`/songs/${draft.id}`, 'GET', adaeze.cookie)).status).toBe(404);
+    // Nobody can put in a group's repertoire a song they can't see.
+    const me = (await send<{ groups: { id: string; type: string }[] }>('/me', 'GET', tobi.cookie)).body;
+    const space = me.groups.find((g) => g.type === 'personal')!;
+    expect((await send(`/groups/${space.id}/repertoire`, 'POST', tobi.cookie, { song_id: draft.id })).status).toBe(404);
+    // The leader adds it to the repertoire: the members see it.
+    expect((await send(`/groups/${group.id}/repertoire`, 'POST', emeka.cookie, { song_id: draft.id })).status).toBe(200);
+    expect((await send(`/songs/${draft.id}`, 'GET', adaeze.cookie)).status).toBe(200);
+    expect((await send(`/songs/${draft.id}`, 'GET', tobi.cookie)).status).toBe(404);
+    // In a song order (not the repertoire): the members see it too.
+    const other = (await send<Song>('/songs', 'POST', emeka.cookie, { title: 'For Sunday only', solfa: GOOD, audience: 'me' })).body;
+    const ev = (await send<{ id: string }>(`/groups/${group.id}/events`, 'POST', emeka.cookie, { kind: 'service', title: 'Mass', starts_at: new Date(Date.now() + 2 * 864e5).toISOString() })).body;
+    expect((await send(`/events/${ev.id}/items`, 'POST', emeka.cookie, { song_id: other.id, section: 'Entrance' })).status).toBe(201);
+    expect((await send(`/songs/${other.id}`, 'GET', adaeze.cookie)).status).toBe(200);
+    expect((await send(`/songs/${other.id}`, 'GET', tobi.cookie)).status).toBe(404);
+  });
+
+  it('only whoever shared it changes who sees it', async () => {
+    const { emeka, adaeze, group } = await choir();
+    const ours = (await send<Song & { audience: string }>('/songs', 'POST', emeka.cookie, { title: 'Ours', solfa: GOOD, shared_from_group: group.id, audience: 'group' })).body;
+    // A member can still edit it, but not who sees it.
+    expect((await send<Song>(`/songs/${ours.id}`, 'PATCH', adaeze.cookie, { composer: 'Trad.' })).status).toBe(200);
+    expect((await send(`/songs/${ours.id}`, 'PATCH', adaeze.cookie, { audience: 'everyone' })).status).toBe(403);
+    expect((await send<Song & { audience: string }>(`/songs/${ours.id}`, 'PATCH', emeka.cookie, { audience: 'everyone' })).body.audience).toBe('everyone');
+    expect((await send<Song & { audience: string }>(`/songs/${ours.id}`, 'PATCH', emeka.cookie, { audience: 'me' })).body.audience).toBe('me');
+    expect((await send(`/songs/${ours.id}`, 'GET', adaeze.cookie)).status).toBe(404);
+  });
+});

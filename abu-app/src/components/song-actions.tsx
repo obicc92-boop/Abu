@@ -66,7 +66,8 @@ export function SongActions({ songId, song }: { songId: string; song?: Song }) {
           <Button small kind="ghost" label={song?.solfa.trim() ? 'Edit' : 'Type the sol-fa'} onPress={() => router.push({ pathname: '/song-editor', params: { id: songId } })} />
         ) : null}
         {song?.sheet_key ? <Button small kind="ghost" label="Original sheet" onPress={() => Linking.openURL(sheetUrl(songId))} /> : null}
-        <Button small kind="ghost" label="Share" onPress={share} />
+        {/* A song only its sharer can see has no one to send the link to. */}
+        {song?.audience !== 'me' ? <Button small kind="ghost" label="Share" onPress={share} /> : null}
       </View>
       {toggleIn.error ? <ErrorText message={toggleIn.error.message} /> : null}
 
@@ -90,11 +91,18 @@ export function SongActions({ songId, song }: { songId: string; song?: Song }) {
         </View>
       ) : null}
       {!signedIn ? <Body muted>Create an account to save songs and keep track of your practice.</Body> : null}
-      {song && (song.group_name || song.shared_by_name) ? (
-        <Body muted>Shared by {song.group_name ?? song.shared_by_name}</Body>
+      {song && (song.group_name || song.shared_by_name || song.audience !== 'everyone') ? (
+        <Body muted>{[song.group_name || song.shared_by_name ? `Shared by ${song.group_name ?? song.shared_by_name}` : null, seenBy(song, s.profile?.id)].filter(Boolean).join(' · ')}</Body>
       ) : null}
     </Card>
   );
+}
+
+/** Who can see a song, said to the person looking (owner's request, 21 November 2026); nothing for everyone's. */
+function seenBy(song: Song, me: string | undefined): string | null {
+  if (song.audience === 'group') return `Only ${song.group_name ?? 'the group'} can see it`;
+  if (song.audience === 'me') return song.shared_by === me ? 'Only you can see it' : 'Not shared with everyone';
+  return null;
 }
 
 const useStyles = makeStyles((colors) => ({

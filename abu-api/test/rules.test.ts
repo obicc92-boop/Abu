@@ -143,7 +143,7 @@ describe('Groups', () => {
 describe('Songs and repertoire', () => {
   it('songs are public: anyone can browse the library', async () => {
     const { db, song } = await world();
-    expect((await listSongs(db, { query: 'ekele' })).some((s) => s.id === song.id)).toBe(true);
+    expect((await listSongs(db, null, { query: 'ekele' })).some((s) => s.id === song.id)).toBe(true);
   });
 
   it('whoever shared a song, or their group, can edit it; nobody else can', async () => {

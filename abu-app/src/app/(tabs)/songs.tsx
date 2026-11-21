@@ -1,6 +1,6 @@
 /**
- * Songs: the library. Every song shared on SolfaScores is open to everyone, signed in
- * or not. Filters: your group's repertoire, My songs, songs with sol-fa, tags.
+ * Songs: the library: songs shared with everyone (all anyone signed out sees), and,
+ * signed in, your group's and your own (who can see a song: abu-api/src/domain/songs.ts). Filters: your group's repertoire, My songs, songs with sol-fa, tags.
  * Signed in, a round "+" floats at the bottom right and opens Add a song's sheet
  * (src/components/add-song-sheet.tsx; owner's request, 21 November 2026).
  */
@@ -79,7 +79,7 @@ export default function Songs() {
         ) : undefined
       }
     >
-      <TopBar title="Songs" subtitle="Every song shared on SolfaScores is open to you." />
+      <TopBar title="Songs" subtitle="Songs shared with everyone, your group’s and your own." />
       {/* Scans and songs left unfinished, in front where they're seen (owner's request, 21 November 2026). */}
       {signedIn ? <CarryOn /> : null}
       <View style={styles.search}>

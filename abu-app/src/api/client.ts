@@ -80,7 +80,15 @@ export interface Song {
   shared_by_name: string | null;
   shared_from_group: string | null;
   group_name: string | null;
+  /** Who can see it: whoever shared it, the group it was shared from, or everyone. */
+  audience: Audience;
 }
+
+/**
+ * Who can see a song (owner's request, 21 November 2026), chosen when it's saved: "Only me", "My group" (the group
+ * it's shared from) or "Everyone". A song in a group's repertoire or song order is seen by that group too.
+ */
+export type Audience = 'me' | 'group' | 'everyone';
 
 export interface SongInput {
   title: string;
@@ -91,6 +99,7 @@ export interface SongInput {
   solfa: string;
   /** Save it even though the checker found problems (the person chose "Save anyway"). */
   ignore_problems?: boolean;
+  audience?: Audience;
 }
 
 /** What you can do with a song, and your own practice of it. */
@@ -436,7 +445,6 @@ export const api = {
   removeFromRepertoire: (groupId: string, songId: string) => request<{ ok: true }>(`/groups/${groupId}/repertoire/${songId}`, { method: 'DELETE' }),
 };
 
-/** Where the original sheet can be opened (anyone may view it). */
 /** A report's range, plus this phone's time zone so dates and months match its calendar. */
 function rangeQuery(range: { from?: string; to?: string }): string {
   const q = new URLSearchParams();
@@ -452,6 +460,7 @@ export function attendanceCsvUrl(groupId: string, range: { from?: string; to?: s
   return `${API_URL}/api/groups/${groupId}/attendance.csv${rangeQuery(range)}`;
 }
 
+/** Where the original sheet can be opened (whoever can see the song; on the web the sign-in goes with it). */
 export function sheetUrl(songId: string): string {
   return `${API_URL}/api/songs/${encodeURIComponent(songId)}/sheet`;
 }

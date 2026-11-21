@@ -70,6 +70,7 @@ import {
   setSheet,
   shareSong,
   songForMe,
+  type Audience,
   type SongInput,
 } from './domain/songs';
 import { newId } from './domain/access';
@@ -80,6 +81,12 @@ import { AppError, badRequest, notFound } from './errors';
 type App = { Bindings: Env; Variables: { userId: string } };
 
 const app = new Hono<App>().basePath('/api');
+
+/** Who's asking, if they're signed in: songs can be seen signed out, but only everyone's. */
+async function viewer(c: { env: Env; req: { raw: Request } }): Promise<string | null> {
+  const session = await getAuth(c.env).api.getSession({ headers: c.req.raw.headers });
+  return session?.user.id ?? null;
+}
 
 /* ---------- Open to everyone ---------- */
 
@@ -93,18 +100,18 @@ app.on(['GET', 'POST'], '/auth/*', (c) => getAuth(c.env).handler(c.req.raw));
 
 app.get('/songs', async (c) =>
   c.json(
-    await listSongs(c.env.DB, {
+    await listSongs(c.env.DB, await viewer(c), {
       query: c.req.query('q'),
       tag: c.req.query('tag'),
       playable: c.req.query('playable') === '1',
     }),
   ),
 );
-app.get('/songs/:id', async (c) => c.json(await getSong(c.env.DB, c.req.param('id'))));
+app.get('/songs/:id', async (c) => c.json(await getSong(c.env.DB, c.req.param('id'), await viewer(c))));
 
-/** The original sheet (PDF or photo). Public, like the song. */
+/** The original sheet (PDF or photo), for whoever can see the song. */
 app.get('/songs/:id/sheet', async (c) => {
-  const song = await getSong(c.env.DB, c.req.param('id'));
+  const song = await getSong(c.env.DB, c.req.param('id'), await viewer(c));
   const file = song.sheet_key ? await c.env.SHEETS.get(song.sheet_key) : null;
   if (!file) throw notFound('This song has no original sheet attached.');
   const ext = song.sheet_key!.split('.').pop();
@@ -113,7 +120,8 @@ app.get('/songs/:id/sheet', async (c) => {
     headers: {
       'content-type': song.sheet_type ?? 'application/octet-stream',
       'content-disposition': `inline; filename="${name}.${ext}"`,
-      'cache-control': 'public, max-age=86400',
+      // A song not for everyone isn't kept by shared caches.
+      'cache-control': song.audience === 'everyone' ? 'public, max-age=86400' : 'private, max-age=86400',
     },
   });
 });
@@ -164,6 +172,7 @@ function songInput(b: Record<string, unknown>): SongInput {
     tags: Array.isArray(b.tags) ? b.tags.filter((t): t is string => typeof t === 'string') : undefined,
     solfa: text(b, 'solfa'),
     ignore_problems: flag(b, 'ignore_problems'),
+    audience: text(b, 'audience') as Audience | undefined,
   };
 }
 
@@ -206,7 +215,7 @@ app.put('/songs/:id/sheet', signedIn, async (c) => {
   await c.env.SHEETS.put(key, file, { httpMetadata: { contentType: type } });
   const old = await setSheet(c.env.DB, songId, key, type);
   if (old) await c.env.SHEETS.delete(old);
-  return c.json(await getSong(c.env.DB, songId));
+  return c.json(await getSong(c.env.DB, songId, c.get('userId')));
 });
 
 app.delete('/songs/:id/sheet', signedIn, async (c) => {
@@ -214,7 +223,7 @@ app.delete('/songs/:id/sheet', signedIn, async (c) => {
   await prepareSheet(c.env.DB, c.get('userId'), songId);
   const old = await setSheet(c.env.DB, songId, null, null);
   if (old) await c.env.SHEETS.delete(old);
-  return c.json(await getSong(c.env.DB, songId));
+  return c.json(await getSong(c.env.DB, songId, c.get('userId')));
 });
 
 /* ---------- Scanning sheets (src/scan.ts) ---------- */

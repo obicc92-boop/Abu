@@ -25,7 +25,7 @@ export default function JustMe() {
     <Page>
       <TopBar back title="Use SolfaScores on your own" subtitle="Learn songs, practise and make setlists. Join a group any time." />
       <Card tone="sand">
-        <Body>Good for solo singers, instrumentalists, music students and anyone visiting a choir. Every song shared on SolfaScores is open to you.</Body>
+        <Body>Good for solo singers, instrumentalists, music students and anyone visiting a choir. Every song shared with everyone on SolfaScores is open to you.</Body>
       </Card>
       <Kicker>The part you usually sing</Kicker>
       <PartPicker value={part} onChange={setPart} />

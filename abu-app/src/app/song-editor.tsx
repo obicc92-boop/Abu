@@ -21,7 +21,7 @@ import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Linking, Platform, Pressable, Switch, Text, TextInput, View, type TextInputInstance } from 'react-native';
 
-import { api, type PickedFile, type Song } from '@/api/client';
+import { api, type Audience, type PickedFile, type Song } from '@/api/client';
 import { useSongPlayer } from '@/audio/use-song-player';
 import { PlayButton } from '@/components/player-controls';
 import { Score, type BarActions } from '@/components/score';
@@ -203,6 +203,16 @@ function Editor({ song, draft, pasted, written, startBar }: { song?: Song; draft
   };
   const withKeys = writing && !keyboard;
   const [from, setFrom] = useState<string | null>(defaultFrom);
+  // Who can see it (owner's request, 21 November 2026): a new song starts with its group's members, or with only
+  // you when it's yours alone; Everyone is a tap away. Later only whoever shared it changes it.
+  const [audience, setAudience] = useState<Audience>(() => song?.audience ?? (defaultFrom ? 'group' : 'me'));
+  const choosesAudience = !editing || (!!song?.shared_by && song.shared_by === s.profile?.id);
+  const audienceGroup = editing ? (song?.group_name ?? null) : (choirs.find((g) => g.id === from)?.name ?? null);
+  /** Shared by a group, or by you alone: "My group" goes with the group. */
+  const shareFrom = (id: string | null) => {
+    setFrom(id);
+    setAudience((a) => (id === null && a === 'group' ? 'me' : id !== null && a === 'me' ? 'group' : a));
+  };
   const [addToRep, setAddToRep] = useState(true);
   const [picked, setPicked] = useState<PickedFile | null>(draft?.sheet ?? null);
   const [removeSheet, setRemoveSheet] = useState(false);
@@ -252,7 +262,16 @@ function Editor({ song, draft, pasted, written, startBar }: { song?: Song; draft
   const save = useMutation({
     // `anyway`: saved with the sol-fa's problems, as the person chose (owner's request, 21 November 2026).
     mutationFn: async (anyway: boolean = false) => {
-      const input = { title: title.trim(), composer: composer.trim(), doh, time_signature: time, tags, solfa, ...(anyway ? { ignore_problems: true } : {}) };
+      const input = {
+        title: title.trim(),
+        composer: composer.trim(),
+        doh,
+        time_signature: time,
+        tags,
+        solfa,
+        ...(anyway ? { ignore_problems: true } : {}),
+        ...(choosesAudience ? { audience } : {}),
+      };
       const saved = editing ? await api.editSong(song!.id, input) : await api.shareSong({ ...input, shared_from_group: from });
       if (removeSheet && !picked) await api.removeSheet(saved.id);
       if (picked) await api.attachSheet(saved.id, picked);
@@ -544,13 +563,11 @@ function Editor({ song, draft, pasted, written, startBar }: { song?: Song; draft
             <Text style={styles.label}>Shared by</Text>
             <View style={styles.wrap}>
               {choirs.map((g) => (
-                <Chip key={g.id} label={g.name} on={from === g.id} onPress={() => setFrom(g.id)} />
+                <Chip key={g.id} label={g.name} on={from === g.id} onPress={() => shareFrom(g.id)} />
               ))}
-              <Chip label="Just me" on={from === null} onPress={() => setFrom(null)} />
+              <Chip label="Just me" on={from === null} onPress={() => shareFrom(null)} />
             </View>
-            <Body muted>
-              {from ? 'Everyone in the group can fix the sol-fa later.' : 'Saved to My songs. Every song on SolfaScores is open to everyone.'}
-            </Body>
+            <Body muted>{from ? 'Everyone in the group can fix the sol-fa later.' : 'Saved to My songs.'}</Body>
             {canAddToRep ? (
               <View style={styles.toggle}>
                 <Text style={styles.toggleText}>Add to our repertoire</Text>
@@ -564,6 +581,25 @@ function Editor({ song, draft, pasted, written, startBar }: { song?: Song; draft
                 />
               </View>
             ) : null}
+          </View>
+        ) : null}
+        {choosesAudience ? (
+          <View style={styles.group}>
+            <Text style={styles.label}>Who can see it</Text>
+            <View style={styles.wrap}>
+              <Chip label="Only me" on={audience === 'me'} onPress={() => setAudience('me')} />
+              {audienceGroup ? <Chip label="My group" on={audience === 'group'} onPress={() => setAudience('group')} /> : null}
+              <Chip label="Everyone" on={audience === 'everyone'} onPress={() => setAudience('everyone')} />
+            </View>
+            <Body muted>
+              {audience === 'me'
+                ? canAddToRep && addToRep
+                  ? 'Only you, and your group, as it’s in the repertoire.'
+                  : 'Only you can see it.'
+                : audience === 'group'
+                  ? `Only ${audienceGroup}’s members can see it.`
+                  : 'Anyone on SolfaScores can find it and sing it.'}
+            </Body>
           </View>
         ) : null}
         <Folding label="Tags (optional)" value={tags.length ? tags.join(', ') : 'None yet'} open={showTags} onToggle={() => setShowTags(!showTags)}>

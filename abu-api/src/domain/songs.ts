@@ -1,4 +1,7 @@
-/** The public song library, sharing and editing songs, original sheets, and each group's repertoire. */
+/**
+ * The song library, sharing and editing songs, who can see each song, original sheets, and each group's
+ * repertoire.
+ */
 // The same sol-fa reader as the app, so nothing with broken sol-fa is ever saved.
 import { parseSolfa } from '../../../abu-app/src/solfa';
 import { badRequest, forbidden, friendly, notFound } from '../errors';
@@ -16,7 +19,8 @@ export interface Song {
   /** R2 key and file type of the original sheet, if attached. */
   sheet_key: string | null;
   sheet_type: string | null;
-  visibility: 'public';
+  /** Who can see it: whoever shared it, the group it was shared from, or everyone. */
+  audience: Audience;
   shared_by: string | null;
   shared_by_name: string | null;
   shared_from_group: string | null;
@@ -24,6 +28,31 @@ export interface Song {
   group_name: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * Who can see a song (owner's request, 21 November 2026: "Only me", "My group" or "Everyone", chosen when it's
+ * saved). Songs saved before then are everyone's. Admins will see every song, with the admin page to come.
+ */
+export type Audience = 'me' | 'group' | 'everyone';
+export const AUDIENCES: readonly Audience[] = ['me', 'group', 'everyone'];
+
+/**
+ * The songs someone can see, as SQL on `s` (songs) with its values: everyone's; their own; their group's; and any
+ * song in the repertoire or a song order of a group they're in (a leader who could see it put it there). Signed
+ * out, only everyone's.
+ */
+function seenBy(viewer: string | null): { sql: string; values: unknown[] } {
+  if (!viewer) return { sql: `s.audience = 'everyone'`, values: [] };
+  return {
+    sql: `(s.audience = 'everyone' or s.shared_by = ?
+      or (s.audience = 'group' and s.shared_from_group in (select group_id from memberships where user_id = ? and status = 'active'))
+      or exists (select 1 from repertoire r join memberships m on m.group_id = r.group_id
+                 where r.song_id = s.id and m.user_id = ? and m.status = 'active')
+      or exists (select 1 from event_items i join events e on e.id = i.event_id join memberships m on m.group_id = e.group_id
+                 where i.song_id = s.id and m.user_id = ? and m.status = 'active'))`,
+    values: [viewer, viewer, viewer, viewer],
+  };
 }
 
 type SongRow = Omit<Song, 'tags'> & { tags: string };
@@ -44,6 +73,8 @@ export interface SongInput {
    * which says to ignore these rules"). The person chose it; the song plays as best it can until they're fixed.
    */
   ignore_problems?: boolean;
+  /** Who can see it. A new song without one is everyone's (as from an app from before the choice). */
+  audience?: Audience;
 }
 
 export interface SongFilters {
@@ -56,10 +87,11 @@ export interface SongFilters {
   limit?: number;
 }
 
-/** Every song is public for now, so anyone can browse, signed in or not. */
-export async function listSongs(db: D1Database, filters: SongFilters = {}): Promise<Song[]> {
-  const where = [`s.visibility = 'public'`];
-  const values: unknown[] = [];
+/** The songs someone can see (signed out: everyone's), searched and filtered. */
+export async function listSongs(db: D1Database, viewer: string | null, filters: SongFilters = {}): Promise<Song[]> {
+  const seen = seenBy(viewer);
+  const where = [seen.sql];
+  const values: unknown[] = [...seen.values];
   const q = filters.query?.trim().replace(/[%_]/g, '');
   if (q) {
     where.push('(s.title like ? or s.composer like ? or s.solfa like ?)');
@@ -78,10 +110,19 @@ export async function listSongs(db: D1Database, filters: SongFilters = {}): Prom
   return results.map(toSong);
 }
 
-export async function getSong(db: D1Database, songId: string): Promise<Song> {
-  const row = await db.prepare(`${SELECT} where s.id = ? and s.visibility = 'public'`).bind(songId).first<SongRow>();
-  if (!row) throw notFound('That song doesn’t exist.');
+/** A song, if the viewer can see it (signed out: only everyone's). One they can't see is "not found". */
+export async function getSong(db: D1Database, songId: string, viewer: string | null): Promise<Song> {
+  const seen = seenBy(viewer);
+  const row = await db.prepare(`${SELECT} where s.id = ? and ${seen.sql}`).bind(songId, ...seen.values).first<SongRow>();
+  if (!row) throw notFound('That song doesn’t exist, or it isn’t shared with you.');
   return toSong(row);
+}
+
+/** Checks who a song is for: "My group" needs the group it's shared from. */
+function audienceFor(audience: unknown, group: string | null): Audience {
+  if (!AUDIENCES.includes(audience as Audience)) throw badRequest('Choose who can see the song.');
+  if (audience === 'group' && !group) throw badRequest('Choose the group it’s shared from, so its members can see it.');
+  return audience as Audience;
 }
 
 /** Checks a song's details, and its sol-fa with the same reader the app uses. */
@@ -101,7 +142,7 @@ function validate(song: Required<Pick<SongInput, 'title' | 'composer' | 'doh' | 
   }
 }
 
-/** Share a song with everyone, optionally on behalf of a group you're in. */
+/** Share a song, optionally on behalf of a group you're in, for yourself, that group or everyone. */
 export async function shareSong(db: D1Database, me: string, input: SongInput & { title: string; shared_from_group?: string | null }): Promise<Song> {
   const song = {
     title: input.title?.trim() ?? '',
@@ -113,19 +154,20 @@ export async function shareSong(db: D1Database, me: string, input: SongInput & {
   };
   validate(song, input.ignore_problems);
   if (input.shared_from_group) await requireMember(db, input.shared_from_group, me);
+  const audience = audienceFor(input.audience ?? 'everyone', input.shared_from_group ?? null);
   const id = newId();
   try {
     await db
       .prepare(
-        `insert into songs (id, title, composer, doh, time_signature, tags, solfa, shared_by, shared_from_group)
-         values (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `insert into songs (id, title, composer, doh, time_signature, tags, solfa, shared_by, shared_from_group, audience)
+         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .bind(id, song.title, song.composer, song.doh, song.time_signature, JSON.stringify(song.tags), song.solfa, me, input.shared_from_group ?? null)
+      .bind(id, song.title, song.composer, song.doh, song.time_signature, JSON.stringify(song.tags), song.solfa, me, input.shared_from_group ?? null, audience)
       .run();
   } catch (e) {
     throw friendly(e);
   }
-  return getSong(db, id);
+  return getSong(db, id, me);
 }
 
 /** Whoever shared a song, or anyone in the group it was shared from, can edit it. */
@@ -139,8 +181,11 @@ export async function canEditSong(db: D1Database, me: string, song: Pick<Song, '
 const CANT_EDIT = 'Only whoever shared this song, or their group, can edit it.';
 
 export async function editSong(db: D1Database, me: string, songId: string, patch: SongInput): Promise<Song> {
-  const current = await getSong(db, songId);
+  const current = await getSong(db, songId, me);
   if (!(await canEditSong(db, me, current))) throw forbidden(CANT_EDIT);
+  // Only whoever shared it changes who sees it (so nobody else can make it theirs alone, or open it to everyone).
+  const audience = patch.audience === undefined || patch.audience === current.audience ? current.audience : audienceFor(patch.audience, current.shared_from_group);
+  if (audience !== current.audience && current.shared_by !== me) throw forbidden('Only whoever shared this song can change who sees it.');
   const next = {
     title: patch.title?.trim() ?? current.title,
     composer: patch.composer?.trim() ?? current.composer,
@@ -152,13 +197,13 @@ export async function editSong(db: D1Database, me: string, songId: string, patch
   validate(next, patch.ignore_problems);
   try {
     await db
-      .prepare('update songs set title = ?, composer = ?, doh = ?, time_signature = ?, tags = ?, solfa = ?, updated_at = ? where id = ?')
-      .bind(next.title, next.composer, next.doh, next.time_signature, JSON.stringify(next.tags), next.solfa, nowIso(), songId)
+      .prepare('update songs set title = ?, composer = ?, doh = ?, time_signature = ?, tags = ?, solfa = ?, audience = ?, updated_at = ? where id = ?')
+      .bind(next.title, next.composer, next.doh, next.time_signature, JSON.stringify(next.tags), next.solfa, audience, nowIso(), songId)
       .run();
   } catch (e) {
     throw friendly(e);
   }
-  return getSong(db, songId);
+  return getSong(db, songId, me);
 }
 
 /**
@@ -166,7 +211,7 @@ export async function editSong(db: D1Database, me: string, songId: string, patch
  * song order uses it. Returns the sheet's R2 key, for the caller to delete.
  */
 export async function deleteSong(db: D1Database, me: string, songId: string): Promise<string | null> {
-  const song = await getSong(db, songId);
+  const song = await getSong(db, songId, me);
   const leader = song.shared_from_group ? (await membershipOf(db, song.shared_from_group, me))?.role === 'leader' : false;
   if (song.shared_by !== me && !leader) throw forbidden('Only whoever shared this song, or their group’s leader, can delete it.');
   try {
@@ -181,7 +226,7 @@ export async function deleteSong(db: D1Database, me: string, songId: string): Pr
 
 /** The R2 key and type for a new sheet, after checking you may change the song. */
 export async function prepareSheet(db: D1Database, me: string, songId: string): Promise<Song> {
-  const song = await getSong(db, songId);
+  const song = await getSong(db, songId, me);
   if (!(await canEditSong(db, me, song))) throw forbidden(CANT_EDIT);
   return song;
 }
@@ -197,7 +242,7 @@ export async function setSheet(db: D1Database, songId: string, key: string | nul
 
 export async function addToRepertoire(db: D1Database, me: string, groupId: string, songId: string): Promise<void> {
   await requireLeader(db, groupId, me, 'Only a leader can add songs to the repertoire.');
-  await getSong(db, songId);
+  await getSong(db, songId, me);
   await db.prepare('insert into repertoire (group_id, song_id, added_by) values (?, ?, ?) on conflict do nothing').bind(groupId, songId, me).run();
 }
 
@@ -226,7 +271,7 @@ export interface SongForMe {
 }
 
 export async function songForMe(db: D1Database, me: string, songId: string): Promise<SongForMe> {
-  const song = await getSong(db, songId);
+  const song = await getSong(db, songId, me);
   const [groups, practice] = await Promise.all([
     db
       .prepare(

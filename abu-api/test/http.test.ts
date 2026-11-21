@@ -26,7 +26,7 @@ describe('API', () => {
   it('answers unknown songs and paths with a 404 and a readable message', async () => {
     const missing = await SELF.fetch('https://abu.test/api/songs/nope');
     expect(missing.status).toBe(404);
-    expect(await missing.json()).toEqual({ error: 'That song doesn’t exist.' });
+    expect(await missing.json()).toEqual({ error: 'That song doesn’t exist, or it isn’t shared with you.' });
     expect((await SELF.fetch('https://abu.test/api/nothing-here')).status).toBe(404);
   });
 });
