@@ -38,7 +38,7 @@ import { musicPiece, songPieces, withKeyBefore, withNewLine, withRow } from '@/l
 import { barAt, lineBeats, lineOfBar, musicLines, rangeLabel, songBars } from '@/score/bars';
 import { TAG_GROUPS } from '@/lib/tags';
 import { takePastedDraft } from '@/lib/paste-draft';
-import { clearScanDraft, scanDraft, type ScanDraft } from '@/scan/draft';
+import { askToCheckAgain, clearScanDraft, scanDraft, type ScanDraft } from '@/scan/draft';
 import { tidyNotes } from '@/scan/line-text';
 import { forgetScan } from '@/scan/saved';
 import { KEY_NAMES, parseSolfa } from '@/solfa';
@@ -285,7 +285,21 @@ function Editor({ song, draft, pasted, written, startBar }: { song?: Song; draft
       player.playFrom(beat);
     },
     playBar: (from, to, loop) => player.playRange(from, to, { loop }),
-    edit: openBar,
+    edit: (bar) => (scanned ? checkAgain(bar) : openBar(bar)),
+  };
+  /**
+   * A scanned song is changed on Check the reading, beside the sheet's picture (owner's request, 21 November 2026:
+   * "the best place to do the edit"): back there at the line holding the bar (or where it was), taking the title, key
+   * and time as they are here. The scan is still under this page; opened afresh, it's reopened from the phone.
+   */
+  const scanned = !!draft?.scanId && !pasted;
+  const checkAgain = (bar: number | null) => {
+    stopWriting();
+    player.stop();
+    const at = bar ? lineOfBar(songPieces(solfa), bar) : -1;
+    askToCheckAgain({ lineId: (at >= 0 ? draft?.lineIds?.[at] : null) ?? null, title, composer, doh, time });
+    if (router.canGoBack()) router.back();
+    else router.replace({ pathname: '/scan', params: { resume: draft!.scanId! } });
   };
   /** Done with the line open (the keypad's Done, or the line's own): back to the score. */
   const closeLine = () => {
@@ -473,16 +487,22 @@ function Editor({ song, draft, pasted, written, startBar }: { song?: Song; draft
             <Pressable onPress={() => setShowHelp(!showHelp)} accessibilityRole="button">
               <Text style={styles.link}>{showHelp ? 'Hide help' : 'Help'}</Text>
             </Pressable>
-            <Pressable
-              onPress={() => {
-                stopWriting();
-                setOpenLine(null);
-                setAsText(!asText);
-              }}
-              accessibilityRole="button"
-            >
-              <Text style={styles.link}>{asText ? 'Edit in the score' : 'Edit as text'}</Text>
-            </Pressable>
+            {scanned ? (
+              <Pressable onPress={() => checkAgain(null)} accessibilityRole="button" accessibilityLabel="Edit, beside the sheet, on Check the reading">
+                <Text style={styles.link}>Edit</Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                onPress={() => {
+                  stopWriting();
+                  setOpenLine(null);
+                  setAsText(!asText);
+                }}
+                accessibilityRole="button"
+              >
+                <Text style={styles.link}>{asText ? 'Edit in the score' : 'Edit as text'}</Text>
+              </Pressable>
+            )}
           </View>
         </View>
         {showHelp ? <Help asText={asText} onExample={() => setSolfa(EXAMPLE)} /> : null}
@@ -573,7 +593,7 @@ function Editor({ song, draft, pasted, written, startBar }: { song?: Song; draft
             }
           />
         ) : null}
-        {!asText ? (
+        {!asText && !scanned ? (
           <AddLine
             text={solfa}
             onAdd={(next, line) => {

@@ -29,7 +29,7 @@
  */
 import { useQuery } from '@tanstack/react-query';
 import * as DocumentPicker from 'expo-document-picker';
-import { Redirect, router, useLocalSearchParams } from 'expo-router';
+import { Redirect, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, Switch, Text, View, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollViewInstance, type TextInputInstance } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -44,7 +44,7 @@ import { PlayButton } from '@/components/player-controls';
 import { BarToolbar, type BarActions } from '@/components/score';
 import { PhoneKeyboardBar, SolfaKeypad } from '@/components/solfa-keypad';
 import { Body, Button, Card, Chip, ErrorText, Kicker, MAX_WIDTH, Page, TopBar } from '@/components/ui';
-import { setScanDraft } from '@/scan/draft';
+import { setScanDraft, takeCheckAgain } from '@/scan/draft';
 import { forgetScan, listScans, openScan, saveScan, type SavedScan } from '@/scan/saved';
 import { ago, titleFromFile } from '@/scan/unfinished';
 import { joinLines, linesKeys, timeFor, withTempo } from '@/scan/join';
@@ -245,6 +245,21 @@ function Scanner() {
       flush();
     };
   }, []);
+  /**
+   * Back from the song editor's Edit (owner's request, 21 November 2026: the check is "the best place to do the
+   * edit"): checking again at the line asked for, with the song's details as the editor had them
+   * (src/scan/draft.ts). Only setters inside: the same function every time.
+   */
+  const checkAgain = useCallback((all: readonly Line[]) => {
+    if (!all.length) return;
+    const ask = takeCheckAgain();
+    if (!ask) return;
+    setHeading((h) => ({ ...h, title: ask.title, composer: ask.composer, key: KEY_NAMES[ask.doh] ?? h.key }));
+    setTime(ask.time);
+    const at = ask.lineId ? all.findIndex((l) => l.id === ask.lineId) : -1;
+    setCurrent(at >= 0 ? at : 0);
+    setPhase('check');
+  }, []);
   /** Carries on with an unfinished scan where it was left. (Only setters inside: the same function every time.) */
   const carryOn = useCallback(async (id: string) => {
     const got = await openScan<SavedLine>(id);
@@ -266,7 +281,9 @@ function Scanner() {
     setCurrent(Math.max(0, Math.min(got.scan.current, restored.length - 1)));
     setScanId(id);
     setPhase(got.scan.phase);
-  }, []);
+    // Reopened for the song editor's Edit (the scan wasn't still open under it).
+    checkAgain(restored);
+  }, [checkAgain]);
   const forget = async (id: string) => {
     await forgetScan(id);
     setUnfinished(await listScans<SavedLine>());
@@ -279,6 +296,12 @@ function Scanner() {
     resumed.current = resume;
     void carryOn(resume);
   }, [resume, carryOn]);
+  // Back from the song editor's Edit, the scan still open under it: checking again (checkAgain, above).
+  const linesNow = useRef(lines);
+  useEffect(() => {
+    linesNow.current = lines;
+  }, [lines]);
+  useFocusEffect(useCallback(() => checkAgain(linesNow.current), [checkAgain]));
   const allowance = useQuery({ queryKey: ['scanAllowance'], queryFn: api.scanAllowance, enabled: phase === 'choose' });
 
   const update = (id: string, patch: Partial<Line>) => setLines((all) => all.map((l) => (l.id === id ? { ...l, ...patch } : l)));
@@ -594,10 +617,20 @@ function Scanner() {
     // left out before it).
     const left = (l: Line) => l.skipped || !l.text.trim();
     const keys = linesKeys(lines.map((l) => ({ text: l.text, key: l.key, left: left(l) })), doh, time);
-    const kept = lines.flatMap((l, i) => (left(l) ? [] : [{ text: l.text, key: keys[i].change }]));
+    const kept = lines.flatMap((l, i) => (left(l) ? [] : [{ id: l.id, text: l.text, key: keys[i].change }]));
     // The tempo printed in the heading starts the song's text (`tempo: Andante. M. 70`).
     const solfa = withTempo(joinLines(kept.map((l) => l.text), time, kept.map((l) => l.key)), heading.tempo);
-    setScanDraft({ title: tidyTitle(heading.title) || titleFromFile(chosen[0]?.name), composer: heading.composer, doh, time, solfa, sheet: chosen[0] ?? null, scanId: scanId ?? undefined });
+    setScanDraft({
+      title: tidyTitle(heading.title) || titleFromFile(chosen[0]?.name),
+      composer: heading.composer,
+      doh,
+      time,
+      solfa,
+      sheet: chosen[0] ?? null,
+      scanId: scanId ?? undefined,
+      // Each kept line is a line of music of its own in the song (joinLines), so the editor can send a bar back to its line.
+      lineIds: kept.map((k) => k.id),
+    });
     router.push({ pathname: '/song-editor', params: { from: 'scan' } });
   };
 
