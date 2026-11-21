@@ -505,7 +505,9 @@ function Editor({ song, draft, pasted, written, startBar }: { song?: Song; draft
             )}
           </View>
         </View>
-        {showHelp ? <Help asText={asText} onExample={() => setSolfa(EXAMPLE)} /> : null}
+        {/* The example only fills an empty song: on a song with music it replaced all of it, unasked, and was saved
+            over the owner's Worthy is the Lamb (21 November 2026). */}
+        {showHelp ? <Help asText={asText} onExample={hasMusic(solfa) ? undefined : () => setSolfa(EXAMPLE)} /> : null}
         {asText ? <TextInput
           ref={field}
           // The parts' low octave marks shown as on a sheet, t₁ for t1; the text keeps t1.
@@ -745,7 +747,8 @@ function Folding({ label, value, open, onToggle, children }: { label: string; va
   );
 }
 
-function Help({ asText, onExample }: { asText: boolean; onExample: () => void }) {
+/** The rules for writing sol-fa, and an example to fill in (`onExample`, only while there's no music yet). */
+function Help({ asText, onExample }: { asText: boolean; onExample?: () => void }) {
   const styles = useStyles();
   const rules = [
     asText
@@ -770,7 +773,7 @@ function Help({ asText, onExample }: { asText: boolean; onExample: () => void })
           • {r}
         </Text>
       ))}
-      <Button small kind="ghost" label="Fill in an example" onPress={onExample} style={{ alignSelf: 'flex-start' }} />
+      {onExample ? <Button small kind="ghost" label="Fill in an example" onPress={onExample} style={{ alignSelf: 'flex-start' }} /> : null}
     </View>
   );
 }
