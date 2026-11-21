@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { DEMO_SONGS, EKELE, GRACE, OLD100 } from '../../data/demo-songs';
+import { readExpression } from '../expressions';
 import { parseKey, parseSolfa, partName, partPlural, type ParseOptions, type ParsedSong } from '..';
 
 const parse = (lines: string[], opts: ParseOptions = { time: '4/4' }): ParsedSong => parseSolfa(lines.join('\n'), opts);
@@ -471,7 +472,7 @@ describe('format table: repeats and jumps', () => {
     const song = parse(['S  {coda} d :r /m :f |']);
     expect(song.errors).toEqual([]);
     expect(song.events.S).toHaveLength(4);
-    expect(messages(song.warnings)).toEqual(['Line 1: “{coda}” isn’t a mark SolfaScores knows. Use {segno}, {ds}, {dc}, {fine}, {1.} or {2.}.']);
+    expect(messages(song.warnings)).toEqual(['Line 1: “{coda}” isn’t a mark SolfaScores knows. Use dynamics like {p} or {ff}, {cresc}, tempo like {Andante} or {M. 72}, {rit}, or {segno}, {ds}, {dc}, {fine}, {1.}, {2.}.']);
   });
 });
 
@@ -586,5 +587,53 @@ describe('parts left out of a line of music', () => {
   it('still says so when a part in the line has a bar too few', () => {
     const text = `time: 2/4\n\n${satb('d :d |r :r |', 's1 :s1 |', 'm :m |s :s |', 'd :d |s1 :s1 |')}\n\n${full}`;
     expect(parseSolfa(text).errors.length).toBeGreaterThan(0);
+  });
+});
+
+describe('musical markings', () => {
+  it('reads dynamics in a part’s row, from the beat they’re written before', () => {
+    const song = parseSolfa('time: 4/4\nS  {p}d :r /{f}m :f |s :- /{cresc}- :- |\nA  d :d /d :d |d :- /- :- |');
+    expect(song.errors).toEqual([]);
+    expect(song.expressions.map((e) => [e.kind, e.text, e.part, e.beat])).toEqual([
+      ['dynamic', 'p', 'S', 0],
+      ['dynamic', 'f', 'S', 2],
+      ['cresc', 'cresc.', 'S', 6],
+    ]);
+    expect(song.expressions[0].level).toBeLessThan(song.expressions[1].level!);
+    // The notes are as before.
+    expect(song.events.S.map((e) => e.text)).toEqual(['d', 'r', 'm', 'f', 's']);
+  });
+
+  it('reads the words too, and tempo for every part wherever it’s written', () => {
+    const song = parseSolfa('time: 2/4\n{Andante M. 70}\nS  {pianissimo}d :r |{rit}m :f |{a tempo}s :- |\nA  {fortissimo}d :d |d :d |d :- |');
+    const got = song.expressions.map((e) => [e.kind, e.text, e.part, e.beat, e.bpm]);
+    expect(got).toContainEqual(['tempo', 'Andante M. 70', null, 0, 70]);
+    expect(got).toContainEqual(['dynamic', 'pp', 'S', 0, undefined]);
+    expect(got).toContainEqual(['dynamic', 'ff', 'A', 0, undefined]);
+    expect(got).toContainEqual(['rit', 'rit.', null, 2, undefined]);
+    expect(got).toContainEqual(['atempo', 'a tempo', null, 4, undefined]);
+  });
+
+  it('knows the ways sheets print them, and warns about one it doesn’t know', () => {
+    expect(readExpression('mf')?.text).toBe('mf');
+    expect(readExpression('Mezzo piano')?.text).toBe('mp');
+    expect(readExpression('sfz')?.kind).toBe('accent');
+    expect(readExpression('Larghetto. M. 79')).toMatchObject({ kind: 'tempo', bpm: 79 });
+    expect(readExpression('Allegro')).toMatchObject({ kind: 'tempo', bpm: 126 });
+    expect(readExpression('M.M.=96')).toMatchObject({ kind: 'tempo', bpm: 96 });
+    expect(readExpression('rall.')?.text).toBe('rall.');
+    expect(readExpression('dim')?.kind).toBe('dim');
+    expect(readExpression('loudly')).toBeNull();
+    const song = parseSolfa('S  {loudly}d :r |m :f |');
+    expect(song.warnings.some((w) => w.message.includes('{loudly}'))).toBe(true);
+  });
+
+  it('keeps its place when the other parts rest through a solo line', () => {
+    const full = 'S  d :d |r :r |\nA  s1 :s1 |t1 :t1 |';
+    const song = parseSolfa(`time: 2/4\n\n${full}\n\nA  {p}m :f |s :- |\n\n{f}\n${full}`);
+    expect(song.expressions.map((e) => [e.text, e.part, e.beat])).toEqual([
+      ['p', 'A', 4],
+      ['f', null, 8],
+    ]);
   });
 });
