@@ -72,9 +72,16 @@ export interface Expression {
   bpm?: number;
 }
 
-export type MarkName = 'segno' | 'ds' | 'dc' | 'fine' | '1.' | '2.';
+/**
+ * A repeat or jump mark (src/solfa/repeats.ts, docs/solfa-format.md):
+ * - signs, at the beat of the first note they mark: the segno 𝄋 `segno`, the coda sign 𝄌 `coda`, a start repeat
+ *   `|:`, and the first and second endings `1.` and `2.`;
+ * - jumps and ends, at the beat their bar ends: D.S. (`ds`, `ds-fine` al Fine, `ds-coda` al Coda), D.C. (`dc`,
+ *   `dc-fine`, `dc-coda`), `fine`, To Coda `tocoda`, and an end repeat `:|`.
+ */
+export type MarkName = 'segno' | 'coda' | '|:' | '1.' | '2.' | 'ds' | 'ds-fine' | 'ds-coda' | 'dc' | 'dc-fine' | 'dc-coda' | 'fine' | 'tocoda' | ':|';
 
-/** A repeat or jump mark. Shown in the MVP; playback doesn't follow it yet. */
+/** A repeat or jump mark, at its beat. The player follows them (`playOrder` in src/solfa/repeats.ts). */
 export interface Mark {
   name: MarkName;
   beat: number;

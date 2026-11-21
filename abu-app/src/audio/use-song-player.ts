@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ParsedSong } from '@/solfa';
 
 import { getAudioContext, NO_AUDIO_MESSAGE } from './context';
-import { defaultTempo, MAX_TEMPO, MAX_TRANSPOSE, MIN_TEMPO, SongPlayer, type MixSettings } from './engine';
+import { defaultTempo, MAX_TEMPO, MAX_TRANSPOSE, MIN_TEMPO, SongPlayer, type MixSettings, type PlayPlace } from './engine';
 import { useChosenSound } from './sound-setting';
 
 const TEMPO_STEP = 4;
@@ -43,16 +43,26 @@ export function useSongPlayer(song: ParsedSong | null, songKey: number, myPart: 
   const [range, setRange] = useState<PlayRange | null>(null);
   // Whether the play paused counts as practice when it carries on to the end (only the whole song, from its start).
   const [pausedCounts, setPausedCounts] = useState(true);
-  const [player] = useState(
-    () =>
-      new SongPlayer(getAudioContext, {
-        onBeat: setBeat,
-        onFinish: () => setTimesPlayed((n) => n + 1),
-        onStop: () => setPlaying(false),
-        // Played to its end (a bar played once, say): the next play is the whole song again.
-        onEnd: () => setRange(null),
-      }),
-  );
+  // Where in the song's order of play a pause left it (after a D.S., say), to carry on there, not take a jump again.
+  const [pausedPlace, setPausedPlace] = useState<PlayPlace | null>(null);
+  // How far the play has got, 0 to 1 (it never goes back at a repeat or a jump).
+  const [done, setDone] = useState(0);
+  const [player] = useState(() => {
+    const p: SongPlayer = new SongPlayer(getAudioContext, {
+      onBeat: (b) => {
+        setBeat(b);
+        if (b >= 0) setDone(p.done());
+      },
+      onFinish: () => setTimesPlayed((n) => n + 1),
+      onStop: () => setPlaying(false),
+      // Played to its end (a bar played once, say): the next play is the whole song again.
+      onEnd: () => {
+        setRange(null);
+        setDone(0);
+      },
+    });
+    return p;
+  });
   const [tempo, setTempo] = useState(() => (song ? defaultTempo(song) : 84));
   const [transpose, setTranspose] = useState(0);
   const [loop, setLoop] = useState(false);
@@ -83,6 +93,8 @@ export function useSongPlayer(song: ParsedSong | null, songKey: number, myPart: 
   if (songId !== shownId) {
     setShownId(songId);
     setBeat(-1);
+    setDone(0);
+    setPausedPlace(null);
     setPausedAt(null);
     setRange(null);
     setPlayed(false);
@@ -107,7 +119,7 @@ export function useSongPlayer(song: ParsedSong | null, songKey: number, myPart: 
    * Starts the player at `from`, to the end or round `stretch`; `counts`: reaching the end is practice. Straight
    * from the tap, so browsers allow the sound.
    */
-  const start = (from: number, stretch: PlayRange | null, counts: boolean) => {
+  const start = (from: number, stretch: PlayRange | null, counts: boolean, resume: PlayPlace | null = null) => {
     if (!song?.total) {
       setMessage('This song has no sol-fa to play yet.');
       return;
@@ -118,8 +130,11 @@ export function useSongPlayer(song: ParsedSong | null, songKey: number, myPart: 
     sounding = player;
     setPlayed(true);
     setPausedAt(null);
+    setPausedPlace(null);
     setRange(stretch);
-    const opts = !stretch ? { counts } : stretch.loop ? { loop: { from: stretch.from, to: stretch.to } } : { until: stretch.to };
+    // The song follows its repeats and jumps (carrying on in its order of play after a pause); a bar, played once
+    // or looped, plays as written.
+    const opts = !stretch ? { counts, ...(resume ? { resume } : {}) } : stretch.loop ? { loop: { from: stretch.from, to: stretch.to } } : { until: stretch.to };
     void player.play(from, opts).then((ok) => {
       if (!ok) {
         setPlaying(false);
@@ -134,12 +149,14 @@ export function useSongPlayer(song: ParsedSong | null, songKey: number, myPart: 
     if (playing) {
       player.stop();
       setPausedAt(null);
+      setPausedPlace(null);
       setRange(null);
+      setDone(0);
       return;
     }
     // From the start, the whole song counts as practice; carrying on keeps what the play was.
     if (pausedAt === null) start(0, null, true);
-    else start(pausedAt, range, pausedCounts);
+    else start(pausedAt, range, pausedCounts, pausedPlace);
   };
 
   return {
@@ -155,6 +172,8 @@ export function useSongPlayer(song: ParsedSong | null, songKey: number, myPart: 
     played,
     /** The stretch playing, or paused in ("Playing bar 5", "Looping bars 5–6"); null for the whole song. */
     range,
+    /** How far the play has got, 0 to 1: through the song in its order of play (never back at a repeat), or a bar in the song. */
+    done,
     togglePlay,
     /** Play from a beat (a bar's first) to the end. Call it straight from the tap. Only from 0 is it practice. */
     playFrom: (beat: number) => start(Math.max(0, beat), null, beat <= 0),
@@ -164,16 +183,21 @@ export function useSongPlayer(song: ParsedSong | null, songKey: number, myPart: 
      */
     playRange: (from: number, to: number, opts: { loop?: boolean } = {}) =>
       start(Math.max(0, from), { from: Math.max(0, from), to, loop: !!opts.loop }, false),
-    /** Stop where it is, to carry on from there with `togglePlay` (in the stretch, if one is playing). */
+    /**
+     * Stop where it is, to carry on from there with `togglePlay` (in the stretch, if one is playing, or where it was
+     * in the song's order of play: past a D.S., it carries on from the segno's pass).
+     */
     pause: () => {
       if (!playing) return;
-      // The beat sounding now, from the song's start (the player counts on through a loop).
-      const total = song?.total ?? 0;
-      const now = Math.floor(player.beatNow());
-      const at = total ? Math.max(0, now % total) : -1;
+      // The written beat sounding now, and where it is in the order of play.
+      const place = player.place();
+      const seg = place ? place.order[place.index] : null;
+      const at = place && seg ? Math.max(seg.from, Math.floor(place.beat)) : -1;
       setPausedCounts(player.counting);
+      setDone(player.done());
       player.stop();
-      if (at >= 0) {
+      if (place && at >= 0) {
+        setPausedPlace({ ...place, beat: at });
         setBeat(at);
         setPausedAt(at);
       }
@@ -181,7 +205,9 @@ export function useSongPlayer(song: ParsedSong | null, songKey: number, myPart: 
     stop: () => {
       player.stop();
       setPausedAt(null);
+      setPausedPlace(null);
       setRange(null);
+      setDone(0);
     },
     changeTempo: (delta: number) => setTempo((t) => Math.max(MIN_TEMPO, Math.min(MAX_TEMPO, t + delta * TEMPO_STEP))),
     changeKey: (delta: number) => setTranspose((t) => Math.max(-MAX_TRANSPOSE, Math.min(MAX_TRANSPOSE, t + delta))),

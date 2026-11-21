@@ -6,7 +6,7 @@
  *
  * Pure module: no React.
  */
-import { dohTimeline, normalizePart, octaveOf, SYLLABLE_PATTERN, type ExpressionKind, type ParsedSong } from '@/solfa';
+import { dohTimeline, isSign, normalizePart, octaveOf, repeatPlan, REPEAT_SPELLING, SYLLABLE_PATTERN, type ExpressionKind, type ParsedSong, type RepeatPlan } from '@/solfa';
 
 export interface ScoreCell {
   /** Absolute beat this column plays on. */
@@ -22,6 +22,29 @@ export interface ScoreCell {
    * so the parts' bar lines stay in step.
    */
   pad?: boolean;
+  /**
+   * A repeat's bar line at this beat's left edge, in place of a plain one (src/solfa/repeats.ts): a start repeat
+   * ‖: (`start`), the end of a repeat :‖ (`end`, the dots in the beat before), or both :‖: one after the other.
+   */
+  repeat?: 'start' | 'end' | 'both';
+  /** The last beat of its line, where a repeat ends: an end repeat :‖ at its right edge. */
+  repeatEndAfter?: boolean;
+}
+
+/**
+ * Repeat and jump marks over one line of the score (src/solfa/repeats.ts), drawn as sheets print them: the segno
+ * and coda signs from the beat they mark, D.S., D.C., Fine and To Coda in italics ending where their bar ends, and
+ * first and second endings as brackets over their bars. The repeats' own bar lines are on the cells (`repeat`).
+ */
+export interface ScoreRepeats {
+  signs: { beat: number; sign: 'segno' | 'coda' }[];
+  /** Words ending at `beat` (the end of their bar): "D.S. al Fine", "Fine", "To Coda" (drawn with the coda sign). */
+  words: { beat: number; text: string; coda: boolean }[];
+  /**
+   * The endings over this line's bars: the label, the beats on this line, whether it starts here (with its label and
+   * a hook down), and whether it ends here closed (a first ending, hooked down at its end; a second is left open).
+   */
+  endings: { label: '1.' | '2.'; from: number; to: number; starts: boolean; closed: boolean }[];
 }
 
 export interface LyricSegment {
@@ -101,6 +124,8 @@ export interface ScoreSystem {
   marks: ScoreMark[];
   /** Hairpins for every part on this line, drawn as wedges with those markings. */
   hairpins: ScoreHairpin[];
+  /** Repeat and jump marks over this line, if it has any (a line of their own, over the parts' markings). */
+  repeats?: ScoreRepeats;
 }
 
 export interface LayoutOptions {
@@ -137,6 +162,8 @@ export function layoutScore(song: ParsedSong, opts: LayoutOptions = {}): ScoreSy
   const systems: ScoreSystem[] = [];
   // Where each key change starts (for one part, where that part changes).
   const changes = dohTimeline(song, 0, opts.only ?? undefined).slice(1);
+  // Repeats and jumps, worked out once: where endings run.
+  const plan = song.marks.length ? repeatPlan(song) : null;
 
   song.sections.forEach((sec, si) => {
     const { lens } = sections[si];
@@ -172,7 +199,9 @@ export function layoutScore(song: ParsedSong, opts: LayoutOptions = {}): ScoreSy
         return { part: p, cells, lyrics: lp ? lyricSegments(sec.lyrics[lp], start, n) : null, marks: marksOn(song, p, start, n), hairpins: [], slurs: [] };
       });
       const marks = marksOn(song, null, start, n);
-      return { start, beats: n, widths: columnWidths(lineRows, start, n, marks, keys, gutter), rows: lineRows, keys, marks, hairpins: [] };
+      const widths = columnWidths(lineRows, start, n, marks, keys, gutter);
+      const repeats = plan ? repeatsOn(song, plan, lineRows, start, n, widths) : undefined;
+      return { start, beats: n, widths, rows: lineRows, keys, marks, hairpins: [], ...(repeats ? { repeats } : {}) };
     };
 
     // The bars laid out, in runs that no line crosses: those before the beats left out, and those after.
@@ -209,6 +238,78 @@ export function layoutScore(song: ParsedSong, opts: LayoutOptions = {}): ScoreSy
   });
   addHairpins(song, systems);
   return systems;
+}
+
+/** Room a repeat's bar line takes beside the notes (its dots, in note characters), and a sign over the line. */
+const REPEAT_BAR_CHARS = 1;
+const SIGN_CHARS = 2;
+
+/**
+ * A line's repeats and jumps (see ScoreRepeats): the signs from their beat, the words ending at theirs, the endings
+ * over their bars, and the repeats' bar lines put on the rows' cells; with room made for them in `widths` (a
+ * repeat's dots beside its bar line, and a jump's words within the bar they end). A sign is on the line holding its
+ * beat; a jump or an end, on the line its bar ends on.
+ */
+function repeatsOn(song: ParsedSong, plan: RepeatPlan, rows: ScoreRow[], start: number, n: number, widths: number[]): ScoreRepeats | undefined {
+  const end = start + n;
+  const on = (beat: number) => beat >= start - 1e-6 && beat < end - 1e-6;
+  const endsOn = (beat: number) => beat > start + 1e-6 && beat <= end + 1e-6;
+  const col = (beat: number) => Math.round(beat - start);
+  const startsAt = new Set(song.marks.filter((m) => m.name === '|:' && on(m.beat)).map((m) => col(m.beat)));
+  const endsAt = new Set(song.marks.filter((m) => m.name === ':|' && endsOn(m.beat)).map((m) => col(m.beat)));
+  const endAtEnd = endsAt.delete(n);
+  for (const row of rows) {
+    row.cells.forEach((cell, i) => {
+      const s = startsAt.has(i);
+      const e = endsAt.has(i);
+      if (s || e) cell.repeat = s && e ? 'both' : s ? 'start' : 'end';
+    });
+    const last = row.cells[n - 1];
+    if (endAtEnd && last) last.repeatEndAfter = true;
+  }
+  for (const c of startsAt) widths[c] += REPEAT_BAR_CHARS;
+  for (const c of endsAt) if (c > 0) widths[c - 1] += REPEAT_BAR_CHARS;
+  if (endAtEnd) widths[n - 1] += REPEAT_BAR_CHARS;
+
+  const signs = song.marks.flatMap((m) => ((m.name === 'segno' || m.name === 'coda') && on(m.beat) ? [{ beat: m.beat, sign: m.name }] : []));
+  const words: ScoreRepeats['words'] = [];
+  for (const m of song.marks) {
+    if (isSign(m.name) || m.name === ':|' || !endsOn(m.beat)) continue;
+    const text = m.name === 'tocoda' ? 'To Coda' : REPEAT_SPELLING[m.name];
+    const same = words.find((w) => Math.abs(w.beat - m.beat) < 1e-6);
+    if (same) same.text += `  ${text}`;
+    else words.push({ beat: m.beat, text, coda: m.name === 'tocoda' });
+  }
+  // Each word within the bar it ends, after a sign there: its last column widened if the bar's too narrow.
+  const barStarts = (rows[0]?.cells ?? []).flatMap((c, i) => (c.barStart ? [i] : []));
+  for (const w of words) {
+    const to = col(w.beat);
+    let from = Math.max(0, ...barStarts.filter((b) => b < to));
+    for (const s of signs) if (col(s.beat) >= from && col(s.beat) < to) from = col(s.beat) + 1;
+    const have = widths.slice(from, to).reduce((a, b) => a + b, 0);
+    const need = Math.ceil((w.text.length + (w.coda ? SIGN_CHARS : 0)) * MARK_CHAR + 1.5);
+    if (to > 0 && need > have) widths[to - 1] += need - have;
+  }
+  for (const s of signs) widths[col(s.beat)] = Math.max(widths[col(s.beat)], SIGN_CHARS + 1);
+
+  // Endings: the first over its bars up to its end repeat, closed; the second from its start, as long as the first
+  // (or up to the next repeat), open.
+  const endings: ScoreRepeats['endings'] = [];
+  const boundaries = song.marks.filter((m) => m.name === '|:' || m.name === ':|' || m.name === '1.' || m.name === '2.').map((m) => m.beat);
+  for (const e of plan.endings) {
+    const spans: { label: '1.' | '2.'; from: number; to: number; closed: boolean }[] = [{ label: '1.', from: e.first, to: e.close, closed: true }];
+    if (song.marks.some((m) => m.name === '2.' && Math.abs(m.beat - e.second) < 1e-6)) {
+      const next = Math.min(song.total, ...boundaries.filter((b) => b > e.second + 1e-6));
+      spans.push({ label: '2.', from: e.second, to: Math.min(next, e.second + (e.close - e.first)), closed: false });
+    }
+    for (const sp of spans) {
+      const from = Math.max(sp.from, start);
+      const to = Math.min(sp.to, end);
+      if (to - from < 1e-6) continue;
+      endings.push({ label: sp.label, from, to, starts: sp.from >= start - 1e-6, closed: sp.closed && sp.to <= end + 1e-6 });
+    }
+  }
+  return signs.length || words.length || endings.length ? { signs, words, endings } : undefined;
 }
 
 /** A hairpin, as the reader gives it: a cresc. or dim. written "<" or ">". */

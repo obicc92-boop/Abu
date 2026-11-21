@@ -449,7 +449,7 @@ describe('format table: repeats and jumps', () => {
     expect(song.sections[0].bars.S[1]).toEqual(['s', '-', '-', '-']);
   });
 
-  it('reads {1.} {2.} and {dc}, and says playback won’t follow them yet', () => {
+  it('reads {1.} {2.} and {dc}, with nothing to warn about', () => {
     const song = parse(['S  d :r /m :f | {1.} s :- /- :- {dc} | {2.} d :- /- :- |']);
     expect(song.errors).toEqual([]);
     expect(song.marks.map((m) => [m.name, m.beat])).toEqual([
@@ -457,7 +457,7 @@ describe('format table: repeats and jumps', () => {
       ['dc', 8],
       ['2.', 8],
     ]);
-    expect(messages(song.warnings)).toEqual(['Playback goes straight through for now. It doesn’t follow {ds}, {dc} or 1st and 2nd endings yet.']);
+    expect(song.warnings).toEqual([]);
   });
 
   it('marks shared by several parts appear once; a mark on its own line goes at that point', () => {
@@ -469,10 +469,12 @@ describe('format table: repeats and jumps', () => {
   });
 
   it('warns about marks it doesn’t know but still reads the bar', () => {
-    const song = parse(['S  {coda} d :r /m :f |']);
+    const song = parse(['S  {bis} d :r /m :f |']);
     expect(song.errors).toEqual([]);
     expect(song.events.S).toHaveLength(4);
-    expect(messages(song.warnings)).toEqual(['Line 1: “{coda}” isn’t a mark SolfaScores knows. Use dynamics like {p} or {ff}, {cresc}, tempo like {Andante} or {M. 72}, {rit}, or {segno}, {ds}, {dc}, {fine}, {1.}, {2.}.']);
+    expect(messages(song.warnings)).toEqual([
+      'Line 1: “{bis}” isn’t a mark SolfaScores knows. Use dynamics like {p} or {ff}, {cresc}, tempo like {Andante} or {M. 72}, {rit}, or repeats like {segno}, {D.S.}, {D.C. al Fine}, {Fine}, {|:}, {:|}, {1.}, {2.}.',
+    ]);
   });
 });
 

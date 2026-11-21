@@ -3,12 +3,13 @@ import { Pressable, ScrollView, StyleSheet, Text, View, type AccessibilityAction
 import Svg, { Line, Path } from 'react-native-svg';
 
 import { songBars, type BarSpan } from '@/score/bars';
-import { displayBeat, layoutScore, type ScoreCell, type ScoreHairpin, type ScoreSlur, type ScoreSystem } from '@/score/layout';
+import { displayBeat, layoutScore, type ScoreCell, type ScoreHairpin, type ScoreRepeats, type ScoreSlur, type ScoreSystem } from '@/score/layout';
 import { isTempo, KEY_NAMES, mod12, partName, type ExpressionKind, type ParsedSong } from '@/solfa';
 import { makeStyles, useColors, useTheme } from '@/theme/theme';
 import { darkColors, fonts, lightColors, partColor, partInk, partLetter, type Palette } from '@/theme/tokens';
 
 import { AgainIcon, CloseIcon, PencilIcon } from './icons';
+import { CodaSign, SegnoSign } from './repeat-signs';
 
 /** How the score is drawn: the player's small sand cards, or Perform mode's big type on dark or light. */
 export type ScoreTheme = 'player' | 'dark' | 'light';
@@ -445,6 +446,10 @@ const System = memo(function System(props: SystemProps) {
           lead={<View style={{ width: edge.width + edge.gap }} />}
         />
       ) : null}
+      {system.repeats ? (
+        // Repeats and jumps, on a line of their own so they never meet the tempo or the parts' dynamics.
+        <RepeatLine repeats={system.repeats} start={start} widths={widths} fontSize={markSize} color={palette.heading} lead={<View style={{ width: edge.width + edge.gap }} />} />
+      ) : null}
       {system.rows.map((row, ri) => {
         const missing = widths.slice(row.cells.length).reduce((a, b) => a + b, 0);
         const flag = flags?.[ri] ?? null;
@@ -703,6 +708,118 @@ function MarkLine({ marks, hairpins, ink, start, widths, fontSize, lead }: MarkL
   );
 }
 
+interface RepeatLineProps {
+  repeats: ScoreRepeats;
+  start: number;
+  widths: number[];
+  fontSize: number;
+  color: string;
+  /** What comes before the first beat's column, so the marks line up with the notes. */
+  lead: ReactNode;
+}
+
+/**
+ * A line's repeats and jumps, over its rows, as sheets print them: the segno and coda signs drawn from the beat
+ * they mark; D.S., D.C., Fine and To Coda in italics, ending where their bar ends; and first and second endings as
+ * a bracket over their bars, "1." or "2." inside it where it starts, the first hooked down at its end too. Signs
+ * and words each have columns of their own, left to right, so none runs into another.
+ */
+function RepeatLine({ repeats, start, widths, fontSize, color, lead }: RepeatLineProps) {
+  const span = (from: number, to: number) => widths.slice(Math.max(0, from), Math.max(0, to)).reduce((a, b) => a + b, 0);
+  const signSize = Math.round(fontSize * 1.45);
+  // Left to right: a sign at its column, a word ending at its column (so before a sign on the same beat).
+  const items = [
+    ...repeats.signs.map((s) => ({ at: Math.round(s.beat - start), order: Math.round(s.beat - start), sign: s.sign, text: '', coda: false })),
+    ...repeats.words.map((w) => ({ at: Math.round(w.beat - start), order: Math.round(w.beat - start) - 0.5, sign: null, text: w.text, coda: w.coda })),
+  ].sort((a, b) => a.order - b.order);
+  const boxes: ReactNode[] = [];
+  let at = 0;
+  items.forEach((it, k) => {
+    if (it.sign) {
+      const from = Math.max(at, it.at);
+      if (span(at, from) > 0) boxes.push(<View key={`gap-${k}`} style={{ flex: span(at, from) }} />);
+      boxes.push(
+        <View key={k} accessible accessibilityLabel={it.sign === 'segno' ? 'Segno' : 'Coda'} style={[styles.repeatBox, { flex: Math.max(1, span(from, from + 1)) }]}>
+          {it.sign === 'segno' ? <SegnoSign size={signSize} color={color} /> : <CodaSign size={signSize} color={color} />}
+        </View>,
+      );
+      at = from + 1;
+    } else {
+      const to = Math.max(at + 1, it.at);
+      boxes.push(
+        <View key={k} style={[styles.repeatBox, styles.repeatWords, { flex: Math.max(1, span(at, to)) }]}>
+          <Text numberOfLines={1} style={[styles.markTempo, styles.repeatText, { color, fontSize }]}>
+            {it.text}
+          </Text>
+          {it.coda ? <CodaSign size={Math.round(fontSize * 1.25)} color={color} /> : null}
+        </View>,
+      );
+      at = to;
+    }
+  });
+  if (span(at, widths.length) > 0) boxes.push(<View key="rest" style={{ flex: span(at, widths.length) }} />);
+  const line = Math.round(fontSize * (repeats.endings.length ? 2.1 : 1.6));
+  return (
+    <View style={[styles.line, styles.repeatLine, { minHeight: line }]}>
+      {repeats.endings.map((e, k) => {
+        const from = Math.round(e.from - start);
+        const to = Math.max(from + 1, Math.round(e.to - start));
+        return (
+          // Each bracket over the same columns as the notes, laid under the signs and words.
+          <View key={`ending-${k}`} style={[StyleSheet.absoluteFill, styles.line]} pointerEvents="none">
+            {lead}
+            {span(0, from) > 0 ? <View style={{ flex: span(0, from) }} /> : null}
+            <View
+              accessible={e.starts}
+              accessibilityLabel={e.label === '1.' ? 'First ending' : 'Second ending'}
+              style={[
+                styles.ending,
+                { flex: Math.max(1, span(from, to)), borderColor: color },
+                e.starts && styles.endingStart,
+                e.closed && styles.endingEnd,
+              ]}
+            >
+              {e.starts ? <Text style={[styles.endingLabel, { color, fontSize: Math.round(fontSize * 1.05), lineHeight: Math.round(fontSize * 1.3) }]}>{e.label}</Text> : null}
+            </View>
+            {span(to, widths.length) > 0 ? <View style={{ flex: span(to, widths.length) }} /> : null}
+          </View>
+        );
+      })}
+      {lead}
+      {boxes}
+    </View>
+  );
+}
+
+/**
+ * A repeat's bar line in a part's row, at a beat's left edge (or the line's last beat's right edge): a thick and a
+ * thin line with two dots on the side of the music repeated (‖: after, :‖ before, :‖: both), in place of the beat's
+ * plain bar line. The dots of an end repeat sit over the beat before, which the layout gives the room.
+ */
+function RepeatBars({ kind, color, unit }: { kind: 'start' | 'end' | 'both' | 'after'; color: string; unit: number }) {
+  const thick = 2.5 * unit;
+  const thin = 1.1 * unit;
+  const gap = 1.6 * unit;
+  const dot = 2.8 * unit;
+  const bar = (x: number, w: number, side: 'left' | 'right' = 'left') => ({ position: 'absolute' as const, top: 0, bottom: 0, width: w, [side]: x, backgroundColor: color });
+  const dots = (x: number, side: 'left' | 'right' = 'left') =>
+    (['30%', '30%'] as const).map((p, i) => ({ position: 'absolute' as const, [i ? 'bottom' : 'top']: p, [side]: x, width: dot, height: dot, borderRadius: dot / 2, backgroundColor: color }));
+  const parts: object[] = [];
+  if (kind === 'after') parts.push(bar(0, thick, 'right'), bar(thick + gap, thin, 'right'), ...dots(thick + 2 * gap + thin, 'right'));
+  else {
+    parts.push(bar(0, thick));
+    if (kind === 'start' || kind === 'both') parts.push(bar(thick + gap, thin), ...dots(thick + 2 * gap + thin));
+    if (kind === 'end' || kind === 'both') parts.push(bar(-gap - thin, thin), ...dots(-2 * gap - thin - dot));
+  }
+  return (
+    <>
+      {parts.map((style, i) => (
+        <View key={i} style={style} pointerEvents="none" />
+      ))}
+    </>
+  );
+}
+
 /** A hairpin's wedge, as sheets draw it: two thin lines from `open[0]` to `open[1]` of its full mouth (0 its point). */
 function Wedge({ open, height, color }: { open: [number, number]; height: number; color: string }) {
   const mid = height / 2;
@@ -789,15 +906,23 @@ function Cell({ cell, flex, active, ink, now, palette, size, big, slur, onPress 
     styles.cell,
     { flex },
     big && { paddingVertical: 4 },
-    cell.barStart && [styles.barStart, { borderLeftColor: palette.barline }],
+    cell.barStart && !cell.repeat && [styles.barStart, { borderLeftColor: palette.barline }],
     active && [styles.cellNow, { backgroundColor: now }],
   ];
+  // A repeat's bar line (‖:, :‖), in the words' ink so it stands out from the plain ones.
+  const unit = Math.max(1, size / 12.5);
+  const repeats = (
+    <>
+      {cell.repeat ? <RepeatBars kind={cell.repeat} color={palette.lyric} unit={unit} /> : null}
+      {cell.repeatEndAfter ? <RepeatBars kind="after" color={palette.lyric} unit={unit} /> : null}
+    </>
+  );
   // A beat the part doesn't have (its bar is short of the others'): left blank, keeping the bar lines in step.
   const inner = cell.pad ? (
     <Text style={[styles.note, { fontSize: size, lineHeight: Math.round(size * 1.36) }]}> </Text>
   ) : (
     <>
-      {cell.barStart ? null : <Text style={[styles.colon, { color: palette.faint, fontSize: size * 0.96 }]}>:</Text>}
+      {cell.barStart || cell.repeat ? null : <Text style={[styles.colon, { color: palette.faint, fontSize: size * 0.96 }]}>:</Text>}
       {slur ? (
         // As sol-fa sheets show a slur: a line in the part's colour under the notes, running on through the
         // cell to the next one (or from the one before) when the slur goes on. The notes stay centred.
@@ -820,9 +945,13 @@ function Cell({ cell, flex, active, ink, now, palette, size, big, slur, onPress 
   return onPress ? (
     <Pressable onPress={onPress} accessible={false} style={box}>
       {inner}
+      {repeats}
     </Pressable>
   ) : (
-    <View style={box}>{inner}</View>
+    <View style={box}>
+      {inner}
+      {repeats}
+    </View>
   );
 }
 
@@ -919,4 +1048,13 @@ const styles = StyleSheet.create({
   slurred: { flexDirection: 'row', alignSelf: 'stretch' },
   slurRun: { flex: 1 },
   slurLine: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 1.5, borderRadius: 1 },
+  repeatLine: { alignItems: 'flex-end', marginBottom: 1 },
+  repeatBox: { minWidth: 0, alignItems: 'flex-start', justifyContent: 'flex-end', paddingLeft: 1 },
+  repeatWords: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'flex-end', gap: 2, paddingLeft: 0, paddingRight: 3 },
+  repeatText: { flexShrink: 1, letterSpacing: 0.2 },
+  // An ending's bracket: a line over its bars, hooked down where it starts (and where a first ending ends).
+  ending: { minWidth: 0, borderTopWidth: 1.25, marginTop: 1 },
+  endingStart: { borderLeftWidth: 1.25, marginLeft: 2 },
+  endingEnd: { borderRightWidth: 1.25, marginRight: 3 },
+  endingLabel: { fontFamily: fonts.heavy, paddingLeft: 3 },
 });

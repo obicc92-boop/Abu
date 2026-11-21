@@ -153,6 +153,7 @@ const IDLE: Player = {
   pausedAt: null,
   played: false,
   range: null,
+  done: 0,
   togglePlay: nothing,
   playFrom: nothing,
   playRange: nothing,

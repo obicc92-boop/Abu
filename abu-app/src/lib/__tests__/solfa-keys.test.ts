@@ -213,3 +213,51 @@ describe('a slur from the keypad', () => {
     ]);
   });
 });
+
+describe('repeats and jumps from the Marks key', () => {
+  const at = (text: string, find: string, plus = 0) => ({ start: text.indexOf(find) + plus, end: text.indexOf(find) + plus });
+
+  it('writes a jump or an end at the end of the bar the cursor is in, just before its bar line', () => {
+    const row = 'd :r | m :f | s :l |';
+    expect(applyKey(row, at(row, 'm'), ins('{D.S.}'))).toEqual({ text: 'd :r | m :f {D.S.} | s :l |', sel: { start: 18, end: 18 } });
+    expect(applyKey(row, at(row, 'f'), ins('{Fine}')).text).toBe('d :r | m :f {Fine} | s :l |');
+    expect(applyKey(row, at(row, ':r'), ins('{:|}')).text).toBe('d :r {:|} | m :f | s :l |');
+    // No space before the bar line: one is put on each side.
+    expect(applyKey('d :r|m :f', { start: 0, end: 0 }, ins('{to coda}')).text).toBe('d :r {to coda} |m :f');
+    // In the last bar, with no bar line after it: at the end of the row.
+    expect(applyKey('d :r | m :f', at('d :r | m :f', 'm'), ins('{D.C. al Fine}')).text).toBe('d :r | m :f {D.C. al Fine}');
+    // After the row's last bar line: after it, where it's read as the end of the bar before.
+    expect(applyKey('d :r | m :f |', { start: 13, end: 13 }, ins('{D.C.}')).text).toBe('d :r | m :f | {D.C.}');
+  });
+
+  it('passes over a marking, and keeps to the cursor’s line in the song’s text', () => {
+    expect(applyKey('d :{p}r | m :f |', { start: 4, end: 4 }, ins('{D.S.}')).text).toBe('d :{p}r {D.S.} | m :f |');
+    const song = 'S  d :r | m :f |\nA  d :d | d :d |';
+    expect(applyKey(song, at(song, 'm'), ins('{D.C.}')).text).toBe('S  d :r | m :f {D.C.} |\nA  d :d | d :d |');
+  });
+
+  it('writes a sign before the note the cursor is in, as the other marks', () => {
+    const row = 'd :r | m :f |';
+    expect(applyKey(row, at(row, 'm'), ins('{segno}')).text).toBe('d :r | {segno}m :f |');
+    expect(applyKey(row, at(row, 'm'), ins('{|:}')).text).toBe('d :r | {|:}m :f |');
+    expect(applyKey(row, at(row, 'm'), ins('{1.}')).text).toBe('d :r | {1.}m :f |');
+  });
+
+  it('deletes a repeat mark all at once, bar line and all', () => {
+    expect(applyKey('d :r {:|} |', { start: 9, end: 9 }, 'erase').text).toBe('d :r  |');
+  });
+
+  it('is read where it was written: a jump at its bar’s end, a sign on its note', () => {
+    const row = 'd :r | m :f | s :l |';
+    let text = applyKey(row, at(row, 'r'), ins('{Fine}')).text;
+    text = applyKey(text, at(text, 'l'), ins('{D.C. al Fine}')).text;
+    text = applyKey(text, at(text, 'm'), ins('{segno}')).text;
+    const read = parseSolfa(`time: 2/4\nS  ${text}`);
+    expect([read.errors, read.warnings]).toEqual([[], []]);
+    expect(read.marks.map((m) => [m.name, m.beat])).toEqual([
+      ['fine', 2],
+      ['segno', 2],
+      ['dc-fine', 6],
+    ]);
+  });
+});

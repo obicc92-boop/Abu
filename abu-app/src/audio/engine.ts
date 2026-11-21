@@ -5,12 +5,15 @@
  * Ported from the audio engine in prototype/index.html (voice, tick, startPlay).
  * It follows the song's musical markings too (expression-curve.ts): louder and
  * softer for the dynamics, faster and slower for the tempo marks, and notes
- * under a slur joined, as a choir sings them.
+ * under a slur joined, as a choir sings them. And it follows the repeats and jumps (src/solfa/repeats.ts): a play
+ * of the song goes through its order of play, stretch after stretch of the song as written, each following on
+ * from the one before with no gap. The beat it reports is the written beat, and the markings apply by written beat
+ * on every pass.
  *
  * Works on any AudioContextLike, so the same code runs on the web (browser
  * Web Audio) and on phones (react-native-audio-api).
  */
-import { dohAt, dohTimeline, midiToHz, noteMidi, type DohPoint, type NoteEvent, type ParsedSong } from '@/solfa';
+import { dohAt, dohTimeline, midiToHz, noteMidi, orderLength, playOrder, type DohPoint, type NoteEvent, type ParsedSong, type Segment } from '@/solfa';
 
 import {
   FULL_LOUDNESS,
@@ -81,11 +84,12 @@ export function defaultTempo(song: ParsedSong): number {
 }
 
 export interface PlayerCallbacks {
-  /** The beat now sounding, or -1 when stopped. */
+  /** The beat now sounding (the written beat: where it is in the song as written), or -1 when stopped. */
   onBeat?(beat: number): void;
   /**
-   * Reached the end of the song: a play-through. Each time round a loop counts. Not for a stretch played with
-   * `until` or `loop`, nor a play started part way with `counts: false`.
+   * Reached the end of the song (its last stretch in the order of play, at a Fine or the end as written): a
+   * play-through, counted once however many repeats it went round. Each time round a loop counts. Not for a
+   * stretch played with `until` or `loop`, nor a play started part way with `counts: false`.
    */
   onFinish?(): void;
   /** Playback stopped, by the user or at the end. */
@@ -99,12 +103,29 @@ export interface PlayerCallbacks {
  * want to start in a certain bar"). In beats from the song's start; `to` and `until` are where it stops, not played.
  */
 export interface PlayOptions {
-  /** Stop here, as at the end of the song, but it isn't a play-through (no onFinish). */
+  /**
+   * Stop here, as at the end of the song, but it isn't a play-through (no onFinish). The bars up to it are played
+   * as written, straight through: no repeats or jumps.
+   */
   until?: number;
-  /** Go round this stretch again and again: on reaching `to`, carry on from `from` with no gap. */
+  /** Go round this stretch again and again, as written: on reaching `to`, carry on from `from` with no gap. */
   loop?: { from: number; to: number };
   /** Whether reaching the song's end is a play-through (onFinish). Default true; false for a play started part way. */
   counts?: boolean;
+  /**
+   * Carry on in an order of play where a pause left it (`SongPlayer.place`): `fromBeat` is in its stretch `index`.
+   * Only for the same song: one changed since (edited) plays on from `fromBeat` as a new play would.
+   */
+  resume?: Pick<PlayPlace, 'order' | 'index' | 'song'>;
+}
+
+/** Where a play has got to: the written beat sounding, and its stretch in the order of play (to carry on after a pause). */
+export interface PlayPlace {
+  beat: number;
+  order: readonly Segment[];
+  index: number;
+  /** The song it's a place in. */
+  song: ParsedSong;
 }
 
 export class SongPlayer {
@@ -131,10 +152,18 @@ export class SongPlayer {
   /** What this play is: to the end of the song, up to `until`, or round `range` again and again. */
   private until: number | null = null;
   private range: { from: number; to: number } | null = null;
-  /** Where the pass now playing began: the play's first beat, or the stretch's start each time round. */
+  /**
+   * The stretches of the song as written that this play goes through, one after another, and the one sounding: the
+   * song's order of play (repeats, D.S., D.C.) from where it started, or the one stretch asked for.
+   */
+  private order: Segment[] = [];
+  private index = 0;
+  /** How many beats the whole song takes in its order of play from the start, for how far a play has got. */
+  private fullLength = 0;
+  /** Where the pass now playing began: the start of the stretch sounding (the play's first beat in the first). */
   private passStart = 0;
-  /** The next time round `range`, scheduled ahead before it's reached: where each part has got to. */
-  private ptrNext: Record<string, number> | null = null;
+  /** The stretches after the one sounding, scheduled ahead before they're reached: where each part has got to in each. */
+  private ahead: Record<string, number>[] = [];
   private playToken = 0;
 
   playing = false;
@@ -162,6 +191,7 @@ export class SongPlayer {
     this.loud = loudnessCurve(song);
     // Measured from the tempo the player starts at, so with the person's tempo left alone a mark plays at its own speed.
     this.pace = tempoCurve(song, defaultTempo(song));
+    this.fullLength = orderLength(playOrder(song));
   }
 
   /** Changing tempo while playing carries on from the current beat. The song's tempo marks go faster or slower from it. */
@@ -194,10 +224,45 @@ export class SongPlayer {
     this.applyLevels();
   }
 
-  /** Beats since the start of the song, as heard now. Negative just after pressing play. */
+  /**
+   * The written beat heard now (where it is in the song as written, in the stretch sounding). Just after pressing
+   * play, before the stretch's start; just past its end, until the next tick moves on to the next stretch.
+   */
   beatNow(): number {
     if (!this.ctx) return 0;
     return this.pace.beatAfter(this.anchorBeat, ((this.ctx.currentTime - this.anchorTime) * this.tempo) / 60);
+  }
+
+  /** Where the play has got to, to carry on from there after a pause (`PlayOptions.resume`); null when it isn't playing. */
+  place(): PlayPlace | null {
+    const seg = this.order[this.index];
+    if (!this.playing || !seg || !this.song) return null;
+    let beat = this.beatNow();
+    let index = this.index;
+    // Past the stretch's end, before the tick has moved on: the next stretch's start.
+    if (beat >= seg.to - 1e-9) {
+      const next = this.upcoming(1);
+      if (next) {
+        beat = next.from + Math.min(beat - seg.to, next.to - next.from - 1e-6);
+        index = this.range ? 0 : index + 1;
+      } else beat = seg.to - 1e-6;
+    }
+    const at = this.order[index];
+    return { beat: Math.max(at.from, Math.min(beat, at.to - 1e-6)), order: [...this.order], index, song: this.song };
+  }
+
+  /**
+   * How far the play has got, 0 to 1: for the song, how much of it has been heard in its order of play (a play from
+   * a bar part way starts as far on as what's left of it), so it never goes back at a repeat; for a bar or a stretch
+   * played on its own, where it is in the song as written.
+   */
+  done(): number {
+    const seg = this.order[this.index];
+    if (!seg || !this.song?.total) return 0;
+    const now = Math.max(seg.from, Math.min(seg.to, this.beatNow()));
+    if (this.range || this.until !== null || !this.fullLength) return Math.min(1, (Math.floor(now) + 1) / this.song.total);
+    const left = seg.to - now + orderLength(this.order.slice(this.index + 1));
+    return Math.max(0, Math.min(1, 1 - left / this.fullLength));
   }
 
   /**
@@ -211,7 +276,19 @@ export class SongPlayer {
     const range = opts.loop ? { from: Math.max(0, opts.loop.from), to: Math.min(total, opts.loop.to) } : null;
     const looping = range && range.to > range.from ? range : null;
     // Carrying on inside the stretch (after a pause) starts there; anywhere else, at the stretch's start.
-    const start = looping && !(fromBeat >= looping.from && fromBeat < looping.to) ? looping.from : fromBeat;
+    let start = looping && !(fromBeat >= looping.from && fromBeat < looping.to) ? looping.from : fromBeat;
+    // The stretches to play: round the loop, up to `until` as written, on in the order a pause left, or the song's
+    // order of play from here (following its repeats and jumps).
+    let order: Segment[];
+    let index = 0;
+    if (looping) order = [looping];
+    else if (opts.until !== undefined) order = [{ from: start, to: Math.min(total, opts.until) }];
+    else if (opts.resume?.order.length && opts.resume.song === this.song) {
+      order = [...opts.resume.order];
+      index = Math.max(0, Math.min(order.length - 1, opts.resume.index));
+      start = Math.max(order[index].from, Math.min(start, order[index].to));
+    } else order = playOrder(this.song, start);
+    if (!order.length) order = [{ from: start, to: start }];
     const token = ++this.playToken;
     if (!this.ctx) {
       this.ctx = this.getContext();
@@ -245,11 +322,13 @@ export class SongPlayer {
     this.range = looping;
     this.until = looping || opts.until === undefined ? null : opts.until;
     this.counting = !looping && this.until === null && (opts.counts ?? true);
+    this.order = order;
+    this.index = index;
     this.anchorTime = ctx.currentTime + START_DELAY_S;
     this.anchorBeat = start;
     this.passStart = start;
     this.ptr = this.pointersFrom(start);
-    this.ptrNext = null;
+    this.ahead = [];
     this.lastBeat = -1;
     this.applyLevels();
     this.timer = setInterval(this.tick, TICK_MS);
@@ -279,25 +358,29 @@ export class SongPlayer {
     // lands where it should even across a change of tempo.
     const spb = 60 / this.tempo;
     let now = this.beatNow();
-    // Round the stretch again: its start follows on exactly when its end sounds, with the notes scheduled ahead.
-    while (this.range && now >= this.range.to) {
-      this.anchorTime = this.timeOf(this.range.to, spb);
-      this.anchorBeat = this.passStart = this.range.from;
-      this.ptr = this.ptrNext ?? this.pointersFrom(this.range.from);
-      this.ptrNext = null;
+    // On to the next stretch (the song's next in its order of play, or round the loop again): its start follows
+    // on exactly when this one's end sounds, with its notes scheduled ahead.
+    for (let next = this.upcoming(1); next && now >= this.order[this.index].to; next = this.upcoming(1)) {
+      this.anchorTime = this.timeOf(this.order[this.index].to, spb);
+      this.anchorBeat = this.passStart = next.from;
+      this.ptr = this.ahead.shift() ?? this.pointersFrom(next.from);
+      this.index = this.range ? 0 : this.index + 1;
       this.lastBeat = -1;
       now = this.beatNow();
     }
-    const end = this.range?.to ?? this.until ?? Infinity;
+    const end = this.order[this.index].to;
     const horizon = this.pace.beatAfter(now, LOOKAHEAD_S / spb);
     const recorded = this.library.loaded(ctx, this.instrument);
     this.schedule(this.ptr, this.anchorBeat, this.anchorTime, this.passStart, end, horizon, spb, recorded);
-    // The next time round, as much of it as falls within the lookahead.
-    if (this.range && horizon > this.range.to) {
-      const round = this.timeOf(this.range.to, spb);
-      this.ptrNext ??= this.pointersFrom(this.range.from);
-      const ahead = this.pace.beatAfter(this.range.from, (ctx.currentTime + LOOKAHEAD_S - round) / spb);
-      this.schedule(this.ptrNext, this.range.from, round, this.range.from, this.range.to, ahead, spb, recorded);
+    // The stretches after it, as much of them as falls within the lookahead.
+    let at = this.timeOf(end, spb);
+    for (let k = 1; at < ctx.currentTime + LOOKAHEAD_S; k++) {
+      const next = this.upcoming(k);
+      if (!next) break;
+      const ptr = (this.ahead[k - 1] ??= this.pointersFrom(next.from));
+      const reach = this.pace.beatAfter(next.from, (ctx.currentTime + LOOKAHEAD_S - at) / spb);
+      this.schedule(ptr, next.from, at, next.from, next.to, reach, spb, recorded);
+      at += this.pace.span(next.from, next.to - next.from) * spb;
     }
 
     // Not the beat before during the moment before the first note (a play from a bar, or carrying on after a pause).
@@ -310,21 +393,31 @@ export class SongPlayer {
     if (this.until !== null && now >= this.until) {
       // The stretch asked for is played: it ends as the song does, but isn't a play-through.
       this.finish();
-    } else if (!this.range && now >= song.total + 0.05) {
+    } else if (!this.range && this.until === null && !this.upcoming(1) && now >= end + 0.05) {
+      // The end of the song in its order of play: a play-through, however many repeats it went round.
       if (this.counting) this.callbacks.onFinish?.();
       if (this.loop) {
+        // Round again from the start: the whole song, whatever bar it was started from.
+        this.order = playOrder(song);
+        this.index = 0;
         this.anchorBeat = 0;
         this.anchorTime = ctx.currentTime + 0.05;
         this.passStart = 0;
         this.ptr = {};
+        this.ahead = [];
         this.lastBeat = -1;
-        // Round again from the start: the whole song, whatever bar it was started from.
         this.counting = true;
       } else {
         this.finish();
       }
     }
   };
+
+  /** The stretch `k` after the one sounding: the next in the order, or the stretch again when going round a loop. */
+  private upcoming(k: number): Segment | null {
+    if (this.range) return this.order[0] ?? null;
+    return this.order[this.index + k] ?? null;
+  }
 
   /** When `beat` sounds, from the anchor (in the pass now playing). */
   private timeOf(beat: number, spb: number): number {

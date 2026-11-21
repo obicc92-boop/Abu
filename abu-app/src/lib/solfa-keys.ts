@@ -3,7 +3,7 @@
  * notation a tap away, since a phone's keyboard keeps the octave mark out of easy reach (owner's request, 20
  * November 2026). Pure: the text and the cursor in, the text and the cursor out.
  */
-import { SYLLABLE_PATTERN } from '@/solfa';
+import { isSign, readRepeat, SYLLABLE_PATTERN } from '@/solfa';
 
 /** The cursor, or the text chosen: from `start` to `end`. */
 export interface Selection {
@@ -13,8 +13,9 @@ export interface Selection {
 
 export type Key =
   /**
-   * Writes text at the cursor, in place of any text chosen. A musical marking in braces (`{p}`, `{Andante}`) goes
-   * before the note the cursor is in, never splitting it.
+   * Writes text at the cursor, in place of any text chosen. A musical marking in braces (`{p}`, `{Andante}`, a sign
+   * such as `{segno}` or `{1.}`) goes before the note the cursor is in, never splitting it; a jump or an end
+   * (`{D.S.}`, `{Fine}`, `{:|}`) goes at the end of the bar the cursor is in, just before its bar line.
    */
   | { insert: string }
   /**
@@ -51,6 +52,38 @@ function markingPlace(text: string, at: number): number {
   let from = at;
   while (from > line && IN_NOTE.test(text[from - 1])) from--;
   return from;
+}
+
+/**
+ * Where a jump or an end tapped with the cursor at `at` goes (`{D.S.}`, `{D.C. al Fine}`, `{Fine}`, `{to coda}`,
+ * `{:|}`), since it's read at the end of its bar: just before the next bar line on the cursor's line (past a
+ * marking the cursor is in, and the spaces before the bar line), or at the end of the line's notes if there's none.
+ */
+function barEndPlace(text: string, at: number): number {
+  const line = text.lastIndexOf('\n', at - 1) + 1;
+  const newline = text.indexOf('\n', at);
+  const end = newline < 0 ? text.length : newline;
+  let k = at;
+  const open = text.slice(line, at).lastIndexOf('{');
+  if (open >= 0 && open > text.slice(line, at).lastIndexOf('}')) {
+    const close = text.indexOf('}', at);
+    if (close >= 0 && close < end) k = close + 1;
+  }
+  let bar = end;
+  while (k < end) {
+    if (text[k] === '{') {
+      const close = text.indexOf('}', k);
+      k = close >= 0 && close < end ? close + 1 : k + 1;
+      continue;
+    }
+    if (text[k] === '|' || text[k] === '‖') {
+      bar = k;
+      break;
+    }
+    k++;
+  }
+  while (bar > line && text[bar - 1] === ' ') bar--;
+  return bar;
 }
 
 /** Spaces, beat marks, and half and quarter beats: what lies between notes. */
@@ -142,6 +175,16 @@ export function applyKey(text: string, sel: Selection, key: Key): { text: string
     return { text: text.slice(0, from) + text.slice(end), sel: { start: from, end: from } };
   }
   if (key === 'slur') return withSlur(text, start, end);
+  const repeat = MARKING.test(key.insert) ? readRepeat(key.insert.slice(1, -1)) : null;
+  if (start === end && repeat && !isSign(repeat)) {
+    // A jump or an end: at the end of the bar, spaced from its notes and its bar line ("s :- {D.S.} |").
+    const at = barEndPlace(text, start);
+    const before = at > 0 && !/\s/.test(text[at - 1]) ? ' ' : '';
+    const after = /[|‖]/.test(text[at] ?? '') ? ' ' : '';
+    const insert = before + key.insert + after;
+    const cursor = at + before.length + key.insert.length;
+    return { text: text.slice(0, at) + insert + text.slice(at), sel: { start: cursor, end: cursor } };
+  }
   if (start === end && MARKING.test(key.insert)) {
     const at = markingPlace(text, start);
     const after = at + key.insert.length;

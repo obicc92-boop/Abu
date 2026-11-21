@@ -32,7 +32,7 @@ document.
 | Tenor | Written an octave above where it sounds | Written as on paper. The app plays it an octave lower |
 | Words | Under the soprano, often under each part | A `W` line follows the part it belongs to. `W:` with no part applies to all parts |
 | Sections | `CHORUS`, `CODA`, `Solo` | `[Verse]`, `[Chorus]`, `[Coda]` |
-| Repeats and jumps | `D.S.`, `$` (segno), 1st/2nd endings, `D.C.` | `{segno}`, `{ds}`, `{dc}`, `{fine}`, `{1.}`, `{2.}`. **Version 2**: playback follows them. In the MVP they're shown but not followed |
+| Repeats and jumps | `D.S.`, `D.C.`, `Fine`, the segno 𝄋 (by hand like `$` or `§`), the coda sign 𝄌, `To Coda`, repeat bar lines `‖:` `:‖`, 1st and 2nd endings | In braces. Signs before the first note they mark: `{segno}`, `{coda}`, `{\|:}`, `{1.}`, `{2.}`. Jumps and ends right after the last note of their bar: `{D.S.}`, `{D.S. al Fine}`, `{D.S. al Coda}`, `{D.C.}`, `{D.C. al Fine}`, `{D.C. al Coda}`, `{Fine}`, `{to coda}`, `{:\|}`. Shown as printed, and played as sheets mean them: see "Repeats and jumps" below |
 | Tempo and mood | `Joyfully`, `Adagio` | `tempo: 72` or a word, e.g. `tempo: Adagio` |
 | Dynamics | `p`, `pp`, `mf`, `f`, `ff`, `piano`, `fortissimo`, `sfz`, `cresc.`, `dim.`, hairpins | In braces before the note they start on, in that part's row: `{p}d :r`, `{ff}`, `{mezzo piano}`, `{sfz}`, `{cresc}`, `{dim}`. On a line of their own, for every part from the next bar |
 | Tempo changes | `Andante. M. 70`, `Larghetto`, `rit.`, `rall.`, `a tempo` | In braces, in a row or on a line of their own, always for every part: `{Andante M. 70}`, `{M. 70}`, `{Allegro}`, `{rit}`, `{a tempo}`. A number (M. 70, ♩ = 70) is its beats a minute; a word alone has its usual speed |
@@ -61,6 +61,66 @@ B  d1:- /f1:s1 | l1:m1 /d1:s1 | d1:- /- :-  |
 S  s :s.l /-.s:f.m | r :- /- :- |
 W  Sing a-loud and be glad
 ```
+
+## Repeats and jumps
+
+Repeats and jumps go in braces, in a part's row (one part's, or every part's: each mark is read once) or on a line of their own. Case, dots and spaces don't matter: `{ds}`, `{d.s.}` and `{Dal Segno}` are all D.S., and `{da capo al fine}` is D.C. al Fine. The older `{fine}`, `{1}` and `{2}` still work.
+
+| Mark | Says | Written |
+|---|---|---|
+| `{segno}` | The segno 𝄋: where D.S. goes back to | Before the first note it marks |
+| `{coda}` | The coda sign 𝄌: where the coda starts | Before the coda's first note |
+| `{\|:}` | Start repeat | Before the first note repeated |
+| `{1.}`, `{2.}` | First and second endings | Before the first note of each |
+| `{:\|}` | End repeat: back to the start repeat | Right after the last note repeated, before the bar line |
+| `{D.S.}`, `{D.S. al Fine}`, `{D.S. al Coda}` | Back to the segno | Right after the last note of the bar, before its bar line |
+| `{D.C.}`, `{D.C. al Fine}`, `{D.C. al Coda}` | Back to the start | The same |
+| `{Fine}` | The end, on the way round after a D.S. or D.C. | The same |
+| `{to coda}` | On the way round after a D.S. or D.C., go from here to the coda | The same |
+
+**Where a mark sits.** A sign sits on the beat of the note it's written before. A jump or an end sits at the end of its bar: written just before a `|`, at the end of a row, or alone between bar lines (`| {D.S.} |`). On a line of its own, it goes where the line of music before it ends. In the middle of a bar, a mark sits at the beat where it's written. The keypad's **Marks → Repeats** writes signs before the note at the cursor, and jumps and ends at the end of the bar the cursor is in.
+
+**How they're played** (the usual conventions):
+- A repeat is played once more. An end repeat with no start repeat goes back to the latest of: the end of the repeat before it (so `A {:|} B {:|}` plays A A B B), the start of its section (`[Chorus]`), and the start of the song.
+- The first ending plays up to its `{:|}`. The second time round, the first ending is left out and the second plays instead. A `{2.}` with no `{:|}` before it ends the first ending there.
+- D.S. and D.C. are taken once. `{Fine}` and `{to coda}` count only on the way round after the jump: al Fine stops at Fine, al Coda goes from To Coda to the coda, and a plain D.S. or D.C. does whichever the song has (with neither, it plays on to the end).
+- After a D.S. or D.C., repeats aren't taken again and the last ending is played.
+- A repeat inside another is played again the second time round the outer one.
+- **Play from here** starts at that bar as if for the first time there, following the repeats and jumps ahead. **Play this bar** and **Loop this bar** play the bar as written.
+- The score shows the bar being played as written ("Bar 2" again after a D.C.), and the dynamics and tempo marks apply where they're written, every time round.
+
+The checker warns about what can't be followed, with its bar: a D.S. with no segno before it, a `{2.}` with no `{1.}`, a `{to coda}` with no `{coda}` after it, an al Fine with no `{Fine}`, an al Coda with no `{to coda}`, and a `{1.}` with no `{:|}` or `{2.}` after it. The music then plays straight on.
+
+A repeat with first and second endings. Played: bars 1 to 4, back to bar 1, bars 1 and 2, then 5 and 6.
+
+```
+S  {|:}d :r /m :f | s :- /- :- | {1.}l :s /f :m | r :- /- :- {:|} | {2.}r :m /r :d | d :- /- :- |
+```
+
+D.C. al Fine. Played: bars 1 to 4, then 1 and 2.
+
+```
+S  d :m /s :d' | t :- /- :- {Fine} | l :s /f :m | r :- /- :- {D.C. al Fine} |
+```
+
+D.S. al Coda. Played: bars 1 to 4, back to the segno in bar 2, then from To Coda to the coda (bar 5).
+
+```
+S  d :m /s :d' | {segno}t :l /s :f {to coda} | m :r /d :t1 | d :- /- :- {D.S. al Coda} |
+
+[Coda]
+S  {coda}d' :- /- :- |
+```
+
+A jump on a line of its own, for every part, at the end of the line above it:
+
+```
+S  d :m /s :d' | t :- /- :- |
+A  d :d /m :m | s :- /- :- |
+{D.C.}
+```
+
+The score draws them as sheets print them: the segno and coda signs over the line, D.S., D.C., Fine and To Coda in italics at the end of their bar, a repeat's bar line as a thick and a thin line with two dots on the side repeated, in every part's row, and endings as a bracket over their bars marked "1." or "2.".
 
 ## Key changes
 

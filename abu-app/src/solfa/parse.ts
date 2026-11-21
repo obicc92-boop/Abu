@@ -10,6 +10,7 @@
 import { keyAfterPivot, keyFromSemitone, mod12, parseKey, parseKeyLine, type KeyInfo, type Pivot } from './keys';
 import { normalizePart, parseNote, partName, SYLLABLE_SEMITONES, type ParsedNote } from './syllables';
 import { isTempo, readExpression, TEMPO_WORDS } from './expressions';
+import { isSign, readRepeat, repeatPlan } from './repeats';
 import type { Expression, Issue, KeyChange, MarkName, NoteEvent, ParseOptions, ParsedSong, Section, SongMeta, Tempo } from './types';
 
 const EPS = 1e-6;
@@ -23,20 +24,8 @@ const PART_LINE_RE = /^([A-Za-z][A-Za-z0-9]{0,7})(?::\s*|\s+)(.*)$/;
 const MARK_RE = /\{([^}]*)\}/g;
 const MARK_ONLY_LINE_RE = /^(?:\{[^}]*\}\s*)+$/;
 
-const MARK_NAMES: Readonly<Record<string, MarkName>> = {
-  segno: 'segno',
-  ds: 'ds',
-  'd.s.': 'ds',
-  'd.s': 'ds',
-  dc: 'dc',
-  'd.c.': 'dc',
-  'd.c': 'dc',
-  fine: 'fine',
-  '1.': '1.',
-  '1': '1.',
-  '2.': '2.',
-  '2': '2.',
-};
+/** Marks in a row, with no nested braces: the bar lines inside one (`{:|}`, `{|:}`) aren't the row's own. */
+const WHOLE_MARK_RE = /\{[^{}]*\}/g;
 
 interface TimeSig {
   pulses: number;
@@ -48,7 +37,8 @@ interface RawMark {
   /** Null for a mark on a line of its own: placed against the section's first part. */
   part: string | null;
   barIndex: number;
-  atEnd: boolean;
+  /** Beats into that bar: a sign's before the first note it marks, a jump's or an end's after the last note it ends. */
+  offset: number;
   /** On a line of its own between lines of music: the line of music it comes before (index in `blocks`). */
   block?: number;
 }
@@ -163,12 +153,12 @@ export function parseSolfa(text: string, options: ParseOptions = {}): ParsedSong
 
   /** A mark in braces: a repeat mark, or a musical marking (dynamics, tempo); neither, it's warned about. */
   const readMark = (inner: string, line: number): { name: MarkName } | { exp: Omit<Expression, 'part' | 'beat'> } | null => {
-    const name = MARK_NAMES[inner.trim().toLowerCase().replace(/\s+/g, '')];
+    const name = readRepeat(inner);
     if (name) return { name };
     const exp = readExpression(inner);
     if (exp) return { exp };
     warnings.push({
-      message: `Line ${line}: “{${inner}}” isn’t a mark SolfaScores knows. Use dynamics like {p} or {ff}, {cresc}, tempo like {Andante} or {M. 72}, {rit}, or {segno}, {ds}, {dc}, {fine}, {1.}, {2.}.`,
+      message: `Line ${line}: “{${inner}}” isn’t a mark SolfaScores knows. Use dynamics like {p} or {ff}, {cresc}, tempo like {Andante} or {M. 72}, {rit}, or repeats like {segno}, {D.S.}, {D.C. al Fine}, {Fine}, {|:}, {:|}, {1.}, {2.}.`,
       line,
     });
     return null;
@@ -219,27 +209,44 @@ export function parseSolfa(text: string, options: ParseOptions = {}): ParsedSong
   };
 
   const readBars = (s: RawSection, part: string, body: string, line: number) => {
-    for (const piece of body.replace(/‖/g, '|').split('|')) {
-      const found: { name: MarkName; atEnd: boolean }[] = [];
+    const bars = s.bars[part];
+    /** Bars read from this line of the row so far. */
+    let here = 0;
+    for (const piece of barPieces(body)) {
+      const found: { name: MarkName; offset: number | 'end' }[] = [];
       let stripped = '';
       let from = 0;
       let sawNotes = false;
-      const bars = s.bars[part];
       for (const mm of piece.matchAll(MARK_RE)) {
         const before = piece.slice(from, mm.index);
         if (before.trim()) sawNotes = true;
         stripped += before + ' ';
+        from = (mm.index ?? 0) + mm[0].length;
         const got = readMark(mm[1], line);
-        if (got && 'name' in got) found.push({ name: got.name, atEnd: sawNotes });
+        if (got && 'name' in got) {
+          // A repeat or jump mark sits at the first beat's edge at or after where it's written: a sign written
+          // before its note on that note's beat, and a jump or an end written after the last note of its bar
+          // (just before the bar line, or at the end of the row) at the bar's end.
+          const last = !piece.slice(from).replace(MARK_RE, '').trim();
+          const counted = (stripped.match(/[:/¦]/g) ?? []).length;
+          const inBeat = !!stripped.split(/[:/¦]/).pop()?.trim();
+          found.push({ name: got.name, offset: sawNotes && last ? 'end' : counted + (inBeat ? 1 : 0) });
+        }
         // A marking starts on the beat it's written before: the beats counted so far in this bar.
         else if (got) s.expressions.push({ exp: got.exp, part: isTempo(got.exp.kind) ? null : part, row: part, barIndex: bars.length, offset: (stripped.match(/[:/¦]/g) ?? []).length });
-        from = (mm.index ?? 0) + mm[0].length;
       }
       stripped += piece.slice(from);
-      const empty = stripped.trim() === '';
-      for (const f of found) s.marks.push({ name: f.name, part, barIndex: bars.length, atEnd: !empty && f.atEnd });
-      if (empty) continue;
-      bars.push(stripped.split(/[:/¦]/).map((b) => b.trim().replace(/\s*=\s*/g, '=')));
+      if (stripped.trim() === '') {
+        // Marks between bar lines (`| {D.S.} |`, or after the row's last bar line): at the end of the bar before on
+        // this line, or else at the start of the next.
+        const prev = bars[bars.length - 1];
+        for (const f of found) s.marks.push(here && prev ? { name: f.name, part, barIndex: bars.length - 1, offset: prev.length } : { name: f.name, part, barIndex: bars.length, offset: 0 });
+        continue;
+      }
+      const beats = stripped.split(/[:/¦]/).map((b) => b.trim().replace(/\s*=\s*/g, '='));
+      for (const f of found) s.marks.push({ name: f.name, part, barIndex: bars.length, offset: f.offset === 'end' ? beats.length : Math.min(f.offset, beats.length) });
+      bars.push(beats);
+      here++;
       s.barLines[part].push(line);
       anyBars = true;
     }
@@ -274,7 +281,10 @@ export function parseSolfa(text: string, options: ParseOptions = {}): ParsedSong
         const s = section();
         for (const mm of line.matchAll(MARK_RE)) {
           const got = readMark(mm[1], ln);
-          if (got && 'name' in got) s.marks.push({ name: got.name, part: null, barIndex: barCount(s), atEnd: false, block: blockAt(s) });
+          // A repeat or jump on a line of its own: where the line of music it's in ends (with no blank line after
+          // it), or before the next one.
+          const within = open && s.blocks.includes(open) ? s.blocks.indexOf(open) + 1 : undefined;
+          if (got && 'name' in got) s.marks.push({ name: got.name, part: null, barIndex: barCount(s), offset: 0, block: within ?? blockAt(s) });
           else if (got) s.expressions.push({ exp: got.exp, part: null, row: null, barIndex: barCount(s), offset: 0, block: blockAt(s) });
         }
         return;
@@ -555,7 +565,7 @@ export function parseSolfa(text: string, options: ParseOptions = {}): ParsedSong
 
   for (const rs of raw) {
     for (const mk of rs.marks) {
-      const beat = beatOf(rs, mk.part, mk.barIndex + (mk.atEnd ? 1 : 0));
+      const beat = beatOf(rs, mk.part, mk.barIndex) + mk.offset;
       if (!result.marks.some((x) => x.name === mk.name && Math.abs(x.beat - beat) < EPS)) {
         result.marks.push({ name: mk.name, beat });
       }
@@ -567,8 +577,10 @@ export function parseSolfa(text: string, options: ParseOptions = {}): ParsedSong
     for (const ex of rs.expressions) result.expressions.push({ ...ex.exp, part: ex.part, beat: beatOf(rs, ex.row, ex.barIndex) + ex.offset });
   }
   result.expressions.sort((a, b) => a.beat - b.beat);
-  if (result.marks.some((m) => m.name !== 'segno' && m.name !== 'fine')) {
-    warnings.push({ message: 'Playback goes straight through for now. It doesn’t follow {ds}, {dc} or 1st and 2nd endings yet.' });
+  // Repeats and jumps the player can't follow (a D.S. with no segno, a {2.} with no {1.}), said with their bar.
+  for (const p of repeatPlan(result).problems) {
+    const bar = barOfBeat(result.sections, isSign(p.name) ? p.beat : p.beat - 0.5);
+    warnings.push({ message: bar ? `Bar ${bar}: ${p.message}` : p.message, ...(bar ? { bar } : {}) });
   }
 
   result.keyChanges = keyChanges(
@@ -671,6 +683,25 @@ function keyChanges(
     for (const b of same) b.shift = best;
   }
   return changes;
+}
+
+/** A row's bars as written, split at its bar lines (`|`, `‖`), but not at one inside a mark (`{:|}`, `{|:}`). */
+function barPieces(body: string): string[] {
+  const kept = body.replace(WHOLE_MARK_RE, (m) => m.replace(/[|‖]/g, '\u0000'));
+  return kept.split(/[|‖]/).map((piece) => piece.replace(/\u0000/g, '|'));
+}
+
+/** The number of the bar a beat is in (from 1, as the checker numbers them), or null past the song's end. */
+function barOfBeat(sections: Section[], beat: number): number | null {
+  for (const sec of sections) {
+    let at = sec.start;
+    const bars = sec.bars[sec.order[0]] ?? [];
+    for (let i = 0; i < bars.length; i++) {
+      at += bars[i].length;
+      if (beat < at - EPS) return sec.firstBar + i;
+    }
+  }
+  return null;
 }
 
 /** Splits a W line into syllables: "peo-ple" → "peo-", "ple". A lone "-" or "_" carries the last syllable over one more note. */

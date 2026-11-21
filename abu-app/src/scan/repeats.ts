@@ -9,8 +9,9 @@
  *   `{:|}`.
  *
  * `repeatMark` gives the spelling for what a sheet prints or a reader writes ("Dal Segno al Fine", "dc", "𝄋",
- * "1st time"). Pure, with no imports: the Worker uses it too.
+ * "1st time"), from the sol-fa reader's own reading. Relative imports only: the Worker uses it too.
  */
+import { readRepeat, REPEAT_SPELLING } from '../solfa/repeats';
 
 /** Signs: written before the first note they mark. */
 export const SIGNS: readonly string[] = ['segno', 'coda', '|:', '1.', '2.'];
@@ -22,21 +23,13 @@ export const ENDS: readonly string[] = ['D.S.', 'D.S. al Fine', 'D.S. al Coda', 
 export const SEGNO_GLYPHS = ['𝄋', '', '§', '$'];
 export const CODA_GLYPHS = ['𝄌', '', '⊕'];
 
-/** What's in a repeat or jump mark's braces as SolfaScores spells it ("dal segno al fine" is "D.S. al Fine"), or null if it isn't one. */
+/**
+ * What's in a repeat or jump mark's braces as SolfaScores spells it ("dal segno al fine" is "D.S. al Fine"), or null
+ * if it isn't one: the sol-fa reader's own reading (src/solfa/repeats.ts), so scanning and the score never differ.
+ */
 export function repeatMark(inner: string): string | null {
-  const t = inner.trim().replace(/\s+/g, ' ');
-  const k = t.toLowerCase();
-  if (SEGNO_GLYPHS.includes(t) || k === 'segno' || k === 'sign') return 'segno';
-  if (CODA_GLYPHS.includes(t) || k === 'coda') return 'coda';
-  if (/^to coda(?: ?(?:𝄌|⊕|))?$/.test(k)) return 'to coda';
-  const jump = k.match(/^(?:(d\.? ?s\.?|dal segno)|(d\.? ?c\.?|da capo))(?: al (fine|coda))?$/);
-  if (jump) return `${jump[1] ? 'D.S.' : 'D.C.'}${jump[3] ? ` al ${jump[3] === 'fine' ? 'Fine' : 'Coda'}` : ''}`;
-  if (/^fine\.?$/.test(k)) return 'Fine';
-  if (/^(?::\|\|?|:‖|:𝄇)$/.test(k)) return ':|';
-  if (/^(?:\|\|?:|‖:|𝄆)$/.test(k)) return '|:';
-  if (/^(?:1\.?|1st(?: time)?|first time)$/.test(k)) return '1.';
-  if (/^(?:2\.?|2nd(?: time)?|second time)$/.test(k)) return '2.';
-  return null;
+  const name = readRepeat(inner.trim());
+  return name ? REPEAT_SPELLING[name] : null;
 }
 
 /** Whether a mark is a sign (before the note it marks) rather than a jump or an end (after its bar's last note). */

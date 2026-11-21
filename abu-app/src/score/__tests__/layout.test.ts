@@ -378,3 +378,65 @@ describe('hairpins and directions on the score', () => {
     expect(sys.rows[0].marks.map((m) => [m.kind, m.text, m.beat])).toEqual([['direction', 'dolce', 0]]);
   });
 });
+
+describe('repeats and jumps on the score', () => {
+  const two = (text: string) => parseSolfa(`time: 2/4\n${text}`);
+
+  it('draws a song with none as before', () => {
+    const [sys] = layoutScore(two('S  d :r | m :f |'), { maxBeats: 8 });
+    expect(sys.repeats).toBeUndefined();
+    expect(sys.rows[0].cells.every((c) => c.repeat === undefined && c.repeatEndAfter === undefined)).toBe(true);
+  });
+
+  it('puts a repeat’s bar lines in every part’s row, with room for their dots', () => {
+    const song = two('S  {|:}d :r | m :f {:|} | s :l {:|} |\nA  d :d | d :d | m :f |');
+    const plain = layoutScore(two('S  d :r | m :f | s :l |\nA  d :d | d :d | m :f |'), { maxBeats: 6 })[0];
+    const [sys] = layoutScore(song, { maxBeats: 6 });
+    for (const row of sys.rows) {
+      expect(row.cells.map((c) => c.repeat ?? null)).toEqual(['start', null, null, null, 'end', null]);
+      expect(row.cells.map((c) => !!c.repeatEndAfter)).toEqual([false, false, false, false, false, true]);
+    }
+    // The start's column, the column before the end, and the last column each get a character more.
+    expect(sys.widths.map((w, i) => w - plain.widths[i])).toEqual([1, 0, 0, 1, 0, 1]);
+    // Nothing to draw over the line: the bar lines are the repeats.
+    expect(sys.repeats).toBeUndefined();
+  });
+
+  it('puts an end repeat at the end of its line, not at the start of the next', () => {
+    const systems = layoutScore(two('S  d :r | m :f {:|} | {|:}s :l | t :d\' |'), { maxBeats: 4 });
+    expect(systems.map((s) => [s.start, s.rows[0].cells.map((c) => c.repeat ?? (c.repeatEndAfter ? 'after' : null))])).toEqual([
+      [0, [null, null, null, 'after']],
+      [4, ['start', null, null, null]],
+    ]);
+  });
+
+  it('draws the segno and coda from their beat, and a jump’s words where its bar ends, on that bar’s line', () => {
+    const song = two('S  {segno}d :r | m :f {to coda} | s :l {D.S. al Coda} | {coda}t :d\' |');
+    const systems = layoutScore(song, { maxBeats: 4 });
+    expect(systems.map((s) => s.repeats)).toEqual([
+      { signs: [{ beat: 0, sign: 'segno' }], words: [{ beat: 4, text: 'To Coda', coda: true }], endings: [] },
+      { signs: [{ beat: 6, sign: 'coda' }], words: [{ beat: 6, text: 'D.S. al Coda', coda: false }], endings: [] },
+    ]);
+    // Room for the words within the bar they end.
+    const bar = (s: (typeof systems)[number], from: number, to: number) => s.widths.slice(from, to).reduce((a, b) => a + b, 0);
+    expect(bar(systems[1], 0, 2)).toBeGreaterThanOrEqual(Math.ceil('D.S. al Coda'.length * 0.7));
+  });
+
+  it('draws first and second endings as brackets over their bars, the first closed and the second open', () => {
+    const song = two('S  {|:}d :r | {1.}m :f {:|} | {2.}s :l | d\' :- |');
+    const [sys] = layoutScore(song, { maxBeats: 8 });
+    expect(sys.repeats?.endings).toEqual([
+      { label: '1.', from: 2, to: 4, starts: true, closed: true },
+      { label: '2.', from: 4, to: 6, starts: true, closed: false },
+    ]);
+    // Across two lines: on the second, it runs on from the line's start, with no label or hook there.
+    const long = layoutScore(two('S  d :r | {1.}m :f | s :l {:|} | {2.}t :d\' |'), { maxBeats: 4 });
+    expect(long.map((s) => s.repeats?.endings)).toEqual([
+      [{ label: '1.', from: 2, to: 4, starts: true, closed: false }],
+      [
+        { label: '1.', from: 4, to: 6, starts: false, closed: true },
+        { label: '2.', from: 6, to: 8, starts: true, closed: false },
+      ],
+    ]);
+  });
+});

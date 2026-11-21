@@ -4,9 +4,11 @@
  * the song; while it's paused, × puts it away. Shown once a song has been played (src/audio/now-playing.tsx).
  */
 import { router } from 'expo-router';
+import { useMemo } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { useNowPlaying } from '@/audio/now-playing';
+import { barAt, songBars } from '@/score/bars';
 import { makeStyles, useColors } from '@/theme/theme';
 import { fonts, partColor } from '@/theme/tokens';
 
@@ -16,12 +18,14 @@ export function MiniPlayer() {
   const styles = useStyles();
   const colors = useColors();
   const { song, player, close } = useNowPlaying();
+  const bars = useMemo(() => (song ? songBars(song.parsed) : []), [song]);
   // Only a song that has been played: opening a song's page to look at it doesn't bring the bar up.
   if (!song || !player.played) return null;
   const { parsed } = song;
   const started = player.beat >= 0;
-  const bar = started ? Math.min(parsed.bars, Math.floor(player.beat / Math.max(1, parsed.beatsPerBar)) + 1) : 0;
-  const progress = started && parsed.total ? Math.min(1, (player.beat + 1) / parsed.total) : 0;
+  // The bar as written (back at bar 5 after a D.S. to bar 5), and how far through the song as it's played.
+  const bar = started ? (barAt(bars, player.beat)?.bar ?? parsed.bars) : 0;
+  const progress = started ? player.done : 0;
   const parts = parsed.parts.slice(0, 4);
   // Playing a stretch of the song (a bar, or a loop, chosen on its score): says so, briefly.
   const line = player.playing

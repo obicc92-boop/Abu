@@ -4,8 +4,8 @@
  * the field being edited, which keeps its cursor: a key is pressed without taking the focus from the field.
  * The sharps and flats have a row of their own under the notes. Used to fix a scanned line (`bridge`: an "="
  * key for the bridge notes sheets print) and to write a song (`parts`: keys for the parts' names and a new line;
- * `keyChange`: a key to change key). Marks, on both, opens the musical markings (dynamics, tempo) in place of the
- * keys; a slur is a key of its own. While the phone's keyboard is in use instead, `PhoneKeyboardBar` sits over
+ * `keyChange`: a key to change key). Marks, on both, opens the musical markings (dynamics, tempo, and the repeats
+ * and jumps) in place of the keys; a slur is a key of its own. While the phone's keyboard is in use instead, `PhoneKeyboardBar` sits over
  * it, to come back.
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -17,6 +17,7 @@ import { KEY_NAMES } from '@/solfa';
 import { makeStyles, useColors } from '@/theme/theme';
 import { fonts } from '@/theme/tokens';
 
+import { CodaSign, RepeatBarSign, SegnoSign } from './repeat-signs';
 import { MAX_WIDTH } from './ui';
 
 const NOTES = ['d', 'r', 'm', 'f', 's', 'l', 't'];
@@ -57,6 +58,38 @@ interface Marking {
   /** Dynamics and accents in bold italic, gradual changes in italic, tempo words in bold; a hairpin drawn. */
   face: 'loud' | 'italic' | 'tempo' | 'hairpin';
 }
+
+/**
+ * Repeats and jumps, behind the Marks panel's Repeats tab (owner's request, 21 November 2026: "DC or to repeat…
+ * find how to use it"), as src/solfa/repeats.ts reads them. Signs go before the note they mark, as the markings
+ * do; jumps and ends at the end of the bar the cursor is in (lib/solfa-keys.ts puts them before its bar line).
+ */
+interface RepeatKey {
+  insert: string;
+  /** What the key shows: a word, or a sign drawn (`draw`), with a word under it. */
+  label: string;
+  draw?: 'segno' | 'coda' | 'start' | 'end' | 'tocoda';
+  caption?: string;
+  said: string;
+}
+const REPEAT_SIGNS: RepeatKey[] = [
+  { insert: '{segno}', label: 'segno', draw: 'segno', caption: 'segno', said: 'Segno sign: where D.S. goes back to' },
+  { insert: '{coda}', label: 'coda', draw: 'coda', caption: 'coda', said: 'Coda sign: where the coda starts' },
+  { insert: '{|:}', label: '|:', draw: 'start', caption: 'repeat from', said: 'Start repeat' },
+  { insert: '{1.}', label: '1.', caption: '1st time', said: 'First ending' },
+  { insert: '{2.}', label: '2.', caption: '2nd time', said: 'Second ending' },
+];
+const REPEAT_JUMPS: RepeatKey[] = [
+  { insert: '{D.S.}', label: 'D.S.', caption: 'to segno', said: 'D.S., Dal Segno: back to the segno' },
+  { insert: '{D.S. al Fine}', label: 'D.S.', caption: 'al Fine', said: 'D.S. al Fine: back to the segno, then end at Fine' },
+  { insert: '{D.C.}', label: 'D.C.', caption: 'to start', said: 'D.C., Da Capo: back to the start' },
+  { insert: '{D.C. al Fine}', label: 'D.C.', caption: 'al Fine', said: 'D.C. al Fine: back to the start, then end at Fine' },
+];
+const REPEAT_ENDS: RepeatKey[] = [
+  { insert: '{Fine}', label: 'Fine', caption: 'the end', said: 'Fine: where it ends after D.S. or D.C.' },
+  { insert: '{to coda}', label: 'To', draw: 'tocoda', caption: 'to coda', said: 'To Coda: after D.S. or D.C., on to the coda from here' },
+  { insert: '{:|}', label: ':|', draw: 'end', caption: 'repeat', said: 'End repeat: back to the start repeat' },
+];
 const DYNAMICS: Marking[] = [
   ['pp', 'pianissimo'],
   ['p', 'piano'],
@@ -249,8 +282,30 @@ export function SolfaKeypad({
 function MarksPanel({ onPick, onCancel }: { onPick(text: string): void; onCancel(): void }) {
   const styles = useStyles();
   const [more, setMore] = useState(false);
+  const [repeats, setRepeats] = useState(false);
   const keys = (marks: Marking[]) =>
     marks.map((m) => <KeyButton key={m.insert} label={m.label} face={m.face} onPress={() => onPick(m.insert)} accessibilityLabel={m.said} />);
+  // Two tabs: the markings (dynamics, tempo), and the repeats and jumps.
+  const tabs = (
+    <View style={styles.tabs} accessibilityRole="tablist">
+      {[
+        { on: !repeats, label: 'Dynamics and tempo', pick: () => setRepeats(false) },
+        { on: repeats, label: 'Repeats', pick: () => setRepeats(true) },
+      ].map((t) => (
+        <Pressable
+          key={t.label}
+          onPressIn={t.pick}
+          focusable={false}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: t.on }}
+          style={[styles.tab, t.on && styles.tabOn]}
+        >
+          <Text style={[styles.tabText, t.on && styles.tabTextOn]}>{t.label}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+  if (repeats) return <RepeatsPanel tabs={tabs} onPick={onPick} onCancel={onCancel} />;
   if (more) {
     return (
       <>
@@ -275,6 +330,7 @@ function MarksPanel({ onPick, onCancel }: { onPick(text: string): void; onCancel
   }
   return (
     <>
+      {tabs}
       <View style={styles.group}>
         <Text style={styles.groupName}>Dynamics</Text>
         <View style={styles.row}>{keys(DYNAMICS)}</View>
@@ -293,6 +349,62 @@ function MarksPanel({ onPick, onCancel }: { onPick(text: string): void; onCancel
       <View style={[styles.row, styles.marksFoot]}>
         <Text style={styles.marksHint}>Put the cursor just before the note it starts on.</Text>
         <KeyButton label="More…" onPress={() => setMore(true)} accessibilityLabel="More marks: directions such as dolce, and the metronome" word small />
+        <KeyButton label="Cancel" onPress={onCancel} word small />
+      </View>
+    </>
+  );
+}
+
+/**
+ * The repeats and jumps, in the Marks panel's Repeats tab: the signs (segno, coda, start repeat, first and second
+ * endings), the jumps back (D.S., D.C., plain or al Fine), and the ends (Fine, To Coda, end repeat). The signs
+ * are drawn as sheets print them.
+ */
+function RepeatsPanel({ tabs, onPick, onCancel }: { tabs: ReactNode; onPick(text: string): void; onCancel(): void }) {
+  const styles = useStyles();
+  const colors = useColors();
+  const keys = (marks: RepeatKey[]) =>
+    marks.map((m) => {
+      const drawn =
+        m.draw === 'segno' ? (
+          <SegnoSign size={22} color={colors.ink} />
+        ) : m.draw === 'coda' ? (
+          <CodaSign size={22} color={colors.ink} />
+        ) : m.draw === 'start' || m.draw === 'end' ? (
+          <RepeatBarSign end={m.draw === 'end'} size={20} color={colors.ink} />
+        ) : m.draw === 'tocoda' ? (
+          <View style={styles.toCoda}>
+            <Text style={[styles.label, styles.italicLabel]}>To</Text>
+            <CodaSign size={18} color={colors.ink} />
+          </View>
+        ) : null;
+      return (
+        <KeyButton
+          key={m.insert}
+          label={drawn ?? m.label}
+          face={drawn ? 'sign' : 'italic'}
+          caption={m.caption}
+          onPress={() => onPick(m.insert)}
+          accessibilityLabel={m.said}
+        />
+      );
+    });
+  return (
+    <>
+      {tabs}
+      <View style={styles.group}>
+        <Text style={styles.groupName}>Signs, before the note they mark</Text>
+        <View style={styles.row}>{keys(REPEAT_SIGNS)}</View>
+      </View>
+      <View style={styles.group}>
+        <Text style={styles.groupName}>Jumps and ends, at the end of the bar</Text>
+        <View style={styles.rows}>
+          <View style={styles.row}>{keys(REPEAT_JUMPS)}</View>
+          <View style={styles.row}>{keys(REPEAT_ENDS)}</View>
+        </View>
+      </View>
+      <View style={[styles.row, styles.marksFoot]}>
+        <Text style={styles.marksHint}>A jump goes before the bar line of the bar the cursor is in.</Text>
         <KeyButton label="Cancel" onPress={onCancel} word small />
       </View>
     </>
@@ -350,8 +462,8 @@ function KeyButton({
   word?: boolean;
   /** The one chosen now. */
   on?: boolean;
-  /** A musical marking, set as sheets print it (`Marking['face']`). */
-  face?: Marking['face'];
+  /** A musical marking, set as sheets print it (`Marking['face']`), or a sign drawn (`label` is the drawing). */
+  face?: Marking['face'] | 'sign';
   accessibilityLabel?: string;
 }) {
   const styles = useStyles();
@@ -375,6 +487,8 @@ function KeyButton({
     >
       {face === 'hairpin' ? (
         <Hairpin opening={label === '<'} />
+      ) : face === 'sign' ? (
+        label
       ) : (
         <Text style={[styles.label, note && styles.noteLabel, narrow && styles.narrowLabel, (done || word) && styles.doneLabel, face && styles[`${face}Label`], color ? { color } : null]}>
           {label}
@@ -429,5 +543,22 @@ const useStyles = makeStyles((colors) => ({
   rows: { gap: 5 },
   groupName: { fontFamily: fonts.bold, fontSize: 11, lineHeight: 13, color: colors.muted, paddingHorizontal: 2 },
   marksFoot: { alignItems: 'center' },
+  // The Marks panel's tabs: the markings, and the repeats and jumps.
+  tabs: { flexDirection: 'row', gap: 6, paddingHorizontal: 2, paddingBottom: 1 },
+  tab: {
+    height: 28,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...({ userSelect: 'none', WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' } as object),
+  },
+  tabOn: { backgroundColor: colors.ink, borderColor: colors.ink },
+  tabText: { fontFamily: fonts.bold, fontSize: 12.5, color: colors.ink },
+  tabTextOn: { color: colors.onInk },
+  toCoda: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   marksHint: { flex: 2.6, fontFamily: fonts.body, fontSize: 12, lineHeight: 16, color: colors.muted, paddingHorizontal: 2 },
 }));

@@ -696,6 +696,157 @@ describe('SongPlayer playing a stretch of the song', () => {
   });
 });
 
+describe('SongPlayer following repeats and jumps', () => {
+  // In G: d G4, r A4, m B4, f C5, s D5, l E5. Played as d r m f s l, then d r m f (D.C. al Fine).
+  const DC = 'S  d :r |m :f {Fine} |s :l {D.C. al Fine} |';
+  const hz = (midi: number) => round(midiToHz(midi));
+  const tune = (ctx: FakeContext, from = 0) =>
+    startTimes({ ...ctx, started: ctx.started.slice(from) } as FakeContext).map((t) => [Math.round(t * 1000) / 1000, pitchesAt(ctx, t)[0]]);
+  const beats = (onBeat: { mock: { calls: number[][] } }) => onBeat.mock.calls.map((c) => c[0]);
+  const D = hz(67);
+  const R = hz(69);
+  const M = hz(71);
+  const F = hz(72);
+  const S = hz(74);
+  const L = hz(76);
+
+  it('plays the song in its order of play with no gap at the jump, reports the written beats, and counts once at Fine', async () => {
+    const { ctx, player, advance, onBeat, onFinish } = setup(DC, { time: '2/4', key: 7 });
+    await player.play();
+    advance(10.5);
+    expect(tune(ctx)).toEqual([
+      [0.08, D],
+      [1.08, R],
+      [2.08, M],
+      [3.08, F],
+      [4.08, S],
+      [5.08, L],
+      [6.08, D],
+      [7.08, R],
+      [8.08, M],
+      [9.08, F],
+    ]);
+    // The note after the jump was scheduled before it sounds.
+    expect(ctx.started.find((n) => Math.abs(n.at - 6.08) < 1e-9)!.now).toBeLessThan(6.08);
+    expect(beats(onBeat)).toEqual([0, 1, 2, 3, 4, 5, 0, 1, 2, 3, -1]);
+    expect(onFinish).toHaveBeenCalledTimes(1);
+    expect(player.playing).toBe(false);
+  });
+
+  it('goes round a repeat and its endings: the first ending once, then the second', async () => {
+    const { ctx, player, advance, onFinish } = setup('S  {|:}d :r |{1.}m :f {:|} |{2.}s :l |', { time: '2/4', key: 7 });
+    await player.play();
+    advance(8.5);
+    expect(tune(ctx).map(([, p]) => p)).toEqual([D, R, M, F, D, R, S, L]);
+    expect(onFinish).toHaveBeenCalledTimes(1);
+  });
+
+  it('plays from a bar following the jumps from there', async () => {
+    const { ctx, player, advance, onFinish, onEnd } = setup(DC, { time: '2/4', key: 7 });
+    await player.play(4, { counts: false });
+    advance(7);
+    expect(tune(ctx).map(([, p]) => p)).toEqual([S, L, D, R, M, F]);
+    expect(onFinish).not.toHaveBeenCalled();
+    expect(onEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it('plays a bar, or loops one, as written: no repeats or jumps', async () => {
+    const once = setup('S  d :r {:|} |m :f {D.C.} |', { time: '2/4', key: 7 });
+    await once.player.play(0, { until: 4 });
+    once.advance(5);
+    expect(tune(once.ctx).map(([, p]) => p)).toEqual([D, R, M, F]);
+
+    const looped = setup('S  d :r |m :f {D.C.} |', { time: '2/4', key: 7 });
+    await looped.player.play(2, { loop: { from: 2, to: 4 } });
+    looped.advance(4.5);
+    expect(tune(looped.ctx).map(([, p]) => p)).toEqual([M, F, M, F, M]);
+  });
+
+  it('carries on after a pause where it was in the order of play, not taking the jump again', async () => {
+    const { ctx, player, advance, onBeat, onFinish } = setup(DC, { time: '2/4', key: 7 });
+    await player.play();
+    advance(7.5); // beat 1 again, after the D.C.
+    const place = player.place()!;
+    expect([Math.floor(place.beat), place.index]).toEqual([1, 1]);
+    player.stop();
+    const before = ctx.started.length;
+    ctx.currentTime = 20;
+    await player.play(1, { resume: place });
+    advance(3.5);
+    expect(tune(ctx, before)).toEqual([
+      [20.08, R],
+      [21.08, M],
+      [22.08, F],
+    ]);
+    expect(beats(onBeat).slice(-4)).toEqual([1, 2, 3, -1]);
+    expect(onFinish).toHaveBeenCalledTimes(1);
+
+    // The song changed since (edited while paused): it plays on from the beat, as a new play would.
+    const edited = setup(DC, { time: '2/4', key: 7 });
+    edited.player.load(parseSolfa(DC, { time: '2/4' }), 7);
+    edited.player.setTempo(60);
+    await edited.player.play(4, { resume: place });
+    edited.advance(7);
+    expect(tune(edited.ctx).map(([, p]) => p)).toEqual([S, L, D, R, M, F]);
+  });
+
+  it('plays the dynamics and the tempo by the written beat on every pass', async () => {
+    const loud = setup('S  {p}d :r |{f}m :f {D.C.} |', { time: '2/4', key: 7 });
+    await loud.player.play();
+    loud.advance(8.5);
+    expect([0.08, 2.08, 4.08, 6.08].map((t) => peaksAt(loud.ctx, t)[0])).toEqual([0.55, 0.93, 0.55, 0.93]);
+
+    // Beats 0 and 1 at 60, beats 2 and 3 at 120; back at the start, 60 again.
+    const paced = setup('time: 2/4\n{M. 60}\nS  d :r |{M. 120}m :f {D.C.} |', { time: '2/4', key: 7 });
+    await paced.player.play();
+    paced.advance(6.5);
+    expect(tune(paced.ctx)).toEqual([
+      [0.08, D],
+      [1.08, R],
+      [2.08, M],
+      [2.58, F],
+      [3.08, D],
+      [4.08, R],
+      [5.08, M],
+      [5.58, F],
+    ]);
+  });
+
+  it('keeps time when the tempo changes after a jump', async () => {
+    const { ctx, player, advance } = setup(DC, { time: '2/4', key: 7 });
+    await player.play();
+    advance(6.5); // beat 0 of the pass after the D.C.
+    player.setTempo(120);
+    advance(2);
+    const times = startTimes(ctx).filter((t) => t > 6.1);
+    expect(times).toHaveLength(3);
+    times.forEach((t, i) => expect(t).toBeCloseTo(6.08 + 0.42 + 0.29 + 0.5 * i, 1));
+    expect(pitchesAt(ctx, times[0])).toEqual([R]);
+  });
+
+  it('says how far it has got through the song as played, never going back at the jump', async () => {
+    const { player, advance } = setup(DC, { time: '2/4', key: 7 });
+    await player.play();
+    const seen: number[] = [];
+    for (let i = 0; i < 10; i++) {
+      advance(1);
+      seen.push(player.done());
+    }
+    // Ten beats in all, the first heard 0.08 s in: a tenth more each second, through the jump back at beat 6.
+    seen.forEach((d, i) => expect(d).toBeCloseTo((i + 0.92) / 10, 3));
+  });
+
+  it('goes round the whole song again, in its order of play, when looping', async () => {
+    const { ctx, player, advance, onFinish } = setup(DC, { time: '2/4', key: 7 });
+    player.setLoop(true);
+    await player.play();
+    advance(10.8);
+    expect(onFinish).toHaveBeenCalledTimes(1);
+    expect(player.playing).toBe(true);
+    expect(tune(ctx).at(-1)?.[1]).toBe(D);
+  });
+});
+
 describe('partLevel', () => {
   const mix = (m: Partial<MixSettings>): MixSettings => ({ muted: {}, solo: null, mine: null, focus: false, ...m });
 

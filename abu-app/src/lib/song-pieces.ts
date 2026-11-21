@@ -159,12 +159,16 @@ export function withKeyBefore(text: string, piece: number, name: string): string
   return lines.join('\n');
 }
 
-/** How many bars the lines of music before each one have, for numbering its bars on from them. */
+/**
+ * How many bars the lines of music before each one have, for numbering its bars on from them. Marks are left out
+ * first: a repeat's `{:|}` isn't a bar line, and a mark alone between bar lines (`| {D.S.} |`) isn't a bar.
+ */
 export function barsBefore(pieces: Piece[]): number[] {
   let n = 0;
+  const bars = (text: string) => text.replace(/\{[^{}]*\}/g, ' ').split(/[|‖]/).filter((b) => b.trim()).length;
   return pieces.map((p) => {
     const before = n;
-    if (p.kind === 'music') n += Math.max(0, ...p.rows.filter((r) => r.part).map((r) => r.text.split('|').filter((b) => b.trim()).length));
+    if (p.kind === 'music') n += Math.max(0, ...p.rows.filter((r) => r.part).map((r) => bars(r.text)));
     return before;
   });
 }

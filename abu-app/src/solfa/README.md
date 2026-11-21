@@ -22,7 +22,7 @@ The prototype is the reference for behaviour and wording; where it disagreed wit
 - **Header lines are read**: `title:`, `composer:`, `arranger:`, `lyricist:`, `key:`, `time:`, `tempo:`, and `Doh is D`. The prototype read them as part names.
 - **`W` with no part line above it** in its section applies to every part without its own words. The prototype rejected it.
 - **`[Verses]`** is kept as text paragraphs (`extraVerses`), not parsed as notes.
-- **`{segno} {ds} {dc} {fine} {1.} {2.}`** become `marks` with beat positions. The prototype reported them as bad notes. Playback doesn't follow them yet, and a warning says so.
+- **Repeats and jumps** (`{segno}`, `{coda}`, `{|:}`, `{:|}`, `{1.}`, `{2.}`, `{D.S.}`, `{D.C. al Fine}`, `{Fine}`, `{to coda}`…) become `marks` with beat positions (signs on their note's beat, jumps and ends at their bar's end). The prototype reported them as bad notes. `repeats.ts` reads them and gives the order of play (`playOrder`), which the player follows; marks it can't follow (a D.S. with no segno) are warned about with their bar.
 - **Key changes**: a `key:` line after the first bars starts a key change at that point, with an optional pivot (`key: D s/d`, or just `key: s/d`). Bridge notes in the parts (`s=d`) change key mid-bar, each part at its own; a part without one changes where the first part does (`KeyChange.bridges`). `dohTimeline(song, key, part)` gives one part's doh through the song.
 - **Part bar counts** are checked per section, as the spec asks. The beat-count check stays as a fallback.
 - **Missing time** is guessed from the bars, with a warning to confirm it.
