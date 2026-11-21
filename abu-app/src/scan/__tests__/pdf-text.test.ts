@@ -338,6 +338,18 @@ describe('musical markings in a typed sheet', () => {
     expect(headerInfo(['Ave Maria', 'Moderato (M. 84)']).tempo).toBe('Moderato (M. 84)');
   });
 
+  it('takes a direction with no set speed as the heading’s tempo, as printed, but not a title', () => {
+    expect(headerInfo(['GREAT IS THY FAITHFULNESS', 'Maestoso', 'Doh is D']).tempo).toBe('Maestoso');
+    expect(headerInfo(['O LORD MY GOD', 'Doh is G', 'With feeling']).tempo).toBe('With feeling');
+    expect(headerInfo(['ALL HAIL', 'Maestoso M. 80']).tempo).toBe('Maestoso M. 80');
+    expect(headerInfo(['Joyfully', 'Doh is G']).tempo).toBe('');
+    expect(headerInfo(['ANTHEM', 'Tutti']).tempo).toBe('');
+    // And one printed over a later line starts that line.
+    const heading = typed('Doh is G   Time 2/4', 106, 90);
+    const lineOf = (y: number) => [...typed('d :- |d :t', 106, y), ...typed('s :- |l :s', 106, y + 14)];
+    expect(readTypedSheet([page([...heading, ...lineOf(150), ...typed('Slowly', 106, 200), ...lineOf(220)])]).lines[1].text.split('\n')[0]).toBe('S  {Slowly}d :- | d :t |');
+  });
+
   it('takes no tempo from running text or a title', () => {
     expect(tempoPrinted('Beyond the Grave')).toBe('');
     expect(tempoPrinted('Grave')).toBe('Grave');
@@ -375,8 +387,8 @@ describe('musical markings in a typed sheet', () => {
   it('keeps dynamics typed among the notes, before their note', () => {
     expect(toAbu('mf d :r |p m :f', false)).toBe('{mf}d :r | {p}m :f |');
     expect(toAbu('d :- |cresc. r :m |dim. f :- ', false)).toBe('d :- | {cresc}r :m | {dim}f :- |');
-    // "accel." isn't played yet: it goes, as before.
-    expect(toAbu('accel. d :r', false)).toBe('d :r |');
+    // "accel." too, now that it's played.
+    expect(toAbu('accel. d :r', false)).toBe('{accel}d :r |');
     // A lone "f" may be fah: it stays a note.
     expect(toAbu('f :r |m :f', false)).toBe('f :r | m :f |');
     // One typed after the last note, for the line after, stays at the end.

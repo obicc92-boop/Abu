@@ -803,6 +803,84 @@ export function changedShare(answer: string, reading: string): number {
   return prev[b.length] / a.length;
 }
 
+/** A row taken apart: what's left with marks, slurs and spaces out (each character with its place in the row), and its marks and slurs by where they come among those characters. */
+interface Skeleton {
+  notes: string;
+  at: number[];
+  /** Each mark, and how many characters of `notes` come before it. */
+  marks: { before: number; text: string }[];
+  /** Each slur: from the character it opens before to the one it closes after. */
+  slurs: [number, number][];
+}
+
+function skeleton(text: string): Skeleton {
+  const out: Skeleton = { notes: '', at: [], marks: [], slurs: [] };
+  const open: number[] = [];
+  for (let k = 0; k < text.length; k++) {
+    const c = text[k];
+    const close = c === '{' ? text.indexOf('}', k) : -1;
+    if (close > k && !text.slice(k + 1, close).includes('{')) {
+      out.marks.push({ before: out.notes.length, text: text.slice(k, close + 1) });
+      k = close;
+    } else if (c === '(') open.push(out.notes.length);
+    else if (c === ')') {
+      const from = open.pop();
+      if (from !== undefined && out.notes.length > from) out.slurs.push([from, out.notes.length - 1]);
+    } else if (!/\s/.test(c)) {
+      out.notes += c === '’' || c === 'ʼ' ? "'" : c;
+      out.at.push(k);
+    }
+  }
+  return out;
+}
+
+/** A mark as said, whatever its case, spaces or dots ("{Rit.}" is "{rit}"). */
+const markKey = (mark: string) => mark.toLowerCase().replace(/[\s.{}]/g, '');
+
+/**
+ * The line with the marks and slurs an AI read for it added (owner's request, 21 November 2026: the AI reads the
+ * marks and slurs of every line, not only of the lines it reads), or null when the AI's rows, with marks, slurs
+ * and spaces taken out, aren't exactly the line's (it changed a note, a beat mark or a bar line, or left a part
+ * out): then the line keeps what it has. What the line has already (a typed PDF's own marks and underlines) is
+ * never dropped: an AI mark goes in only where the line has none before that note (nor the same mark just by
+ * it), and an AI slur only where it overlaps none of the line's. The line's spacing and rows of words stay.
+ */
+export function withMarksAdded(line: string, answer: string): string | null {
+  const rows = splitLine(line);
+  const mine = rows.filter((r) => r.part);
+  const theirs = splitLine(answer).filter((r) => r.part);
+  if (!mine.length || theirs.length !== mine.length) return null;
+  const marked: string[] = [];
+  for (let i = 0; i < mine.length; i++) {
+    const a = skeleton(mine[i].text);
+    const b = skeleton(theirs[i].text);
+    if (a.notes !== b.notes) return null;
+    // What goes in at each place in the row: slurs closing there, then marks, then slurs opening.
+    const adds = new Map<number, { close: string; marks: string; open: string }>();
+    const at = (n: number) => {
+      if (!adds.has(n)) adds.set(n, { close: '', marks: '', open: '' });
+      return adds.get(n)!;
+    };
+    const place = (before: number) => (before < a.at.length ? a.at[before] : (a.at[a.at.length - 1] ?? -1) + 1);
+    for (const m of b.marks) {
+      if (a.marks.some((x) => x.before === m.before || (markKey(x.text) === markKey(m.text) && Math.abs(x.before - m.before) <= 3))) continue;
+      at(place(m.before)).marks += m.before < a.at.length ? m.text : ` ${m.text}`;
+    }
+    const slurs = [...a.slurs];
+    for (const [from, to] of b.slurs) {
+      if (slurs.some(([f, t]) => from <= t && to >= f)) continue;
+      slurs.push([from, to]);
+      at(a.at[from]).open += '(';
+      at(a.at[to] + 1).close += ')';
+    }
+    let text = mine[i].text;
+    for (const [n, add] of [...adds.entries()].sort((x, y) => y[0] - x[0])) text = text.slice(0, n) + add.close + add.marks + add.open + text.slice(n);
+    marked.push(text);
+  }
+  let k = 0;
+  return joinLine(rows.map((r) => (r.part ? { part: r.part, text: marked[k++] } : r)));
+}
+
 /** The checker's messages that are about one part ("Alto, bar 2 has 5 beats…"), and the rest. */
 export function problemsByPart(messages: string[], parts: string[]): { byPart: Record<string, string[]>; other: string[] } {
   const byPart: Record<string, string[]> = {};

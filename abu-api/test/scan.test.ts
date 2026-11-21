@@ -4,8 +4,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ensureUser } from '../src/domain/groups';
 import { scanAllowance, useScan } from '../src/domain/scan';
-import { CHECK_SYSTEM, checkLine, cleanPage, fixLine, keyName, keyOf, LINE_SCHEMA, LINE_SYSTEM, lineText, readHeading, readLine, readLineWords, readPage, readWords, rowsAnswer, tempoOf, tidyMarks, tidySlurs, timeOf } from '../src/scan';
-import { call, signUp } from './helpers';
+import app from '../src/index';
+import { CHECK_SYSTEM, checkLine, cleanPage, fixLine, keyName, keyOf, LINE_SCHEMA, LINE_SYSTEM, lineText, MARK_RULES, MARKS_SYSTEM, readHeading, readLine, readLineWords, readMarks, readPage, readWords, rowsAnswer, tempoOf, tidyMarks, tidySlurs, timeOf, WORDS_MARKS_SYSTEM } from '../src/scan';
+import { call, ORIGIN, signUp } from './helpers';
 
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
 
@@ -162,16 +163,16 @@ describe('reading with Cloudflare’s reader', () => {
     expect(system.role).toBe('system');
     expect(system.content).toContain('in braces, just before the note');
     expect(system.content).toContain('{Andante M. 70}');
-    expect(system.content).toContain('Copy only marks that are printed');
+    expect(system.content).toContain('Copy only the marks and slurs that are printed');
     expect(system.content).toContain('add the ones printed');
   });
 
   it('reads the tempo printed in a heading, as printed', async () => {
     const { env: withAi, run } = cloudflare('Title: Comfort ye\nComposer: Handel\nKey: Doh is E\nTime: 4/4\nTempo: Larghetto, M. 79');
     expect(await readHeading(withAi, JPEG.buffer, 'image/jpeg')).toEqual({ title: 'Comfort ye', composer: 'Handel', key: 'E', time: '4/4', tempo: 'Larghetto, M. 79' });
-    expect(JSON.stringify((run.mock.calls[0] as [string, { messages: { content: unknown }[] }])[1].messages[0].content)).toContain('Tempo: the speed, as written');
+    expect(JSON.stringify((run.mock.calls[0] as [string, { messages: { content: unknown }[] }])[1].messages[0].content)).toContain('Tempo: the speed or mood, as written');
     // A reader's guess that isn't a tempo SolfaScores knows is left out; a ♩ read as a J is a ♩.
-    for (const [tempo, want] of [['none', ''], ['4/4', ''], ['Joyfully', ''], ['Andante. M. 70', 'Andante. M. 70'], ['J = 72', '♩ = 72'], ['(M.M. 60)', 'M.M. 60']]) {
+    for (const [tempo, want] of [['Maestoso', 'Maestoso'], ['With feeling', 'With feeling'], ['none', ''], ['4/4', ''], ['Joyful', ''], ['Solo', ''], ['Andante. M. 70', 'Andante. M. 70'], ['J = 72', '♩ = 72'], ['(M.M. 60)', 'M.M. 60']]) {
       const { env: again } = cloudflare(`Title: Psalm 23\nComposer:\nKey: F\nTime: 3/4\nTempo: ${tempo}`);
       expect((await readHeading(again, JPEG.buffer, 'image/jpeg')).tempo).toBe(want);
     }
@@ -181,7 +182,8 @@ describe('reading with Cloudflare’s reader', () => {
 describe('markings in a line, as a reader writes them', () => {
   it('are told to every line reader, in the prompt and the schema', () => {
     expect(LINE_SYSTEM).toContain('`{pp}` `{p}` `{mp}` `{mf}` `{f}` `{ff}`');
-    expect(LINE_SYSTEM).toContain('`{cresc}`, `{dim}`, `{rit}`');
+    expect(LINE_SYSTEM).toContain('`{cresc}` `{dim}`, a hairpin `{<}` or `{>}` before the note where the wedge starts, `{rit}` `{rall}` `{accel}` `{a tempo}`');
+    expect(LINE_SYSTEM).toContain('a tempo or direction as printed (`{Andante M. 70}`, `{Maestoso}`, `{dolce}`, `{With feeling}`)');
     expect(LINE_SYSTEM).toContain('Braces are not beats');
     // Haiku and Cloudflare's reader check with the same rules.
     expect(CHECK_SYSTEM.startsWith(LINE_SYSTEM)).toBe(true);
@@ -205,7 +207,7 @@ describe('markings in a line, as a reader writes them', () => {
 
   it('slurs: every line reader is told to copy them, in round brackets', () => {
     expect(LINE_SYSTEM).toContain("A slur (notes underlined, or joined by a curve: sung to one syllable) goes in round brackets from its first note to its last: `(m'.d')`, `(s :f |m)`");
-    expect(LINE_SYSTEM).toContain('Copy only slurs that are printed. Brackets are not beats either.');
+    expect(LINE_SYSTEM).toContain('Brackets are not beats either.\n- Copy only the marks and slurs that are printed.');
     expect(CHECK_SYSTEM).toContain('It usually leaves markings and slurs out: add the ones printed.');
     expect(LINE_SCHEMA.properties.rows.items.properties.notes.description).toContain('slurs in round brackets');
   });
@@ -235,7 +237,10 @@ describe('markings in a line, as a reader writes them', () => {
     expect(tempoOf('Allegro moderato ♩=120')).toBe('Allegro moderato ♩=120');
     expect(tempoOf('Andante (M. 70)')).toBe('Andante (M. 70)');
     expect(tempoOf('Key: F 4 J=72')).toBe('♩=72');
-    expect(tempoOf('Slowly', 'Doh is G', '4/4', 'Matthew 70')).toBe('');
+    expect(tempoOf('Joyful', 'Doh is G', '4/4', 'Matthew 70')).toBe('');
+    // The reader's own Tempo line may be a direction with no set speed, as printed.
+    expect(['Maestoso', 'Slowly', 'With feeling', 'Maestoso M. 80', 'Tutti'].map((t) => tempoOf(t))).toEqual(['Maestoso', 'Slowly', 'With feeling', 'Maestoso M. 80', '']);
+    expect(tempoOf('', 'Key: G Maestoso')).toBe('');
   });
 });
 
@@ -360,5 +365,70 @@ describe('shaping', () => {
 
   it('names rows by position when the reader leaves the part out', () => {
     expect(lineText({ rows: [{ notes: 'd :r' }, { part: '?', notes: 'm :f |' }] }, ['T', 'B'])).toBe('T  d :r |\nB  m :f |');
+  });
+});
+
+describe('reading the marks of a line that reads right already', () => {
+  const ROWS = 'S  d :r /m :f | s :- /- :- |\nA  d :t1 /d :d | m :- /- :- |';
+
+  it('has Opus give the rows back marked with the words, in the same call, when asked', async () => {
+    const fetch = claudeReplies({
+      rows: [
+        { part: 'S', words: 'Glo-ry be to God', notes: '{p}d :r /(m :f) | {rit}s :- /- :- |' },
+        { part: 'A', words: '', notes: '{p}d :t1 /d :d | m :- /- :- |' },
+      ],
+      key: '',
+    });
+    const got = await readLineWords(withKey, JPEG.buffer, 'image/jpeg', { parts: ['S', 'A'], notes: ROWS, marks: true });
+    expect(got).toEqual({ words: [{ after: 0, text: 'Glo-ry be to God' }], notes: 'S  {p}d :r /(m :f) | {rit}s :- /- :- |\nA  {p}d :t1 /d :d | m :- /- :- |' });
+    const request = JSON.parse(String(fetch.mock.calls[0][1]?.body));
+    expect(request.model).toBe('claude-opus-5-5');
+    expect(request.system[0].text).toBe(WORDS_MARKS_SYSTEM);
+    expect(WORDS_MARKS_SYSTEM).toContain(MARK_RULES);
+    expect(request.output_config.format.schema.properties.rows.items.required).toEqual(['part', 'words', 'notes']);
+    // Not asked: the words only, as before.
+    const plain = claudeReplies({ rows: [{ part: 'S', words: 'Glo-ry' }], key: '' });
+    expect(await readLineWords(withKey, JPEG.buffer, 'image/jpeg', { parts: ['S'], notes: 'S  d :- |' })).toEqual({ words: [{ after: 0, text: 'Glo-ry' }] });
+    expect(JSON.parse(String(plain.mock.calls.at(-1)?.[1]?.body)).output_config.format.schema.properties.rows.items.required).toEqual(['part', 'words']);
+  });
+
+  it('asks Cloudflare’s reader for the rows marked, tightly, and shapes its answer', async () => {
+    const { env: withAi, run } = cloudflare('Here are the rows:\nS  {<}d :r /(m :f) | s :- /- :- {>}\nA  d :t1 /d :d | m :- /- :- |');
+    const got = await readMarks(withAi, JPEG.buffer, 'image/jpeg', { parts: ['S', 'A'], notes: ROWS, by: 'cloudflare' });
+    // Nothing else touched: no bar line added to a row left without one.
+    expect(got.text).toBe('S  {<}d :r /(m :f) | s :- /- :- {>}\nA  d :t1 /d :d | m :- /- :- |');
+    const [model, input] = run.mock.calls[0] as [string, { messages: { role: string; content: unknown }[]; max_tokens: number }];
+    expect(model).toBe('@cf/mistralai/mistral-small-3.1-24b-instruct');
+    expect(String(input.messages[0].content).startsWith(MARKS_SYSTEM)).toBe(true);
+    expect(MARKS_SYSTEM).toContain(MARK_RULES);
+    expect(MARKS_SYSTEM).toContain('Never change, add or take out a note');
+    expect((input.messages[1].content as { type: string; text?: string }[]).find((c) => c.type === 'text')?.text).toBe(`Parts, top to bottom: S, A. The line's rows as read:\n${ROWS}`);
+    expect(input.max_tokens).toBeLessThan(400);
+  });
+
+  it('asks Haiku, at low effort, when it’s Claude’s turn', async () => {
+    const fetch = claudeReplies({ rows: [{ part: 'S', notes: '{Maestoso}d :r /m :f | s :- /- :- |' }, { part: 'A', notes: 'd :t1 /d :d | m :- /- :- |' }] });
+    const got = await readMarks(withKey, JPEG.buffer, 'image/jpeg', { parts: ['S', 'A'], notes: ROWS, by: 'claude' });
+    expect(got.text).toBe('S  {Maestoso}d :r /m :f | s :- /- :- |\nA  d :t1 /d :d | m :- /- :- |');
+    const request = JSON.parse(String(fetch.mock.calls[0][1]?.body));
+    expect(request.model).toBe('claude-haiku-5-5');
+    expect(request.output_config.effort).toBe('low');
+    expect(request.max_tokens).toBe(4000);
+    expect(request.system[0].text).toBe(MARKS_SYSTEM);
+  });
+
+  it('counts each marks reading as a line in the day’s allowance, and checks the request first', async () => {
+    const { cookie } = await signUp('Marks Scanner');
+    const { env: withAi } = cloudflare('S  {p}d :r |');
+    const send = (q: string, e: Env) =>
+      app.request(`/api/scan/marks?${q}`, { method: 'POST', body: JPEG, headers: { 'content-type': 'image/jpeg', origin: ORIGIN, cookie } }, e);
+    const res = await send(`parts=S&notes=${encodeURIComponent('S  d :r |')}`, withAi);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ text: 'S  {p}d :r |' });
+    // No rows sent, or Claude asked for without a key: refused before anything is counted.
+    expect((await send('parts=S', withAi)).status).toBe(400);
+    expect((await send(`parts=S&by=claude&notes=${encodeURIComponent('S  d :r |')}`, withAi)).status).toBe(503);
+    const left = await call('/scan/allowance', { cookie });
+    expect(await left.json()).toMatchObject({ lines: 399 });
   });
 });

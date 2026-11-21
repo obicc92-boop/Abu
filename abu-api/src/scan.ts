@@ -15,7 +15,7 @@
  */
 import Anthropic from '@anthropic-ai/sdk';
 
-import { TEMPO_WORDS } from '../../abu-app/src/solfa';
+import { readExpression, TEMPO_WORDS } from '../../abu-app/src/solfa';
 import { AppError, badRequest } from './errors';
 
 /** The strong reader: reads a line from scratch, for lines the cheaper path can't get right. */
@@ -35,7 +35,7 @@ A line of music is one system: the rows of notes for all the parts sung together
 
 For each line of music, in reading order, give its box in pixels of this image: top (just above the first row of notes, including raised octave marks), bottom (just below its last row, including lowered octave marks and its last words row), left and right (including a first column with an upbeat and the table borders). Boxes of different lines must not overlap. Also give the parts of its rows of notes, top to bottom, as S, A, T, B or Solo, and how many rows of words it has.
 
-Also read the heading if there is one: title, composer or arranger, the key (from "Doh is ...", "Key ...") as a note name such as Ab or F#, the time (such as 4/4) and the tempo as printed (such as "Andante. M. 70"), if printed. Use an empty string for anything not printed. Leave out headings, verses printed as text, footers and anything that isn't a line of sol-fa.`;
+Also read the heading if there is one: title, composer or arranger, the key (from "Doh is ...", "Key ...") as a note name such as Ab or F#, the time (such as 4/4) and the tempo as printed (such as "Andante. M. 70" or "Maestoso"), if printed. Use an empty string for anything not printed. Leave out headings, verses printed as text, footers and anything that isn't a line of sol-fa.`;
 
 const PAGE_SCHEMA = {
   type: 'object',
@@ -89,6 +89,14 @@ export interface PageReading {
 
 /* ---------- Reading one line ---------- */
 
+/**
+ * How every reader writes the markings and slurs printed with a line (src/solfa/expressions.ts reads them):
+ * dynamics, hairpins, tempo changes and directions in braces before the note they start on, slurs in brackets.
+ */
+export const MARK_RULES = `- Markings printed over or under a part's row go in that row, in braces, just before the note they're printed over: dynamics \`{pp}\` \`{p}\` \`{mp}\` \`{mf}\` \`{f}\` \`{ff}\` \`{sfz}\`, \`{cresc}\` \`{dim}\`, a hairpin \`{<}\` or \`{>}\` before the note where the wedge starts, \`{rit}\` \`{rall}\` \`{accel}\` \`{a tempo}\`, and a tempo or direction as printed (\`{Andante M. 70}\`, \`{Maestoso}\`, \`{dolce}\`, \`{With feeling}\`), as in \`S  {p}d :r /m :f |\`. A tempo printed above the line goes before the top part's first note. Braces are not beats: they change no beat marks or bar lines.
+- A slur (notes underlined, or joined by a curve: sung to one syllable) goes in round brackets from its first note to its last: \`(m'.d')\`, \`(s :f |m)\`. Brackets are not beats either.
+- Copy only the marks and slurs that are printed.`;
+
 export const LINE_SYSTEM = `You read one line of music from a picture of a tonic sol-fa choir sheet (typed or handwritten) and write it in SolfaScores' sol-fa text format. Copy exactly what is printed or written; never correct or improve the music.
 
 The picture shows one line of music: one row of notes per part, top to bottom, often with rows of words between them. Give each row of notes, in the order given, with its part name.
@@ -104,8 +112,7 @@ SolfaScores' format:
 - A new key written with this line, above it or at its start (\`Key F\`, \`Doh is F\`, \`(F)\`, a key in a box), is given as \`key\`: the note's letter with any sharp or flat (\`F\`, \`B♭\`, \`F♯\`). An empty string if none is written there (the key in the sheet's heading isn't one). Write the bridge notes as well, where there are any.
 - If the line begins with a column before its first bar line (an upbeat), write that column as the row's first bar: \`s | d :r /m :f |\`.
 - Every row has the same number of bars, lined up with the rows above and below. A bar with nothing in it for a part is written with its empty beats, e.g. \` : : : \` for 4 beats.
-- Markings printed over or under a part's row go in that row, in braces, just before the note they're printed over: dynamics \`{pp}\` \`{p}\` \`{mp}\` \`{mf}\` \`{f}\` \`{ff}\` \`{sfz}\`, and \`{cresc}\`, \`{dim}\`, \`{rit}\`, \`{rall}\`, \`{a tempo}\`, as in \`S  {p}d :r /m :f |\`. A tempo printed above the line goes before the top part's first note: \`{Andante M. 70}\`. Copy only marks that are printed. Braces are not beats: they change no beat marks or bar lines.
-- A slur (notes underlined, or joined by a curve: sung to one syllable) goes in round brackets from its first note to its last: \`(m'.d')\`, \`(s :f |m)\`. Copy only slurs that are printed. Brackets are not beats either.
+${MARK_RULES}
 
 Example of one line of four parts in 4/4:
 S  s1 | d :-.r /m :d | f :m /r :- |
@@ -124,7 +131,7 @@ export const LINE_SCHEMA = {
         type: 'object',
         properties: {
           part: { type: 'string' },
-          notes: { type: 'string', description: "The row in SolfaScores sol-fa, with printed markings in braces before their notes ({p}, {Andante M. 70}) and slurs in round brackets ((m'.d'))" },
+          notes: { type: 'string', description: "The row in SolfaScores sol-fa, with printed markings in braces before their notes ({p}, {<}, {Andante M. 70}) and slurs in round brackets ((m'.d'))" },
           words: { type: 'string' },
         },
         required: ['part', 'notes', 'words'],
@@ -173,6 +180,57 @@ export const WORDS_LINE_SCHEMA = {
   required: ['rows', 'key'],
   additionalProperties: false,
 };
+
+/**
+ * The words call when the line's marks are wanted as well (owner's request, 21 November 2026: the AI reads the
+ * marks and slurs of every line, not only of the lines it reads): the rows of notes come back too, marked. One
+ * call, not two. The app keeps them only if, marks and slurs aside, they're the notes it sent.
+ */
+export const WORDS_MARKS_SYSTEM = `${WORDS_LINE_SYSTEM}
+
+Also give each part's row of notes back as it came, with the markings and slurs printed with it added, as follows. Change nothing else in the row: no note, octave mark, beat mark or bar line.
+${MARK_RULES}`;
+
+export const WORDS_MARKS_SCHEMA = {
+  type: 'object',
+  properties: {
+    rows: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: { part: { type: 'string' }, words: { type: 'string' }, notes: { type: 'string' } },
+        required: ['part', 'words', 'notes'],
+        additionalProperties: false,
+      },
+    },
+    key: { type: 'string' },
+  },
+  required: ['rows', 'key'],
+  additionalProperties: false,
+};
+
+/**
+ * The marks reading, for a typed sheet's line that reads right already (owner's request, 21 November 2026): its
+ * rows come back with what's printed with them, nothing else changed. Cloudflare's reader first, Haiku if it
+ * can't; the app keeps an answer only if, marks and slurs aside, it's the rows it sent.
+ */
+export const MARKS_SYSTEM = `You add the markings printed on one line of a tonic sol-fa choir sheet to its rows of notes, which have been read already and come with the picture, one row per part, top to bottom. Give every row back exactly as it came, adding only:
+${MARK_RULES}
+Never change, add or take out a note, octave mark, beat mark or bar line. If nothing is printed, give the rows back as they came.`;
+
+export const MARKS_SCHEMA = {
+  type: 'object',
+  properties: {
+    rows: {
+      type: 'array',
+      items: { type: 'object', properties: { part: { type: 'string' }, notes: { type: 'string' } }, required: ['part', 'notes'], additionalProperties: false },
+    },
+  },
+  required: ['rows'],
+  additionalProperties: false,
+};
+
+const MARKS_ANSWER = `Answer with only the rows, one per part, in order, each as the part name, two spaces and the notes. No other text.`;
 
 export interface LineReading {
   /** The line in SolfaScores' format: one row per part, each with the words under it, if any. */
@@ -337,6 +395,30 @@ export function rowsAnswer(answer: string, parts: string[]): string {
   return lineText({ rows, words }, parts);
 }
 
+/**
+ * A line's rows of notes as a reader gave them back with their marks, in the parts' order: marks and slurs tidied,
+ * nothing else touched (no bar line added, so the app can compare them with the rows it sent).
+ */
+export function markedRows(rows: { part?: string; notes?: string }[] | undefined, parts: string[]): string {
+  return (rows ?? [])
+    .slice(0, parts.length)
+    .map((row, i) => `${(parts[i] ?? `P${i + 1}`).padEnd(2)} ${tidySlurs(tidyMarks(row.notes ?? '')).replace(/\s+/g, ' ').trim()}`)
+    .join('\n');
+}
+
+/** Cloudflare's reader's answer to the marks reading, rows as "S  {p}d :r |", in the parts' order. */
+export function marksAnswer(answer: string, parts: string[]): string {
+  const rows: { notes: string }[] = [];
+  for (const raw of answer.split('\n')) {
+    const m = raw
+      .trim()
+      .replace(/^`+|`+$/g, '')
+      .match(/^(Solo|Soprano|Alto|Tenor|Bass|S|A|T|B|P\d+)\b[:.]?\s*(.*)$/i);
+    if (m && rows.length < parts.length) rows.push({ notes: m[2] });
+  }
+  return markedRows(rows, parts);
+}
+
 /** Corrects a line SolfaScores' own model read that fails SolfaScores' checker (Cloudflare's reader). */
 export async function fixLine(env: Env, image: ArrayBuffer, type: ImageType, opts: { parts: string[]; time?: string; key?: string; draft: string }): Promise<LineReading> {
   const beats = opts.time?.split('/')[0];
@@ -372,7 +454,7 @@ Title: the song's title
 Composer: who wrote or arranged it
 Key: the key, as written (for example "Doh is G" or "Key F")
 Time: the time signature, as written (for example 3/4, 4/4, 6/8, 2/4 or C)
-Tempo: the speed, as written (for example "Andante. M. 70", "Allegro" or "♩ = 72")
+Tempo: the speed or mood, as written (for example "Andante. M. 70", "Maestoso", "With feeling" or "♩ = 72")
 Leave the rest of a line empty if that isn't written on the sheet. No other text.`;
 
 /** A sheet's heading as read: what's missing is "". */
@@ -393,12 +475,20 @@ const METRONOME = String.raw`(?:\bM\.\s*M\.?|\bMM\b\.?|\bM\.|\bM(?=\s*=)|♩|�
 const TEMPO_WORD = `\\b(?:${Object.keys(TEMPO_WORDS).join('|')})\\b(?:\\s+(?:${Object.keys(TEMPO_WORDS).join('|')})\\b)?`;
 const TEMPO_PRINTED = new RegExp(`${TEMPO_WORD}(?:[\\s.,;:(–—-]{0,4}${METRONOME})?|${METRONOME}`, 'i');
 
+/** Directions about who sings, not how fast or in what mood: never a heading's tempo. */
+const NOT_TEMPO = /^(?:tutti|solo|unison|unis|hum|humming|molto|poco)\.?$/i;
+
 /**
  * The tempo as printed, from the first of `texts` that has one: a tempo word ("Andante", "Allegro moderato"),
- * a metronome mark ("M. 70", "♩ = 72"), or both ("Larghetto, M. 79"); "" if none. Only words SolfaScores
- * knows the speed of, so a reader's guess ("Joyful", "4/4") isn't taken for one.
+ * a metronome mark ("M. 70", "♩ = 72"), or both ("Larghetto, M. 79"); "" if none. The first text, the reader's
+ * own Tempo line, may also be a direction with no set speed, as printed ("Maestoso", "Slowly", "With feeling":
+ * owner's request, 21 November 2026), which the song's `tempo:` line keeps as words. Only what SolfaScores
+ * knows (src/solfa/expressions.ts), so a reader's guess ("Joyful", "4/4") isn't taken for one.
  */
 export function tempoOf(...texts: string[]): string {
+  const own = (texts[0] ?? '').trim().replace(/^\((.*)\)$/, '$1').replace(/[\s,;:]+$/, '');
+  const said = own.length <= 60 ? readExpression(own) : null;
+  if (said && (said.kind === 'tempo' || (said.kind === 'direction' && !NOT_TEMPO.test(own)))) return own.replace(/\bJ(\s*=)/, '♩$1');
   for (const text of texts) {
     const m = (text ?? '').match(TEMPO_PRINTED);
     if (!m) continue;
@@ -450,7 +540,7 @@ function base64(buf: ArrayBuffer): string {
   return btoa(s);
 }
 
-async function ask(env: Env, model: string, system: string, schema: Record<string, unknown>, image: ArrayBuffer, type: ImageType, prompt: string, effort: 'low' | 'medium' = 'medium'): Promise<unknown> {
+async function ask(env: Env, model: string, system: string, schema: Record<string, unknown>, image: ArrayBuffer, type: ImageType, prompt: string, effort: 'low' | 'medium' = 'medium', maxTokens = 16000): Promise<unknown> {
   if (!env.ANTHROPIC_API_KEY) throw new AppError(503, 'The AI reader isn’t switched on for scanning.');
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, baseURL: env.ANTHROPIC_BASE_URL || undefined, maxRetries: 2 });
   let message;
@@ -458,7 +548,7 @@ async function ask(env: Env, model: string, system: string, schema: Record<strin
     message = await client.messages.create({
       model,
       // Room for its thinking as well as the answer: a reply cut short isn't valid JSON.
-      max_tokens: 16000,
+      max_tokens: maxTokens,
       system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
       output_config: { effort, format: { type: 'json_schema', schema } },
       messages: [
@@ -528,9 +618,15 @@ export async function readLine(env: Env, image: ArrayBuffer, type: ImageType, op
  * poorly (owner's call, 20 November 2026). `after` is the part's place in `parts` (0 for the first). Also a new
  * key written with the line, if there's one, as SolfaScores' own reader reads only notes.
  */
-export async function readLineWords(env: Env, image: ArrayBuffer, type: ImageType, opts: { parts: string[]; notes: string }): Promise<{ words: { after: number; text: string }[]; key?: string }> {
+export async function readLineWords(
+  env: Env,
+  image: ArrayBuffer,
+  type: ImageType,
+  opts: { parts: string[]; notes: string; marks?: boolean },
+): Promise<{ words: { after: number; text: string }[]; key?: string; notes?: string }> {
   const prompt = `Parts, top to bottom: ${opts.parts.join(', ')}. The line's notes as read:\n${opts.notes}`;
-  const raw = (await ask(env, STRONG, WORDS_LINE_SYSTEM, WORDS_LINE_SCHEMA, image, type, prompt, 'low')) as { rows?: { part?: string; words?: string }[]; key?: string };
+  const [system, schema] = opts.marks ? [WORDS_MARKS_SYSTEM, WORDS_MARKS_SCHEMA] : [WORDS_LINE_SYSTEM, WORDS_LINE_SCHEMA];
+  const raw = (await ask(env, STRONG, system, schema, image, type, prompt, 'low')) as { rows?: { part?: string; words?: string; notes?: string }[]; key?: string };
   const words: { after: number; text: string }[] = [];
   (raw.rows ?? []).forEach((row, i) => {
     const at = opts.parts.indexOf(partOf(row.part ?? '') ?? '');
@@ -538,7 +634,28 @@ export async function readLineWords(env: Env, image: ArrayBuffer, type: ImageTyp
     if (text) words.push({ after: at >= 0 ? at : Math.min(i, opts.parts.length - 1), text });
   });
   const key = keyName(raw.key);
-  return { words, ...(key ? { key } : {}) };
+  // With the marks asked for: the rows of notes back, marked (the app checks they're the notes it sent).
+  const notes = opts.marks && raw.rows?.some((r) => r.notes?.trim()) ? markedRows(raw.rows, opts.parts) : '';
+  return { words, ...(key ? { key } : {}), ...(notes ? { notes } : {}) };
+}
+
+/**
+ * The marks and slurs printed with a line that reads right already, added to its rows (`notes`): Cloudflare's
+ * reader, or Haiku (`by: 'claude'`, at low effort) when Cloudflare's can't. The rows come back as "S  {p}d :r |";
+ * the app keeps them only if, marks and slurs aside, they're the rows it sent.
+ */
+export async function readMarks(env: Env, image: ArrayBuffer, type: ImageType, opts: { parts: string[]; notes: string; by: 'cloudflare' | 'claude' }): Promise<{ text: string }> {
+  const prompt = `Parts, top to bottom: ${opts.parts.join(', ')}. The line's rows as read:\n${opts.notes}`;
+  let text: string;
+  if (opts.by === 'claude') {
+    const raw = (await ask(env, CHEAP, MARKS_SYSTEM, MARKS_SCHEMA, image, type, prompt, 'low', 4000)) as { rows?: { part?: string; notes?: string }[] };
+    text = markedRows(raw.rows, opts.parts);
+  } else {
+    // The rows and the few marks added: about a token for every one or two characters.
+    text = marksAnswer(await askCloudflare(env, image, type, prompt, `${MARKS_SYSTEM}\n\n${MARKS_ANSWER}`, Math.min(1500, 150 + Math.ceil(opts.notes.length / 1.5))), opts.parts);
+  }
+  if (!text.trim()) throw new AppError(422, 'No marks could be read for this line.');
+  return { text };
 }
 
 /** Checks the reading SolfaScores' own model made of a line against its picture (Haiku), fixing what it got wrong. */

@@ -23,7 +23,7 @@
  * `pageText` takes what it needs from a pdf.js page; the rest is plain logic.
  * Positions are in PDF points, from the page's top left.
  */
-import { TEMPO_WORDS } from '@/solfa';
+import { readExpression, TEMPO_WORDS } from '@/solfa';
 
 
 /** A character on the page: its left and right edges, its baseline and type size, and any octave mark found for it. */
@@ -706,9 +706,8 @@ export function toAbu(text: string, drawnBars: boolean): string {
   t = t.replace(/\)(?:\s*(['’ʼ]+|,)|([12]))(?=[\s:./|)]|$)/g, (_, mark = '', low = '') => `${mark}${low})`);
   t = t.replace(/\s+'/g, "'"); // "d '" is d'
   t = t.replace(/([a-z]),(?=[\s:./|)]|$)/g, (_, n: string) => `${n}1`); // "t," (a comma after a note, not before one) is the low t1
-  // Dynamics typed among the notes are kept, in braces before the note after them ("mf r" is {mf}r); SolfaScores
-  // doesn't play "accel." yet, so it goes.
-  t = t.replace(DYNAMICS, (_, pre: string, dyn: string) => (dyn.startsWith('accel') ? `${pre} ` : `${pre} ${markOf(dyn.replace(/\.$/, ''))}`));
+  // Dynamics and tempo changes typed among the notes are kept, in braces before the note after them ("mf r" is {mf}r).
+  t = t.replace(DYNAMICS, (_, pre: string, dyn: string) => `${pre} ${markOf(dyn.replace(/\.$/, ''))}`);
   t = t.replace(LABELS, '$1 '); // "CH", "Verse", a part's letter: never notes, which are small letters
   // Words printed among the notes ("4 bars for organ"): letters no sol-fa syllables make.
   t = t.replace(/(^|[\s|:/])([A-Za-z']{2,})(?=[\s|:/]|$)/g, (m, pre: string, w: string) => (NOTE_RUN.test(w) ? m : `${pre} `));
@@ -734,12 +733,17 @@ const TEMPO_NAMES = Object.keys(TEMPO_WORDS).join('|');
 /** A tempo word SolfaScores knows the speed of (and a second, "Allegro moderato"), with a metronome mark after it or not; or the mark alone. */
 const TEMPO_PRINTED = new RegExp(String.raw`\b(?:${TEMPO_NAMES})\b(?:\s+(?:${TEMPO_NAMES})\b)?(?:[\s.,;:(–—-]{0,4}${METRONOME})?|${METRONOME}`, 'gi');
 
+/** Whether a text, capitalised as printed, is a direction with no set speed ("Maestoso", "Slowly", "With feeling"), not one about who sings. */
+const isDirection = (text: string) => /^[A-Z]/.test(text) && readExpression(text)?.kind === 'direction' && !/^(?:tutti|solo|unison|unis|hum|humming|molto|poco)\.?$/i.test(text);
+
 /**
- * A tempo printed in a line of text, as printed ("Andante. M. 70", "Larghetto, M. 79", "♩ = 72"), or "". A
- * tempo word is printed with a capital (a small one is running text), and "Grave" only with a metronome mark or
- * on its own (a title's "The Empty Grave" isn't one).
+ * A tempo printed in a line of text, as printed ("Andante. M. 70", "Larghetto, M. 79", "♩ = 72", "Maestoso
+ * M. 80"), or "". A tempo word is printed with a capital (a small one is running text), and "Grave" only with a
+ * metronome mark or on its own (a title's "The Empty Grave" isn't one). With `directions`, a line that's only a
+ * direction with no set speed is one too, as printed ("Maestoso", "Slowly", "With feeling": owner's request, 21
+ * November 2026), kept as words (not from a title, which could be one).
  */
-export function tempoPrinted(text: string): string {
+export function tempoPrinted(text: string, directions = true): string {
   for (const m of text.matchAll(TEMPO_PRINTED)) {
     const t = m[0];
     if (/^[a-z]/.test(t)) continue;
@@ -747,9 +751,13 @@ export function tempoPrinted(text: string): string {
     if (!metronome && /^grave$/i.test(t) && /[A-Za-z]/.test(text.replace(t, ''))) continue;
     let out = t.replace(/[\s.,;:(–—-]+$/, '');
     if (out.includes('(') && !out.includes(')')) out += ')';
+    // A direction printed before the metronome mark is part of it ("Maestoso M. 80").
+    const before = text.slice(0, m.index).trim().replace(/[\s.,;:(–—-]+$/, '');
+    if (metronome && before && isDirection(before)) return `${before}${text.slice(text.indexOf(before) + before.length, m.index)}${out}`.replace(/\s+/g, ' ');
     return out;
   }
-  return '';
+  const line = text.trim().replace(/[\s,;:]+$/, '');
+  return directions && line.length <= 30 && isDirection(line) ? line : '';
 }
 
 /** The key ("Doh is G", "Key Eb"), time ("Time 3/4") and tempo ("Andante. M. 70") printed in a sheet's heading. */
@@ -764,7 +772,9 @@ export function headerInfo(lines: string[]): { key: string; time: string; tempo:
   const w = text.search(/time/i);
   const m = (w >= 0 ? text.slice(w + 4) : text).match(TIME);
   const time = m && ['2', '4', '8', '16'].includes(m[2]) ? `${m[1]}/${m[2]}` : '';
-  const tempo = lines.map(tempoPrinted).find(Boolean) ?? '';
+  // A title alone ("Joyfully"?) is no direction to play by.
+  const title = lines.find((h) => /[A-Za-z]{3}/.test(h));
+  const tempo = lines.map((l) => tempoPrinted(l, l !== title)).find(Boolean) ?? '';
   return { key, time, tempo };
 }
 

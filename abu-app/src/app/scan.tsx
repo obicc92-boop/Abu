@@ -31,7 +31,7 @@ import { useQuery } from '@tanstack/react-query';
 import * as DocumentPicker from 'expo-document-picker';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, Text, View, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollViewInstance, type TextInputInstance } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, Switch, Text, View, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollViewInstance, type TextInputInstance } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { api, ApiError, type PickedFile, type ScanLineReading } from '@/api/client';
@@ -48,6 +48,8 @@ import { forgetScan, listScans, openScan, saveScan, type SavedScan } from '@/sca
 import { ago, titleFromFile } from '@/scan/unfinished';
 import { joinLines, linesKeys, timeFor, withTempo } from '@/scan/join';
 import { bestFree, changedShare, joinLine, keepsParts, namesNotWords, problemsByPart, splitLine, tidyNotes, tidyTitle, withBarsInStep, withWords, wordsOf, wordsPreferring, type LineRow, type LineWords } from '@/scan/line-text';
+import { withAiMarks, withWordsAndMarks } from '@/scan/ai-marks';
+import { readSetting, writeSetting } from '@/lib/storage';
 import { placeCursor } from '@/lib/field-cursor';
 import { applyKey, type Key, type Selection } from '@/lib/solfa-keys';
 import { findLinesOwn, readLineOwn } from '@/scan/own-reader';
@@ -75,6 +77,8 @@ const PART_CHOICES: { n: number; label: string }[] = [
 ];
 /** How a sheet is written, as the person says. */
 type Written = 'hand' | 'typed';
+/** On this phone: "off" when the person doesn't want an AI to read every line's marks and slurs. */
+const MARKS_KEY = 'abu.scanMarks';
 const WRITTEN_CHOICES: { w: Written; label: string }[] = [
   { w: 'hand', label: 'Handwritten' },
   { w: 'typed', label: 'Typed' },
@@ -184,6 +188,14 @@ function Scanner() {
   const [current, setCurrent] = useState(0);
   const [time, setTime] = useState('4/4');
   const [partsWanted, setPartsWanted] = useState(4);
+  // Whether an AI reads every line's marks and slurs (owner's request, 21 November 2026), kept on the phone: on unless turned off.
+  const [marksAi, setMarksAi] = useState(() => readSetting(MARKS_KEY) !== 'off');
+  const chooseMarks = (on: boolean) => {
+    setMarksAi(on);
+    writeSetting(MARKS_KEY, on ? null : 'off');
+  };
+  // Today's allowance ran out during a marks reading: no more of them for this sheet.
+  const marksStopped = useRef(false);
   // How the sheet is written, as the person says: it decides how it's read and which AIs help.
   const [written, setWritten] = useState<Written | null>(null);
   const [readers, setReaders] = useState<Readers>({ cloudflare: false, anthropic: false });
@@ -307,15 +319,33 @@ function Scanner() {
    * read): Cloudflare's reader reads handwritten words poorly (owner's call, 20 November 2026). The app's words
    * stay under a part Opus gave none for, and all of them if it can't be asked.
    */
-  const withOpusWords = async (line: Line, text: string, ai: Readers): Promise<{ text: string; key?: string }> => {
+  const withOpusWords = async (line: Line, text: string, ai: Readers, passes: (t: string) => boolean): Promise<{ text: string; key?: string }> => {
     if (!line.handwritten || !ai.anthropic) return { text };
     try {
       const notes = joinLine(splitLine(text).filter((r) => r.part));
-      const { words, key } = await api.scanLineWords(line.blob, { parts: line.parts, notes });
-      return { text: words.length ? withWords(text, wordsPreferring(words, wordsOf(text))) : text, key };
+      // With the marks and slurs too, in the same call, when they're wanted: kept only if its notes are the line's.
+      const r = await api.scanLineWords(line.blob, { parts: line.parts, notes, marks: marksAi });
+      return { text: withWordsAndMarks(text, r, passes), key: r.key };
     } catch {
       return { text };
     }
+  };
+  /**
+   * A typed sheet's line that reads right already, with the marks and slurs printed with it read by AI when
+   * they're wanted (owner's request, 21 November 2026): Cloudflare's reader first, then Haiku if Cloudflare's is
+   * off, over its day, or gives back other notes. What the line has already (a PDF's own marks and underlines)
+   * stays; an answer that changed a note is ignored (`withMarksAdded`). The line as it was if neither can.
+   */
+  const typedMarks = async (line: Line, text: string, ai: Readers, passes: (t: string) => boolean): Promise<string> => {
+    const got = await withAiMarks(text, {
+      on: marksAi && !line.handwritten && !marksStopped.current,
+      readers: ai,
+      ask: async (by, notes) => (await api.scanMarks(line.blob, { parts: line.parts, notes, by })).text,
+      passes,
+    });
+    // Today's allowance is used up: no more marks readings for this sheet (the lines keep what they have).
+    if (got.allowanceOut) marksStopped.current = true;
+    return got.text;
   };
   /**
    * A new key a reader saw written with the line (owner's request, 20 November 2026): kept unless the line has
@@ -334,7 +364,7 @@ function Scanner() {
     // fails for something else (only bar lines move): the person and the AIs then start from bars in step.
     if (!passes(own)) own = withBarsInStep(own, beats) ?? own;
     if (!again && passes(own)) {
-      const { text, key } = await withOpusWords(line, own, ai);
+      const { text, key } = line.handwritten ? await withOpusWords(line, own, ai, passes) : { text: await typedMarks(line, own, ai, passes), key: undefined };
       update(line.id, { status: 'read', text, checked: false, ...keyFrom(line, text, key) });
       return text;
     }
@@ -365,7 +395,7 @@ function Scanner() {
         if (passes(text) && keepsParts(text, draft) && !(corrected && changedShare(text, draft) > 0.2)) {
           // (Not when the person asked again: the words may be theirs.)
           let key = r.key;
-          if (corrected && !again) ({ text, key = r.key } = await withOpusWords(line, text, ai));
+          if (corrected && !again) ({ text, key = r.key } = await withOpusWords(line, text, ai, passes));
           update(line.id, { status: 'read', text, doubts: r.doubts, checked: false, via, ...keyFrom(line, text, key) });
           return text;
         }
@@ -391,6 +421,7 @@ function Scanner() {
   };
 
   const read = async () => {
+    marksStopped.current = false;
     setScanId(`${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`);
     setPhase('reading');
     setLines([]);
@@ -574,6 +605,8 @@ function Scanner() {
         error={error}
         pagesLeft={allowance.data?.pages}
         partsWanted={partsWanted}
+        marksAi={marksAi}
+        setMarksAi={chooseMarks}
         setPartsWanted={setPartsWanted}
         written={written}
         setWritten={setWritten}
@@ -668,6 +701,8 @@ function ChooseStep(props: {
   setPartsWanted(n: number): void;
   written: Written | null;
   setWritten(w: Written): void;
+  marksAi: boolean;
+  setMarksAi(on: boolean): void;
   onPhoto(): void;
   onChoose(): void;
   onRemove(i: number): void;
@@ -752,6 +787,21 @@ function ChooseStep(props: {
                   ? 'A typed PDF is read from its own text, a photo from the picture.'
                   : 'Choose one, so SolfaScores reads it the right way.'}
             </Text>
+            <View style={styles.toggle}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.toggleLabel}>Read marks and slurs with AI</Text>
+                <Text style={styles.small}>Dynamics, slurs, hairpins and tempo words on every line. Uses some of today’s AI allowance.</Text>
+              </View>
+              <Switch
+                value={props.marksAi}
+                onValueChange={props.setMarksAi}
+                accessibilityLabel="Read marks and slurs with AI"
+                trackColor={{ false: colors.switchOff, true: colors.primary }}
+                thumbColor={colors.onPrimary}
+                // On the web, react-native-web colours the "on" knob separately.
+                {...({ activeThumbColor: colors.onPrimary } as object)}
+              />
+            </View>
           </Card>
           <Card>
             <Kicker>Voice parts in each line</Kicker>
@@ -764,7 +814,11 @@ function ChooseStep(props: {
           </Card>
           {error ? <ErrorText message={error} /> : null}
           <Button label="Read the sheet" onPress={props.onRead} disabled={!props.written} />
-          <Text style={styles.tip}>SolfaScores reads the sheet itself, and asks an AI only about lines it can’t get right. Then you check each line before anything is saved.</Text>
+          <Text style={styles.tip}>
+            {props.marksAi
+              ? 'SolfaScores reads the sheet itself, and asks an AI about lines it can’t get right and for each line’s marks and slurs. Then you check each line before anything is saved.'
+              : 'SolfaScores reads the sheet itself, and asks an AI only about lines it can’t get right. Then you check each line before anything is saved.'}
+          </Text>
         </>
       )}
       {pagesLeft !== undefined ? <Text style={[styles.tip, { textAlign: 'center' }]}>You can scan {pagesLeft} more page{pagesLeft === 1 ? '' : 's'} today.</Text> : null}
@@ -1275,6 +1329,8 @@ const useStyles = makeStyles((colors) => ({
   tip: { fontFamily: fonts.body, fontSize: 13, lineHeight: 18, color: colors.muted },
   muted: { fontFamily: fonts.bold, fontSize: 12.5, color: colors.muted },
   small: { fontFamily: fonts.body, fontSize: 12.5, color: colors.muted },
+  toggle: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4 },
+  toggleLabel: { fontFamily: fonts.bold, fontSize: 14.5, color: colors.ink },
   rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   tray: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },

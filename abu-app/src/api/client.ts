@@ -371,10 +371,19 @@ export const api = {
   },
   /** Cloudflare's reader reads a row of words (a JPEG of the row). */
   scanWords: (image: Blob) => request<{ words: string }>('/scan/words', { method: 'POST', body: image, headers: { 'Content-Type': 'image/jpeg' } }),
-  /** Opus copies a line's words (a JPEG), each part's, given its notes as read (`after` is the part's place), and a new key written with it. */
-  scanLineWords: (image: Blob, o: { parts: string[]; notes: string }) => {
+  /**
+   * Opus copies a line's words (a JPEG), each part's, given its notes as read (`after` is the part's place), and a
+   * new key written with it; with `marks`, the rows of notes back too, with the marks and slurs printed with them.
+   */
+  scanLineWords: (image: Blob, o: { parts: string[]; notes: string; marks?: boolean }) => {
     const q = new URLSearchParams({ parts: o.parts.join(','), notes: o.notes });
-    return request<{ words: { after: number; text: string }[]; key?: string }>(`/scan/line-words?${q}`, { method: 'POST', body: image, headers: { 'Content-Type': 'image/jpeg' } });
+    if (o.marks) q.set('marks', '1');
+    return request<{ words: { after: number; text: string }[]; key?: string; notes?: string }>(`/scan/line-words?${q}`, { method: 'POST', body: image, headers: { 'Content-Type': 'image/jpeg' } });
+  },
+  /** A line's rows (`notes`) back with the marks and slurs printed with them (a JPEG of the line): Cloudflare's reader, or Claude's with `by: 'claude'`. */
+  scanMarks: (image: Blob, o: { parts: string[]; notes: string; by: 'cloudflare' | 'claude' }) => {
+    const q = new URLSearchParams({ parts: o.parts.join(','), notes: o.notes, by: o.by });
+    return request<{ text: string }>(`/scan/marks?${q}`, { method: 'POST', body: image, headers: { 'Content-Type': 'image/jpeg' } });
   },
   /** The sheet's title, composer, key and time, from a picture of the top of its first page (Cloudflare's reader); "" where none was found. */
   scanHeading: (image: Blob) =>

@@ -74,7 +74,7 @@ import {
 } from './domain/songs';
 import { newId } from './domain/access';
 import { scanAllowance, useScan } from './domain/scan';
-import { checkImage, checkLine, cloudflareReady, fixLine, partOf, readHeading, readLine, readLineWords, readPage, readWords, scanningReady, scanReaders } from './scan';
+import { checkImage, checkLine, cloudflareReady, fixLine, partOf, readHeading, readLine, readLineWords, readMarks, readPage, readWords, scanningReady, scanReaders } from './scan';
 import { AppError, badRequest, notFound } from './errors';
 
 type App = { Bindings: Env; Variables: { userId: string } };
@@ -303,7 +303,10 @@ app.post('/scan/line', signedIn, async (c) => {
   return c.json(await readLine(c.env, image, type, { parts, ...opts }));
 });
 
-/** A line's words, each part's, given its notes as read (?notes=), with the line's picture as the body (Opus). */
+/**
+ * A line's words, each part's, given its notes as read (?notes=), with the line's picture as the body (Opus).
+ * With ?marks=1, its rows of notes come back too, with the marks and slurs printed with them.
+ */
 app.post('/scan/line-words', signedIn, async (c) => {
   scanningReady(c.env);
   const parts = lineParts(c);
@@ -313,7 +316,25 @@ app.post('/scan/line-words', signedIn, async (c) => {
   const image = await c.req.arrayBuffer();
   const type = checkImage(contentType(c), image.byteLength);
   await useScan(c.env.DB, c.get('userId'), 'line');
-  return c.json(await readLineWords(c.env, image, type, { parts, notes }));
+  return c.json(await readLineWords(c.env, image, type, { parts, notes, marks: c.req.query('marks') === '1' }));
+});
+
+/**
+ * The marks and slurs printed with a line that reads right already (?notes=, its rows), with the line's picture
+ * as the body: Cloudflare's reader, or Claude's cheap model with ?by=claude. Counted as a line.
+ */
+app.post('/scan/marks', signedIn, async (c) => {
+  const by = c.req.query('by') === 'claude' ? 'claude' : 'cloudflare';
+  if (by === 'claude') scanningReady(c.env);
+  else cloudflareReady(c.env);
+  const parts = lineParts(c);
+  const notes = (c.req.query('notes') ?? '').slice(0, 4000);
+  if (!notes.trim()) throw badRequest('Send the line’s notes.');
+  checkImage(contentType(c), Number(c.req.header('content-length') ?? 1) || 1);
+  const image = await c.req.arrayBuffer();
+  const type = checkImage(contentType(c), image.byteLength);
+  await useScan(c.env.DB, c.get('userId'), 'line');
+  return c.json(await readMarks(c.env, image, type, { parts, notes, by }));
 });
 
 /** Checks a line SolfaScores' own model read (?draft=, the reading as text), with the line's picture as the body. */
