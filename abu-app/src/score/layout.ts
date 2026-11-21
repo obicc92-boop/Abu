@@ -6,7 +6,7 @@
  *
  * Pure module: no React.
  */
-import { dohTimeline, octaveOf, SYLLABLE_PATTERN, type ParsedSong } from '@/solfa';
+import { dohTimeline, octaveOf, SYLLABLE_PATTERN, type ExpressionKind, type ParsedSong } from '@/solfa';
 
 export interface ScoreCell {
   /** Absolute beat this column plays on. */
@@ -26,11 +26,40 @@ export interface LyricSegment {
   text: string;
 }
 
+/** A musical marking on the score (src/solfa/expressions.ts), drawn from the column of the beat it starts on. */
+export interface ScoreMark {
+  /** Absolute beat it starts on. */
+  beat: number;
+  /** As shown: "pp", "sfz", "cresc.", "Andante M. 70", "rit.". */
+  text: string;
+  kind: ExpressionKind;
+}
+
+/**
+ * A slur under a row's notes on one line of the score: written in brackets ("(m'.d')", "(s :f |m)"), drawn as a
+ * sheet does in sol-fa, as a line under the notes from the first to the last.
+ */
+export interface ScoreSlur {
+  /** First and last column it runs under. */
+  from: number;
+  to: number;
+  /**
+   * Where it starts under the first column's notes and ends under the last's, as a share of their shown width
+   * (0–1). Null where it runs on from the line before or to the next line: from or to that column's edge.
+   */
+  start: number | null;
+  end: number | null;
+}
+
 export interface ScoreRow {
   part: string;
   cells: ScoreCell[];
   /** Words under this row, or null when the part has none. */
   lyrics: LyricSegment[] | null;
+  /** This part's own markings starting on this line (dynamics, accents, cresc., dim.), drawn just above its notes. */
+  marks: ScoreMark[];
+  /** Slurs under this row's notes on this line, in order. */
+  slurs: ScoreSlur[];
 }
 
 export interface ScoreSystem {
@@ -44,11 +73,23 @@ export interface ScoreSystem {
   rows: ScoreRow[];
   /** Key changes starting on this line: the beat, and the new doh (semitones above C, before any transpose). */
   keys: { beat: number; semitone: number }[];
+  /**
+   * Markings for every part starting on this line: tempo, rit., a tempo, and dynamics written on a line of their
+   * own. Drawn above the line, beside the key changes.
+   */
+  marks: ScoreMark[];
 }
 
 export interface LayoutOptions {
   /** Most beat columns per line. 12 suits a phone; Perform mode uses fewer. */
   maxBeats?: number;
+  /**
+   * Room across a line, in note characters (the score's width over one character of the notes' type). Given, whole
+   * bars go on a line while their columns fit it, so no line is crowded, and `maxBeats` only applies if given too;
+   * a bar too wide on its own gets a line to itself (the score lets it scroll sideways). Not given (before the
+   * score knows its width), lines take `maxBeats` beats as before.
+   */
+  maxChars?: number;
   /** Show only this part ("my part only"). Words come from another part if it has none. */
   only?: string | null;
 }
@@ -57,7 +98,11 @@ export interface LayoutOptions {
 const MIN_COLUMN = 3;
 
 export function layoutScore(song: ParsedSong, opts: LayoutOptions = {}): ScoreSystem[] {
-  const maxBeats = opts.maxBeats ?? 12;
+  const { maxChars } = opts;
+  const maxBeats = opts.maxBeats ?? (maxChars ? Infinity : 12);
+  // Fitted to a width, nothing stretches a line to give a beat's colon room beside a busy beat ("s,f.m,r"), so
+  // each column has a character more than its notes.
+  const gutter = maxChars ? 1 : 0;
   const systems: ScoreSystem[] = [];
   // Where each key change starts (for one part, where that part changes).
   const changes = dohTimeline(song, 0, opts.only ?? undefined).slice(1);
@@ -65,66 +110,169 @@ export function layoutScore(song: ParsedSong, opts: LayoutOptions = {}): ScoreSy
   song.sections.forEach((sec, si) => {
     const first = sec.order[0];
     const bars = sec.bars[first];
-    const barLen = Math.max(1, ...bars.map((b) => b.length));
-    const fit = Math.max(1, Math.floor(maxBeats / barLen));
-    const per = Math.ceil(bars.length / Math.ceil(bars.length / fit));
     const rows = opts.only && sec.order.includes(opts.only) ? [opts.only] : sec.order;
     const lyricsFrom = (p: string): string | null => {
       if (sec.lyrics[p]) return p;
       if (opts.only) return sec.order.find((q) => sec.lyrics[q]) ?? null;
       return null;
     };
+    // The beat each bar starts on, and where the last one ends.
+    const barStarts = [sec.start];
+    for (const bar of bars) barStarts.push(barStarts[barStarts.length - 1] + bar.length);
 
-    let i = 0;
-    let beatAt = sec.start;
-    while (i < bars.length) {
-      const take: number[] = [];
-      let n = 0;
-      while (i + take.length < bars.length && take.length < per) {
-        n += bars[i + take.length].length;
-        take.push(i + take.length);
-      }
-      const start = beatAt;
+    /** Bars `from` up to (not including) `to` as one line of the score; its slurs are added once the lines are chosen. */
+    const line = (from: number, to: number): Omit<ScoreSystem, 'id' | 'heading'> => {
+      const start = barStarts[from];
+      const n = barStarts[to] - start;
+      const keys = changes.filter((c) => c.beat >= start - 1e-6 && c.beat < start + n - 1e-6).map((c) => ({ beat: c.beat, semitone: c.semitone }));
       const lineRows: ScoreRow[] = rows.map((p) => {
         const cells: ScoreCell[] = [];
         let b = start;
-        for (const bi of take) {
+        for (let bi = from; bi < to; bi++) {
           (sec.bars[p][bi] ?? []).forEach((text, k) => {
-            cells.push({ beat: b, text, barStart: k === 0, hold: text === '-' || text === '' });
+            const bare = text.replace(SLUR_RE, '');
+            cells.push({ beat: b, text, barStart: k === 0, hold: bare === '-' || bare === '' });
             b += 1;
           });
         }
         const lp = lyricsFrom(p);
-        return { part: p, cells, lyrics: lp ? lyricSegments(sec.lyrics[lp], start, n) : null };
+        return { part: p, cells, lyrics: lp ? lyricSegments(sec.lyrics[lp], start, n) : null, marks: marksOn(song, p, start, n), slurs: [] };
       });
-      systems.push({
-        id: `${si}-${i}`,
-        heading: i === 0 && sec.name ? sec.name : null,
-        start,
-        beats: n,
-        widths: columnWidths(lineRows, start, n),
-        rows: lineRows,
-        keys: changes.filter((c) => c.beat >= start - 1e-6 && c.beat < start + n - 1e-6).map((c) => ({ beat: c.beat, semitone: c.semitone })),
-      });
-      beatAt += n;
-      i += take.length;
+      const marks = marksOn(song, null, start, n);
+      return { start, beats: n, widths: columnWidths(lineRows, start, n, marks, keys, gutter), rows: lineRows, keys, marks };
+    };
+
+    const lines = maxChars ? linesByRoom(bars.length, barStarts, line, maxChars, maxBeats) : linesByBeats(bars, maxBeats);
+    // Parts with a slur still open at the end of the line before, so it runs on from the next line's start.
+    const slurOpen: Record<string, boolean> = {};
+    let from = 0;
+    for (const count of lines) {
+      const made = line(from, from + count);
+      for (const row of made.rows) {
+        const got = slursIn(row.cells, !!slurOpen[row.part]);
+        slurOpen[row.part] = got.open;
+        row.slurs = got.slurs;
+      }
+      systems.push({ id: `${si}-${from}`, heading: from === 0 && sec.name ? sec.name : null, ...made });
+      from += count;
     }
   });
   return systems;
 }
 
+/**
+ * Bars on each line, by count: as many as `maxBeats` holds of the longest bar,
+ * spread evenly so a bar is never left alone on the last line (scoreHTML's rule).
+ */
+function linesByBeats(bars: string[][], maxBeats: number): number[] {
+  if (!bars.length) return [];
+  const barLen = Math.max(1, ...bars.map((b) => b.length));
+  const fit = Math.max(1, Math.floor(maxBeats / barLen));
+  const per = Math.ceil(bars.length / Math.ceil(bars.length / fit));
+  const lines: number[] = [];
+  for (let i = 0; i < bars.length; i += per) lines.push(Math.min(per, bars.length - i));
+  return lines;
+}
+
+/**
+ * Bars on each line, by the room they need: a line takes whole bars while
+ * their columns fit `maxChars` (and `maxBeats`); a bar too wide on its own has
+ * a line to itself. Of the ways with the fewest lines, the one whose lines are
+ * most even in width (least sum of squares), so a bar is left alone on the last
+ * line only when nothing else fits; on a tie, the earlier lines fuller.
+ */
+function linesByRoom(
+  count: number,
+  barStarts: number[],
+  line: (from: number, to: number) => { widths: number[] },
+  maxChars: number,
+  maxBeats: number,
+): number[] {
+  // For each number of bars from the start: the fewest lines to hold them, how even, and where its last line starts.
+  const best: { lines: number; cost: number; from: number }[] = [{ lines: 0, cost: 0, from: 0 }];
+  for (let to = 1; to <= count; to++) {
+    let pick: { lines: number; cost: number; from: number } | null = null;
+    for (let from = to - 1; from >= 0; from--) {
+      const width = line(from, to).widths.reduce((a, b) => a + b, 0);
+      const alone = to - from === 1;
+      // Lines only get wider with more bars, so once one is too wide, so is every longer one.
+      if (!alone && (width > maxChars || barStarts[to] - barStarts[from] > maxBeats)) break;
+      const lines = best[from].lines + 1;
+      const cost = best[from].cost + width * width;
+      if (!pick || lines < pick.lines || (lines === pick.lines && cost < pick.cost)) pick = { lines, cost, from };
+    }
+    best.push(pick!);
+  }
+  const lines: number[] = [];
+  for (let to = count; to > 0; to = best[to].from) lines.unshift(to - best[to].from);
+  return lines;
+}
+
+/** A slur's brackets, kept in a beat as written ("(m'.d')", "(s", "m)") and never shown. */
+const SLUR_RE = /[()]/g;
+
+/**
+ * The slurs under a row's notes on one line, from the brackets in its beats.
+ * One open at the line's start (`open`, from the line before) runs from the
+ * first column's edge, and one still open at its end runs to the last
+ * column's edge and on to the next line (`open` in the answer).
+ */
+function slursIn(cells: ScoreCell[], open: boolean): { slurs: ScoreSlur[]; open: boolean } {
+  if (!cells.length) return { slurs: [], open };
+  const slurs: ScoreSlur[] = [];
+  let now: ScoreSlur | null = open ? { from: 0, to: 0, start: null, end: null } : null;
+  for (let col = 0; col < cells.length; col++) {
+    const text = cells[col].text;
+    if (!text.includes('(') && !text.includes(')')) continue;
+    // Where each bracket falls in the beat as shown, as a share of its width (mono type: one character, one width).
+    const pieces = text.split(/([()])/);
+    const widths = pieces.map((piece) => (piece === '(' || piece === ')' ? 0 : displayBeat(piece).length));
+    const total = widths.reduce((a, b) => a + b, 0) || 1;
+    let at = 0;
+    pieces.forEach((piece, k) => {
+      if (piece === '(' && !now) now = { from: col, to: col, start: at / total, end: null };
+      else if (piece === ')' && now) {
+        slurs.push({ ...now, to: col, end: at / total });
+        now = null;
+      }
+      at += widths[k];
+    });
+  }
+  if (now) slurs.push({ ...now, to: cells.length - 1, end: null });
+  return { slurs, open: now !== null };
+}
+
+/**
+ * A part's markings (or, with null, those for every part) starting within a line's beats. One written in several
+ * parts' rows on the same beat (a tempo over each part) is shown once.
+ */
+function marksOn(song: ParsedSong, part: string | null, start: number, n: number): ScoreMark[] {
+  const marks: ScoreMark[] = [];
+  for (const e of song.expressions) {
+    if (e.part !== part || e.beat < start - 1e-6 || e.beat >= start + n - 1e-6) continue;
+    if (marks.some((m) => m.text === e.text && Math.abs(m.beat - e.beat) < 1e-6)) continue;
+    marks.push({ beat: e.beat, text: e.text, kind: e.kind });
+  }
+  return marks;
+}
+
 /** Words are set smaller than notes: one word character takes about this many note characters. */
 const LYRIC_CHAR = 0.7;
+/** Markings are set small too, about the same. */
+const MARK_CHAR = 0.7;
+/** Room a key change's name takes ("Doh is Bb"), when a marking shares its line. */
+const KEY_CHARS = 9;
 
 /**
  * Relative column widths in note characters: room for the longest beat in each
- * column, then extra on a syllable's first column when the words need it.
+ * column (and `gutter` beside it), then extra on a syllable's first column when
+ * the words need it, and on a marking's first column when it needs it.
  */
-function columnWidths(rows: ScoreRow[], start: number, n: number): number[] {
+function columnWidths(rows: ScoreRow[], start: number, n: number, marks: ScoreMark[], keys: { beat: number }[], gutter: number): number[] {
   const widths = new Array<number>(n).fill(MIN_COLUMN);
   for (const row of rows) {
     row.cells.forEach((cell, col) => {
-      if (col < n) widths[col] = Math.max(widths[col], displayBeat(cell.text).length);
+      if (col < n) widths[col] = Math.max(widths[col], displayBeat(cell.text).length + gutter);
     });
   }
   for (const row of rows) {
@@ -135,7 +283,36 @@ function columnWidths(rows: ScoreRow[], start: number, n: number): number[] {
       if (need > have) widths[from] += need - have;
     }
   }
+  for (const row of rows) roomForMarks(widths, start, row.marks, []);
+  roomForMarks(widths, start, marks, keys);
   return widths;
+}
+
+/**
+ * Makes room for a line of markings. A marking runs on over the beats after it,
+ * up to the next one on its line (markings on the same beat, and a key change
+ * there, side by side), so its first column is widened only when even that is
+ * too narrow. A line with key changes and no markings is left as it was.
+ */
+function roomForMarks(widths: number[], start: number, marks: ScoreMark[], keys: { beat: number }[]): void {
+  if (!marks.length) return;
+  const cols = new Map<number, { chars: number; marked: boolean }>();
+  const add = (beat: number, chars: number, marked: boolean) => {
+    const col = Math.floor(beat - start);
+    const was = cols.get(col);
+    cols.set(col, was ? { chars: was.chars + 2 + chars, marked: was.marked || marked } : { chars, marked });
+  };
+  keys.forEach((k) => add(k.beat, KEY_CHARS, false));
+  marks.forEach((m) => add(m.beat, m.text.length, true));
+  const at = [...cols.keys()].sort((a, b) => a - b);
+  at.forEach((col, i) => {
+    const { chars, marked } = cols.get(col)!;
+    if (!marked) return;
+    const to = i + 1 < at.length ? at[i + 1] : widths.length;
+    const have = widths.slice(col, to).reduce((a, b) => a + b, 0);
+    const need = Math.ceil(chars * MARK_CHAR + 0.5);
+    if (need > have) widths[col] += need - have;
+  });
 }
 
 /** Groups a line's words so each syllable spans the beats until the next one. */
@@ -164,9 +341,11 @@ const octave = (mark: string | undefined) => {
 /**
  * How a beat is shown: octave marks as small raised or lowered digits (d' → d¹,
  * t1 → t₁), holds as "–", and a bridge note as the sheet prints it, its old
- * name small and raised before its new one (s=d → ˢd).
+ * name small and raised before its new one (s=d → ˢd). A slur's brackets are
+ * left out (the score draws a line under the notes instead), so they take no room.
  */
-export function displayBeat(text: string): string {
+export function displayBeat(beat: string): string {
+  const text = beat.replace(SLUR_RE, '');
   if (text === '-') return '–';
   return text
     .replace(BRIDGE_RE, (_m, syl: string, mark?: string) => [...syl].map((c) => SMALL[c] ?? c).join('') + octave(mark))

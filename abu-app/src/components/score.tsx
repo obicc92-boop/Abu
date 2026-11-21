@@ -1,8 +1,8 @@
-import { memo, useEffect, useMemo, useRef } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { ScrollView, StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
 
-import { displayBeat, layoutScore, type ScoreCell, type ScoreSystem } from '@/score/layout';
-import { KEY_NAMES, mod12, partName, type ParsedSong } from '@/solfa';
+import { displayBeat, layoutScore, type ScoreCell, type ScoreSlur, type ScoreSystem } from '@/score/layout';
+import { isTempo, KEY_NAMES, mod12, partName, type ExpressionKind, type ParsedSong } from '@/solfa';
 import { useTheme } from '@/theme/theme';
 import { fonts, lightColors, partColor, partInk, partLetter, type Palette } from '@/theme/tokens';
 
@@ -40,6 +40,7 @@ interface ScoreProps {
   silent?: Readonly<Record<string, boolean>>;
   /** Show only this part. */
   only?: string | null;
+  /** Most beats on a line until the score knows its width; from then, lines take what fits it. */
   maxBeats?: number;
   /** Where the line holding the active beat sits, relative to the score, so the screen can scroll to it. */
   onActiveLine?: (y: number, height: number) => void;
@@ -60,14 +61,23 @@ interface ScoreProps {
  */
 export function Score({ song, activeBeat, silent, only, maxBeats, onActiveLine, theme = 'player', size = 12.5, transpose = 0, mine = null }: ScoreProps) {
   const { scheme, colors } = useTheme();
-  const systems = useMemo(() => layoutScore(song, { only, maxBeats }), [song, only, maxBeats]);
+  const big = theme !== 'player';
+  const shown = only && song.parts.includes(only) ? [only] : song.parts;
+  // Lines are laid out by the room their bars need (owner's report, 21 November 2026: a busy song was jam-packed
+  // on a phone, notes running into each other), so the score measures its width and counts it in characters of
+  // the notes' type, less the card's padding, the parts' coloured edge, and a shared colour's letter if any.
+  const [width, setWidth] = useState(0);
+  const charWidth = size * MONO_CHAR;
+  const edge = big ? EDGE_BIG : EDGE;
+  const twins = shown.some((p, i) => shown.findIndex((q) => partColor(q) === partColor(p)) !== i);
+  const room = width - 2 * (big ? PAD_BIG : PAD) - edge.width - edge.gap - (twins ? twinRoom(big) : 0);
+  const maxChars = width > 0 ? Math.max(MIN_COLUMN_CHARS, Math.floor(room / charWidth)) : 0;
+  const systems = useMemo(() => layoutScore(song, maxChars ? { only, maxChars } : { only, maxBeats }), [song, only, maxBeats, maxChars]);
   const positions = useRef<Record<string, { y: number; height: number }>>({});
   const activeId = systems.find((s) => activeBeat >= s.start && activeBeat < s.start + s.beats)?.id ?? null;
   // Perform chooses its own look; the player follows the app's light or dark.
   // Kept the same between beats, so the lines (memoised) don't all draw again on every beat.
   const palette = useMemo(() => (theme === 'player' ? playerLook(colors, scheme === 'dark') : PERFORM_LOOKS[theme]), [theme, colors, scheme]);
-  const big = theme !== 'player';
-  const shown = only && song.parts.includes(only) ? [only] : song.parts;
 
   useEffect(() => {
     const pos = activeId ? positions.current[activeId] : undefined;
@@ -75,7 +85,13 @@ export function Score({ song, activeBeat, silent, only, maxBeats, onActiveLine, 
   }, [activeId, onActiveLine]);
 
   return (
-    <View style={[styles.score, big && { gap: 14 }]}>
+    <View
+      style={[styles.score, big && { gap: 14 }]}
+      onLayout={(e) => {
+        const now = Math.round(e.nativeEvent.layout.width);
+        setWidth((was) => (was === now ? was : now));
+      }}
+    >
       {shown.length > 1 ? (
         <View style={styles.legend}>
           {shown.map((p) => (
@@ -97,7 +113,17 @@ export function Score({ song, activeBeat, silent, only, maxBeats, onActiveLine, 
           }}
         >
           {s.heading ? <Text style={[styles.heading, { color: palette.heading }, big && { fontSize: 13 }]}>{s.heading}</Text> : null}
-          <System system={s} activeBeat={s.id === activeId ? activeBeat : -1} silent={silent} palette={palette} size={size} big={big} transpose={transpose} />
+          <System
+            system={s}
+            activeBeat={s.id === activeId ? activeBeat : -1}
+            silent={silent}
+            palette={palette}
+            size={size}
+            big={big}
+            transpose={transpose}
+            maxChars={maxChars}
+            charWidth={charWidth}
+          />
         </View>
       ))}
     </View>
@@ -112,42 +138,37 @@ interface SystemProps {
   size: number;
   big: boolean;
   transpose: number;
+  /** Room across a line in note characters (0 before the score knows its width), and one character's width. */
+  maxChars: number;
+  charWidth: number;
 }
 
 /** One line of the score. Memoised: only the line being played re-renders each beat. */
-const System = memo(function System({ system, activeBeat, silent, palette, size, big, transpose }: SystemProps) {
+const System = memo(function System({ system, activeBeat, silent, palette, size, big, transpose, maxChars, charWidth }: SystemProps) {
   const { widths, start } = system;
+  const need = widths.reduce((a, b) => a + b, 0);
   const lyricSize = big ? size * 0.72 : 9.5;
-  const span = (from: number, to: number) => widths.slice(from, to).reduce((a, b) => a + b, 0);
+  const markSize = big ? size * 0.62 : 9;
   const edge = big ? EDGE_BIG : EDGE;
   // Parts sharing a colour on this line (S1 and S2, or parts with no name) keep a small label.
   const shared = system.rows.map((r) => partColor(r.part)).filter((c, i, all) => all.indexOf(c) !== i);
-  return (
-    <View style={[styles.system, { backgroundColor: palette.system }, big && styles.systemBig]}>
-      {system.keys.length ? (
-        // Where the key changes: "Doh is A" from that beat on.
-        <View style={styles.line}>
-          <View style={{ width: edge.width + edge.gap }} />
-          {span(0, Math.floor(system.keys[0].beat - start)) > 0 ? <View style={{ flex: span(0, Math.floor(system.keys[0].beat - start)) }} /> : null}
-          {system.keys.map((k, i) => {
-            const from = Math.floor(k.beat - start);
-            const to = i + 1 < system.keys.length ? Math.floor(system.keys[i + 1].beat - start) : widths.length;
-            return (
-              <View key={k.beat} style={{ flex: Math.max(1, span(from, to)), minWidth: 0 }}>
-                <Text numberOfLines={1} style={[styles.keyMark, { color: palette.heading, fontSize: big ? size * 0.62 : 9 }]}>
-                  Doh is {KEY_NAMES[mod12(k.semitone + transpose)]}
-                </Text>
-              </View>
-            );
-          })}
-        </View>
-      ) : null}
+  // Above the line, from the beat each starts: where the key changes ("Doh is A" from that beat on), and markings
+  // for every part (tempo, rit., a dynamic written on a line of its own), in the headings' colour.
+  const lineMarks: LineMark[] = [
+    ...system.keys.map((k) => ({ beat: k.beat, text: `Doh is ${KEY_NAMES[mod12(k.semitone + transpose)]}`, style: [styles.keyMark, { color: palette.heading }] })),
+    ...system.marks.map((m) => ({ beat: m.beat, text: m.text, style: markLook(m.kind, palette.heading, palette) })),
+  ];
+  const lines = (
+    <>
+      {lineMarks.length ? <MarkLine marks={lineMarks} start={start} widths={widths} fontSize={markSize} lead={<View style={{ width: edge.width + edge.gap }} />} /> : null}
       {system.rows.map((row) => {
         const missing = widths.slice(row.cells.length).reduce((a, b) => a + b, 0);
         const ink = partInk(row.part, palette.dark);
         // On a dark background, the edge is the part's lighter shade too, so it stands out as well as its notes.
         const color = palette.dark ? ink : partColor(row.part);
         const faint = !!silent?.[row.part];
+        const twin = shared.includes(partColor(row.part));
+        const slurs = row.slurs.length ? slurCells(row.slurs) : null;
         return (
           <View key={row.part} style={[styles.partRow, faint && styles.faint]}>
             <View
@@ -156,8 +177,25 @@ const System = memo(function System({ system, activeBeat, silent, palette, size,
               style={[styles.edge, { width: edge.width, marginRight: edge.gap, backgroundColor: color }]}
             />
             <View style={styles.partBody}>
+              {row.marks.length ? (
+                // The part's own markings (p, f, sfz, cresc.), just above its notes, in its colour.
+                <MarkLine
+                  marks={row.marks.map((m) => ({ beat: m.beat, text: m.text, style: markLook(m.kind, ink, palette) }))}
+                  start={start}
+                  widths={widths}
+                  fontSize={markSize}
+                  lead={
+                    // Unseen, so the markings line up with notes moved along by the label.
+                    twin ? (
+                      <Text aria-hidden style={[styles.twin, styles.unseen, { fontSize: big ? 11 : 9 }]}>
+                        {partLetter(row.part)}
+                      </Text>
+                    ) : null
+                  }
+                />
+              ) : null}
               <View style={styles.line}>
-                {shared.includes(partColor(row.part)) ? <Text style={[styles.twin, { color: ink, fontSize: big ? 11 : 9 }]}>{partLetter(row.part)}</Text> : null}
+                {twin ? <Text style={[styles.twin, { color: ink, fontSize: big ? 11 : 9 }]}>{partLetter(row.part)}</Text> : null}
                 {row.cells.map((cell, i) => (
                   <Cell
                     key={cell.beat}
@@ -169,6 +207,7 @@ const System = memo(function System({ system, activeBeat, silent, palette, size,
                     palette={palette}
                     size={size}
                     big={big}
+                    slur={slurs?.[i]}
                   />
                 ))}
                 {missing > 0 ? <View style={{ flex: missing }} /> : null}
@@ -196,13 +235,128 @@ const System = memo(function System({ system, activeBeat, silent, palette, size,
           </View>
         );
       })}
+    </>
+  );
+  return (
+    <View style={[styles.system, { backgroundColor: palette.system }, big && styles.systemBig]}>
+      {maxChars && need > maxChars ? (
+        // A bar too wide for the screen even on its own: the line scrolls sideways in its card at the width it
+        // needs, rather than its notes running into each other.
+        <ScrollView
+          horizontal
+          contentContainerStyle={[styles.lines, big && styles.linesBig, { width: need * charWidth + edge.width + edge.gap + (shared.length ? twinRoom(big) : 0) }]}
+        >
+          {lines}
+        </ScrollView>
+      ) : (
+        lines
+      )}
     </View>
   );
 });
 
+/** A marking to draw above the notes, or a key change sharing their line, in its own type. */
+interface LineMark {
+  beat: number;
+  text: string;
+  style: StyleProp<TextStyle>;
+}
+
+/**
+ * How a marking is set, as printed sheets set them: dynamics and accents (p, ff,
+ * sfz) bold italic, cresc. and dim. italic, both in the part's colour (`ink`);
+ * tempo, rit. and a tempo italic in the headings' colour, like a key change.
+ */
+function markLook(kind: ExpressionKind, ink: string, palette: Look): StyleProp<TextStyle> {
+  if (isTempo(kind)) return [styles.markTempo, { color: palette.heading }];
+  return [kind === 'dynamic' || kind === 'accent' ? styles.markLoud : styles.markGradual, { color: ink }];
+}
+
+interface MarkLineProps {
+  marks: LineMark[];
+  start: number;
+  widths: number[];
+  fontSize: number;
+  /** What comes before the first beat's column, so the marks line up with the notes. */
+  lead: ReactNode;
+}
+
+/**
+ * A thin line of markings over the beat columns, each from its beat's column.
+ * A marking has the room up to the next one on the line, so a long one runs on
+ * over the beats after it rather than being squashed (the layout widens its
+ * column when even that isn't enough); ones on the same beat sit side by side.
+ */
+function MarkLine({ marks, start, widths, fontSize, lead }: MarkLineProps) {
+  const span = (from: number, to: number) => widths.slice(from, to).reduce((a, b) => a + b, 0);
+  const cols: { col: number; marks: LineMark[] }[] = [];
+  for (const m of marks) {
+    const col = Math.floor(m.beat - start);
+    const same = cols.find((c) => c.col === col);
+    if (same) same.marks.push(m);
+    else cols.push({ col, marks: [m] });
+  }
+  cols.sort((a, b) => a.col - b.col);
+  const before = span(0, cols[0]?.col ?? 0);
+  return (
+    <View style={styles.line}>
+      {lead}
+      {before > 0 ? <View style={{ flex: before }} /> : null}
+      {cols.map((c, i) => (
+        <View key={c.col} style={{ flex: Math.max(1, span(c.col, i + 1 < cols.length ? cols[i + 1].col : widths.length)), minWidth: 0 }}>
+          {/* Set in the first one's type too, so the line's ellipsis, if it ever needs one, matches it. */}
+          <Text numberOfLines={1} style={[styles.markLine, c.marks[0].style, { fontSize }]}>
+            {c.marks.map((m, j) => (
+              <Text key={j} style={m.style}>
+                {/* An em space: plain spaces run together on the web's single line. */}
+                {j ? '\u2003' : ''}
+                {m.text}
+              </Text>
+            ))}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/**
+ * What slurs draw in one cell: a line under its notes from `under`'s starts to
+ * ends (shares of their width), and on to the cell's left or right edge where
+ * the slur comes from or goes on to another cell.
+ */
+interface CellSlur {
+  left: boolean;
+  right: boolean;
+  under: [number, number][];
+}
+
+/** A row's slurs, cell by cell. */
+function slurCells(slurs: ScoreSlur[]): Record<number, CellSlur> {
+  const cells: Record<number, CellSlur> = {};
+  for (const s of slurs) {
+    for (let col = s.from; col <= s.to; col++) {
+      const cell = (cells[col] ??= { left: false, right: false, under: [] });
+      cell.left ||= col > s.from || s.start === null;
+      cell.right ||= col < s.to || s.end === null;
+      cell.under.push([col === s.from && s.start !== null ? s.start : 0, col === s.to && s.end !== null ? s.end : 1]);
+    }
+  }
+  return cells;
+}
+
 /** The coloured bar at the start of each part's row, and the room after it. */
 const EDGE = { width: 4, gap: 5 };
 const EDGE_BIG = { width: 5, gap: 7 };
+/** The card's padding at each side of a line, in the player and in Perform. */
+const PAD = 6;
+const PAD_BIG = 8;
+/** JetBrains Mono: every character, the raised and lowered octave marks too, is 0.6 of the type's size across. */
+const MONO_CHAR = 0.6;
+/** Never fewer note characters to a line than this, however narrow the score. */
+const MIN_COLUMN_CHARS = 3;
+/** Room for the small letter of parts sharing a colour ("S1"), before their notes (styles.twin). */
+const twinRoom = (big: boolean) => (big ? 11 : 9) * 1.4 + 3;
 
 interface CellProps {
   cell: ScoreCell;
@@ -214,9 +368,25 @@ interface CellProps {
   palette: Look;
   size: number;
   big: boolean;
+  /** A slur under this cell's notes, if any. */
+  slur?: CellSlur;
 }
 
-function Cell({ cell, flex, active, ink, now, palette, size, big }: CellProps) {
+function Cell({ cell, flex, active, ink, now, palette, size, big, slur }: CellProps) {
+  const note = (
+    <Text
+      numberOfLines={1}
+      style={[
+        styles.note,
+        { color: ink, fontSize: size, lineHeight: Math.round(size * 1.36) },
+        cell.hold && { color: palette.faint },
+        active && styles.noteNow,
+      ]}
+    >
+      {displayBeat(cell.text) || ' '}
+    </Text>
+  );
+  const line = [styles.slurLine, { backgroundColor: ink }];
   return (
     <View
       style={[
@@ -228,16 +398,22 @@ function Cell({ cell, flex, active, ink, now, palette, size, big }: CellProps) {
       ]}
     >
       {cell.barStart ? null : <Text style={[styles.colon, { color: palette.faint, fontSize: size * 0.96 }]}>:</Text>}
-      <Text
-        style={[
-          styles.note,
-          { color: ink, fontSize: size, lineHeight: Math.round(size * 1.36) },
-          cell.hold && { color: palette.faint },
-          active && styles.noteNow,
-        ]}
-      >
-        {displayBeat(cell.text) || ' '}
-      </Text>
+      {slur ? (
+        // As sol-fa sheets show a slur: a line in the part's colour under the notes, running on through the
+        // cell to the next one (or from the one before) when the slur goes on. The notes stay centred.
+        <View style={styles.slurred}>
+          <View style={styles.slurRun}>{slur.left ? <View style={line} /> : null}</View>
+          <View>
+            {note}
+            {slur.under.map(([a, b], k) => (
+              <View key={k} style={[line, { left: `${a * 100}%`, right: `${(1 - b) * 100}%` }]} />
+            ))}
+          </View>
+          <View style={styles.slurRun}>{slur.right ? <View style={line} /> : null}</View>
+        </View>
+      ) : (
+        note
+      )}
     </View>
   );
 }
@@ -257,8 +433,11 @@ const styles = StyleSheet.create({
     marginTop: 2,
     marginBottom: 4,
   },
-  system: { borderRadius: 11, paddingTop: 7, paddingRight: 6, paddingBottom: 5, paddingLeft: 6, gap: 3 },
-  systemBig: { paddingTop: 10, paddingRight: 8, paddingBottom: 8, paddingLeft: 8, gap: 4 },
+  system: { borderRadius: 11, paddingTop: 7, paddingRight: PAD, paddingBottom: 5, paddingLeft: PAD, gap: 3 },
+  systemBig: { paddingTop: 10, paddingRight: PAD_BIG, paddingBottom: 8, paddingLeft: PAD_BIG, gap: 4 },
+  /** A line too wide for the screen, inside its sideways scroll: the gaps the card gives its lines. */
+  lines: { flexDirection: 'column', gap: 3 },
+  linesBig: { gap: 4 },
   partRow: { flexDirection: 'row', alignItems: 'stretch' },
   edge: { borderRadius: 2, marginVertical: 2 },
   partBody: { flex: 1, minWidth: 0 },
@@ -274,5 +453,13 @@ const styles = StyleSheet.create({
   lyricBox: { minWidth: 0, paddingTop: 1, paddingBottom: 3, paddingLeft: 2 },
   lyric: { fontFamily: fonts.body },
   lyricNow: { fontFamily: fonts.heavy },
-  keyMark: { fontFamily: fonts.heavy, letterSpacing: 0.3, paddingLeft: 2, marginBottom: 1 },
+  markLine: { fontFamily: fonts.body, letterSpacing: 0.3, paddingLeft: 2, marginBottom: 1 },
+  keyMark: { fontFamily: fonts.heavy, fontStyle: 'normal' },
+  markLoud: { fontFamily: fonts.heavy, fontStyle: 'italic' },
+  markGradual: { fontFamily: fonts.body, fontStyle: 'italic' },
+  markTempo: { fontFamily: fonts.bold, fontStyle: 'italic' },
+  unseen: { opacity: 0 },
+  slurred: { flexDirection: 'row', alignSelf: 'stretch' },
+  slurRun: { flex: 1 },
+  slurLine: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 1.5, borderRadius: 1 },
 });

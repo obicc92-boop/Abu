@@ -123,3 +123,210 @@ describe('key changes on the score', () => {
     expect(systems.map((s) => s.keys)).toEqual([[], [{ beat: 10, semitone: 2 }]]);
   });
 });
+
+describe('musical markings on the score', () => {
+  const marksOf = (song: ReturnType<typeof parseSolfa>, opts?: Parameters<typeof layoutScore>[1]) =>
+    layoutScore(song, opts).map((s) => ({
+      line: s.marks.map((m) => [m.kind, m.text, m.beat]),
+      rows: Object.fromEntries(s.rows.map((r) => [r.part, r.marks.map((m) => [m.kind, m.text, m.beat])])),
+    }));
+
+  const song = parseSolfa(
+    [
+      '{Andante M. 70}',
+      'S  {p}d :r /{f}m :f | s :- /{cresc}- :- | d :r /{dim}m :f | s :- /- :- |',
+      'A  {mf}d :d /d :d | m :- /- :- | {rit}d :d /d :d | d :- /- :- |',
+      '',
+      '{ff}',
+      'S  {sfz}m :- /- :- | d :- /- :- |',
+      'A  {a tempo}d :- /- :- | m :- /- :- |',
+    ].join('\n'),
+    { time: '4/4' },
+  );
+
+  it('gives each row its own part’s markings, on the line holding their beats', () => {
+    expect(song.errors).toEqual([]);
+    expect(marksOf(song, { maxBeats: 8 }).map((s) => s.rows)).toEqual([
+      { S: [['dynamic', 'p', 0], ['dynamic', 'f', 2], ['cresc', 'cresc.', 6]], A: [['dynamic', 'mf', 0]] },
+      { S: [['dim', 'dim.', 10]], A: [] },
+      { S: [['accent', 'sfz', 16]], A: [] },
+    ]);
+  });
+
+  it('puts the markings for every part on the line itself: tempo, rit., a tempo, a dynamic on its own line', () => {
+    expect(marksOf(song, { maxBeats: 8 }).map((s) => s.line)).toEqual([
+      [['tempo', 'Andante M. 70', 0]],
+      [['rit', 'rit.', 8]],
+      [
+        ['dynamic', 'ff', 16],
+        ['atempo', 'a tempo', 16],
+      ],
+    ]);
+  });
+
+  it('shows a tempo written over every part once', () => {
+    const twice = parseSolfa('S  d :r /m :f | {rit}s :- /- :- |\nA  d :d /d :d | {rit}m :- /- :- |', { time: '4/4' });
+    expect(layoutScore(twice)[0].marks).toEqual([{ beat: 4, text: 'rit.', kind: 'rit' }]);
+  });
+
+  it('keeps the markings for every part and your own part’s with my part only', () => {
+    expect(marksOf(song, { maxBeats: 8, only: 'A' })).toEqual([
+      { line: [['tempo', 'Andante M. 70', 0]], rows: { A: [['dynamic', 'mf', 0]] } },
+      { line: [['rit', 'rit.', 8]], rows: { A: [] } },
+      {
+        line: [
+          ['dynamic', 'ff', 16],
+          ['atempo', 'a tempo', 16],
+        ],
+        rows: { A: [] },
+      },
+    ]);
+  });
+
+  it('shares the line with a key change on the same beat', () => {
+    const keyed = parseSolfa(['key: G', 'S  d :r /m :f | s :- /- :- |', 'Doh is D', '{Allegro}', 'S  m :r /d :- | r :- /- :- |'].join('\n'), { time: '4/4' });
+    const systems = layoutScore(keyed, { maxBeats: 8 });
+    expect(systems.map((s) => [s.keys.map((k) => k.beat), s.marks.map((m) => [m.text, m.beat])])).toEqual([
+      [[], []],
+      [[8], [['Allegro', 8]]],
+    ]);
+  });
+
+  it('lays out a song without markings as before', () => {
+    const systems = layoutScore(parseSolfa(OLD100, { time: '4/4' }));
+    expect(systems.every((s) => s.marks.length === 0 && s.rows.every((r) => r.marks.length === 0))).toBe(true);
+    expect(systems.map((s) => s.widths)).toEqual([
+      [3, 3, 4, 3, 4, 3, 4, 3, 3, 3, 3, 3],
+      [3, 3, 3, 3, 4, 4, 5, 3, 3, 3, 3, 3],
+      [3, 3, 4, 4, 4, 3, 5, 4, 3, 3, 3, 3],
+      [3, 3, 3, 3, 4, 3, 3, 3, 3, 3, 3, 3],
+    ]);
+  });
+
+  it('changes nothing else for markings that fit in the room to the next one', () => {
+    const plain = 'S  d :r /m :f | s :- /- :- |\nW  Sing to the Lord, sing\nA  d :d /d :d | m :- /- :- |';
+    const marked = '{Andante}\nS  {p}d :r /{f}m :f | s :- /{cresc}- :- |\nW  Sing to the Lord, sing\nA  {mf}d :d /d :d | m :- /- :- |';
+    const strip = (systems: ReturnType<typeof layoutScore>) => systems.map((s) => ({ ...s, marks: [], rows: s.rows.map((r) => ({ ...r, marks: [] })) }));
+    const [withMarks] = layoutScore(parseSolfa(marked, { time: '4/4' }));
+    expect(withMarks.rows[0].marks).toHaveLength(3);
+    expect(strip(layoutScore(parseSolfa(marked, { time: '4/4' })))).toEqual(strip(layoutScore(parseSolfa(plain, { time: '4/4' }))));
+  });
+
+  it('widens a column when a marking hasn’t the room before the next one', () => {
+    // "cresc." needs about 5 note characters; with "f" on the next beat it has only its own 3.
+    const [sys] = layoutScore(parseSolfa('S  {cresc}d :{f}r /m :f |', { time: '4/4' }));
+    expect(sys.widths).toEqual([5, 3, 3, 3]);
+  });
+});
+
+describe('slurs on the score', () => {
+  const slursOf = (text: string, maxBeats?: number) => layoutScore(parseSolfa(text, { time: '4/4' }), { maxBeats }).map((s) => s.rows[0].slurs);
+
+  it('underlines the notes of a slur in one beat, and shows no brackets', () => {
+    const [sys] = layoutScore(parseSolfa("S  (m'.d') :r /m :f |", { time: '4/4' }));
+    expect(sys.rows[0].slurs).toEqual([{ from: 0, to: 0, start: 0, end: 1 }]);
+    expect(sys.rows[0].cells[0].text).toBe("(m'.d')");
+    expect(displayBeat(sys.rows[0].cells[0].text)).toBe('m¹.d¹');
+  });
+
+  it('starts and ends under the notes it holds, partway through a beat', () => {
+    // "s.l" shown: the slur starts under the l, two thirds of the way along.
+    expect(slursOf('S  s.(l :t) /d :- |')).toEqual([[{ from: 0, to: 1, start: 2 / 3, end: 1 }]]);
+    expect(slursOf('S  (d.r).m :f /s :- |')).toEqual([[{ from: 0, to: 0, start: 0, end: 3 / 5 }]]);
+  });
+
+  it('runs across beats and across a bar line', () => {
+    expect(slursOf('S  (d :r) /m :f |')).toEqual([[{ from: 0, to: 1, start: 0, end: 1 }]]);
+    expect(slursOf('S  d :r /(s :f | m) :- /- :- |')).toEqual([[{ from: 2, to: 4, start: 0, end: 1 }]]);
+  });
+
+  it('carries on from the start of the next line when a line breaks inside it', () => {
+    const text = 'S  d :r /m :(f | s :- /- :- | m) :r /d :- |';
+    expect(slursOf(text, 4)).toEqual([
+      [{ from: 3, to: 3, start: 0, end: null }],
+      [{ from: 0, to: 3, start: null, end: null }],
+      [{ from: 0, to: 0, start: null, end: 1 }],
+    ]);
+  });
+
+  it('treats a held beat with a closing bracket as a hold', () => {
+    const [sys] = layoutScore(parseSolfa('S  (d :-) /m :f |', { time: '4/4' }));
+    expect(sys.rows[0].cells[1]).toMatchObject({ text: '-)', hold: true });
+    expect(displayBeat('-)')).toBe('–');
+  });
+
+  it('gives brackets no room, and leaves a song without slurs as it was', () => {
+    const widths = (text: string) => layoutScore(parseSolfa(text, { time: '4/4' })).map((s) => s.widths);
+    // (Without words: notes under a slur share a syllable, so words would sit differently.)
+    expect(widths("S  (m'.d') :(r | m) :f /s.(l :t) |\nA  d :d | d :d /d :d |")).toEqual(widths("S  m'.d' :r | m :f /s.l :t |\nA  d :d | d :d /d :d |"));
+    const systems = layoutScore(parseSolfa(OLD100, { time: '4/4' }));
+    expect(systems.every((s) => s.rows.every((r) => r.slurs.length === 0))).toBe(true);
+  });
+});
+
+describe('lines laid out by the room their bars need', () => {
+  // Busy like Handel's Worthy is the Lamb: many notes to a beat.
+  const busyLines = [
+    "S  s,f.m,r :d /d'.d' :.l | r'.r' :.t /l,s.f,m :r.t | s,f.m,r :d /d'.d' :.l | r'.r' :.t /d' :- |",
+    'W  Wor- thy is the Lamb that was slain and hath re- deem- ed us to God by his blood to re- ceive pow- er and rich- es',
+    'A  m,r.d,t1 :d /m.m :.f | f.f :.r /d,t1.l1,s1 :s1.s1 | m,r.d,t1 :d /m.m :.f | f.f :.s /m :- |',
+    "T  d,t1.l1,s1 :m /s.s :.d' | l.l :.s /f,m.r,d :t1.r | d,t1.l1,s1 :m /s.s :.d' | l.l :.s /s :- |",
+    'B  d :d /d.d :.f1 | f1.f1 :.s1 /l1 :s1 | d :d /d.d :.f1 | f1.f1 :.s1 /d :- |',
+  ];
+  const busy = parseSolfa(busyLines.join('\n'), { time: '4/4' });
+  const busyNotes = parseSolfa(busyLines.filter((l) => !l.startsWith('W')).join('\n'), { time: '4/4' });
+  const total = (s: { widths: number[] }) => s.widths.reduce((a, b) => a + b, 0);
+  const barsOn = (s: ReturnType<typeof layoutScore>[number]) => s.rows[0].cells.filter((c) => c.barStart).length;
+
+  it('gives a busy song fewer bars a line than a simple hymn in the same room', () => {
+    expect(busy.errors).toEqual([]);
+    const hymn = layoutScore(parseSolfa(OLD100, { time: '4/4' }), { maxChars: 44 });
+    const crowded = layoutScore(busy, { maxChars: 44 });
+    expect(hymn.map(barsOn)).toEqual([3, 3, 3, 3]);
+    expect(Math.max(...crowded.map(barsOn))).toBeLessThan(3);
+    expect(crowded.map(barsOn).reduce((a, b) => a + b, 0)).toBe(4);
+  });
+
+  it('never puts more on a line than its room, unless one bar alone is wider', () => {
+    for (const maxChars of [20, 30, 44, 60, 90]) {
+      for (const sys of [...layoutScore(busy, { maxChars }), ...layoutScore(parseSolfa(OLD100, { time: '4/4' }), { maxChars })]) {
+        if (barsOn(sys) > 1) expect(total(sys)).toBeLessThanOrEqual(maxChars);
+      }
+    }
+    // Too narrow for most bars: one bar a line, some wider than the room (the score scrolls those sideways).
+    const lines = layoutScore(busy, { maxChars: 20 });
+    expect(lines.map(barsOn)).toEqual([1, 1, 1, 1]);
+    expect(lines.some((s) => total(s) > 20)).toBe(true);
+  });
+
+  it('gives each word its room, and a busy beat a character beside it for its colon', () => {
+    // The tenor's "d,t1.l1,s1", shown "d,t₁.l₁,s₁": 10 characters, and one more.
+    expect(layoutScore(busyNotes, { maxChars: 90 })[0].widths[0]).toBe(11);
+    const [first] = layoutScore(busy, { maxChars: 90 });
+    for (const seg of first.rows[0].lyrics ?? []) {
+      const from = seg.beat - first.start;
+      const room = first.widths.slice(from, from + seg.span).reduce((a, b) => a + b, 0);
+      expect(room).toBeGreaterThanOrEqual(Math.ceil(seg.text.length * 0.7 + 0.5));
+    }
+  });
+
+  it('spreads bars evenly, leaving a bar alone on the last line only when nothing else fits', () => {
+    const seven = parseSolfa(`S  ${'d :r /m :f | '.repeat(7)}`, { time: '4/4' });
+    // Room for three bars of 12: three lines, 3 + 2 + 2 rather than 3 + 3 + 1.
+    expect(layoutScore(seven, { maxChars: 40 }).map(barsOn)).toEqual([3, 2, 2]);
+    expect(layoutScore(parseSolfa(`S  ${'d :r /m :f | '.repeat(5)}`, { time: '4/4' }), { maxChars: 40 }).map(barsOn)).toEqual([3, 2]);
+  });
+
+  it('still keeps to maxBeats when it is given too', () => {
+    const lines = layoutScore(parseSolfa(OLD100, { time: '4/4' }), { maxChars: 200, maxBeats: 8 });
+    expect(lines.every((s) => s.beats <= 8)).toBe(true);
+  });
+
+  it('lays out as before without a budget: lines by beats, columns without the extra character', () => {
+    const systems = layoutScore(busy);
+    // 12 beats hold three bars; four bars spread evenly make two lines of two.
+    expect(systems.map((s) => s.beats)).toEqual([8, 8]);
+    expect(layoutScore(busyNotes)[0].widths[0]).toBe(10);
+    expect(layoutScore(busy, { maxBeats: 12 })).toEqual(systems);
+  });
+});
