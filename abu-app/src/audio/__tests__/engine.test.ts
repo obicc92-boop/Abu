@@ -73,8 +73,8 @@ class FakeContext {
   currentTime = 0;
   state = 'running';
   destination = new FakeNode();
-  /** Every oscillator started: its frequency and start time. */
-  started: { hz: number; at: number }[] = [];
+  /** Every oscillator started: its frequency, start time, and the clock when it was scheduled. */
+  started: { hz: number; at: number; now: number }[] = [];
   /** Every recording started. */
   sources: FakeSource[] = [];
   gains: FakeGain[] = [];
@@ -105,7 +105,7 @@ class FakeContext {
       detune = new FakeParam();
       onended: (() => void) | null = null;
       start(at = 0) {
-        ctx.started.push({ hz: this.frequency.value, at });
+        ctx.started.push({ hz: this.frequency.value, at, now: ctx.currentTime });
       }
       stop() {}
     })();
@@ -172,7 +172,8 @@ function setup(text = OLD100, opts: { time: string; key?: number } = { time: '4/
   const onBeat = jest.fn<(b: number) => void>();
   const onFinish = jest.fn<() => void>();
   const onStop = jest.fn<() => void>();
-  const player = new SongPlayer(() => ctx as unknown as AudioContextLike, { onBeat, onFinish, onStop }, sounds?.library);
+  const onEnd = jest.fn<() => void>();
+  const player = new SongPlayer(() => ctx as unknown as AudioContextLike, { onBeat, onFinish, onStop, onEnd }, sounds?.library);
   const song = parseSolfa(text, opts);
   player.load(song, opts.key ?? 0);
   player.setTempo(60); // one beat per second keeps the arithmetic easy
@@ -184,7 +185,7 @@ function setup(text = OLD100, opts: { time: string; key?: number } = { time: '4/
       jest.advanceTimersByTime(TICK_MS);
     }
   };
-  return { ctx, player, song, onBeat, onFinish, onStop, advance };
+  return { ctx, player, song, onBeat, onFinish, onStop, onEnd, advance };
 }
 
 beforeEach(() => {
@@ -560,6 +561,138 @@ describe('SongPlayer playing recorded instruments', () => {
     expect(r.offset).toBeCloseTo(r.loopStart, 9);
     expect(d.offset).toBeCloseTo(DELAY, 6);
     expect(m.offset).toBeCloseTo(DELAY, 6);
+  });
+});
+
+describe('SongPlayer playing a stretch of the song', () => {
+  // In G: d G4, r A4, m B4, f C5, s D5, l E5.
+  const SIX = 'S  d :r |m :f |s :l |';
+  const hz = (midi: number) => round(midiToHz(midi));
+  /** The note started at each time, as a pitch. */
+  const tune = (ctx: FakeContext) => startTimes(ctx).map((t) => [Math.round(t * 1000) / 1000, pitchesAt(ctx, t)[0]]);
+  const beats = (onBeat: { mock: { calls: number[][] } }) => onBeat.mock.calls.map((c) => c[0]);
+
+  it('stops at `until`, with nothing from it played, and it isn’t a play-through', async () => {
+    const { ctx, player, advance, onBeat, onFinish, onStop, onEnd } = setup(SIX, { time: '2/4', key: 7 });
+    await player.play(2, { until: 4 });
+    advance(2.05);
+    expect(player.playing).toBe(true);
+    advance(0.05); // beat 4 is reached at 2.08 s
+    expect(player.playing).toBe(false);
+    expect(tune(ctx)).toEqual([
+      [0.08, hz(71)],
+      [1.08, hz(72)],
+    ]);
+    expect(beats(onBeat)).toEqual([2, 3, -1]);
+    expect(onFinish).not.toHaveBeenCalled();
+    expect(onStop).toHaveBeenCalledTimes(1);
+    expect(onEnd).toHaveBeenCalledTimes(1);
+    expect(player.counting).toBe(false);
+  });
+
+  it('stops a note held over the stretch’s end there, and doesn’t join a slur over it', async () => {
+    const held = setup('S  d :- |- :- |', { time: '2/4', key: 7 });
+    await held.player.play(0, { until: 1 });
+    held.advance(2);
+    const [note] = shapes(held.ctx);
+    expect(note.ramps[note.ramps.length - 1][1]).toBeCloseTo(0.08 + 0.95, 9);
+
+    const slur = setup('S  (d :r) |m :- |', { time: '2/4', key: 7 });
+    await slur.player.play(0, { until: 1 });
+    slur.advance(2);
+    expect(shapes(slur.ctx)).toHaveLength(1);
+    const [d] = shapes(slur.ctx);
+    expect(d.ramps[d.ramps.length - 1][1]).toBeCloseTo(0.08 + 0.95, 9);
+  });
+
+  it('goes round a stretch with no gap, scheduling the notes across the join ahead of time', async () => {
+    const { ctx, player, advance, onBeat, onFinish, onEnd } = setup(SIX, { time: '2/4', key: 7 });
+    await player.play(2, { loop: { from: 2, to: 4 } });
+    advance(5.5);
+    expect(player.playing).toBe(true);
+    expect(tune(ctx)).toEqual([
+      [0.08, hz(71)],
+      [1.08, hz(72)],
+      [2.08, hz(71)],
+      [3.08, hz(72)],
+      [4.08, hz(71)],
+      [5.08, hz(72)],
+    ]);
+    // Exactly a beat apart across each join, and each first note of a time round was scheduled before it sounds.
+    startTimes(ctx).forEach((t, i) => expect(t).toBeCloseTo(0.08 + i, 9));
+    for (const at of [2.08, 4.08]) expect(ctx.started.find((n) => Math.abs(n.at - at) < 1e-9)!.now).toBeLessThan(at);
+    expect(beats(onBeat)).toEqual([2, 3, 2, 3, 2, 3]);
+    expect(onFinish).not.toHaveBeenCalled();
+    expect(onEnd).not.toHaveBeenCalled();
+    player.stop();
+    expect(beats(onBeat).at(-1)).toBe(-1);
+    expect(onEnd).not.toHaveBeenCalled();
+  });
+
+  it('goes round a stretch with a tempo mark in it at the tempo of each part of it', async () => {
+    // Beat 1 at 60, beat 2 at 120: each time round takes 1.5 s, and starts again at 60.
+    const { ctx, player, advance } = setup('time: 2/4\n{M. 60}\nS  d :r |{M. 120}m :f |', { time: '2/4', key: 7 });
+    await player.play(1, { loop: { from: 1, to: 3 } });
+    advance(4.3);
+    expect(tune(ctx)).toEqual([
+      [0.08, hz(69)],
+      [1.08, hz(71)],
+      [1.58, hz(69)],
+      [2.58, hz(71)],
+      [3.08, hz(69)],
+      [4.08, hz(71)],
+    ]);
+  });
+
+  it('plays from a bar after a tempo mark at the tempo there, and to the end isn’t practice', async () => {
+    const { ctx, player, advance, onFinish, onEnd } = setup('time: 2/4\n{M. 60}\nS  d :r |{M. 120}m :f |s :l |', { time: '2/4', key: 7 });
+    await player.play(3, { counts: false });
+    advance(2);
+    expect(tune(ctx)).toEqual([
+      [0.08, hz(72)],
+      [0.58, hz(74)],
+      [1.08, hz(76)],
+    ]);
+    expect(player.playing).toBe(false);
+    expect(onFinish).not.toHaveBeenCalled();
+    expect(onEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it('counts a whole-song loop started part way from its first whole time round', async () => {
+    const { player, advance, onFinish } = setup('S  d :r /m :f |', { time: '4/4', key: 7 });
+    player.setLoop(true);
+    await player.play(2, { counts: false });
+    advance(2.2); // to the end from beat 2: not counted
+    expect(onFinish).not.toHaveBeenCalled();
+    advance(4.1); // the whole song once round
+    expect(onFinish).toHaveBeenCalledTimes(1);
+  });
+
+  it('carries on inside a stretch after a pause, and goes round it again', async () => {
+    const { ctx, player, advance, onBeat } = setup(SIX, { time: '2/4', key: 7 });
+    const stretch = { loop: { from: 2, to: 4 } };
+    await player.play(2, stretch);
+    advance(3.5); // into beat 3 the second time round
+    // As the hook pauses: the beat sounding now, then stop.
+    const at = Math.floor(player.beatNow());
+    expect(at).toBe(3);
+    player.stop();
+    const before = ctx.started.length;
+    ctx.currentTime = 10;
+    await player.play(at, stretch);
+    advance(2.8);
+    const after = startTimes({ ...ctx, started: ctx.started.slice(before) } as FakeContext);
+    expect(after.map((t) => Math.round(t * 1000) / 1000)).toEqual([10.08, 11.08, 12.08]);
+    expect(pitchesAt(ctx, 10.08)).toEqual([hz(72)]); // f, where it was paused
+    expect(pitchesAt(ctx, 11.08)).toEqual([hz(71)]); // round again to m
+    expect(beats(onBeat).slice(-3)).toEqual([3, 2, 3]);
+  });
+
+  it('starts a stretch at its own start when asked to carry on outside it', async () => {
+    const { ctx, player, advance } = setup(SIX, { time: '2/4', key: 7 });
+    await player.play(0, { loop: { from: 4, to: 6 } });
+    advance(1);
+    expect(tune(ctx)[0]).toEqual([0.08, hz(74)]);
   });
 });
 

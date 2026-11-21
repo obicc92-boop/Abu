@@ -23,7 +23,14 @@ export function MiniPlayer() {
   const bar = started ? Math.min(parsed.bars, Math.floor(player.beat / Math.max(1, parsed.beatsPerBar)) + 1) : 0;
   const progress = started && parsed.total ? Math.min(1, (player.beat + 1) / parsed.total) : 0;
   const parts = parsed.parts.slice(0, 4);
-  const line = player.playing ? `Bar ${bar} of ${parsed.bars}` : player.pausedAt !== null ? `Paused at bar ${bar}` : song.composer || 'Tap play to hear it again';
+  // Playing a stretch of the song (a bar, or a loop, chosen on its score): says so, briefly.
+  const line = player.playing
+    ? player.range
+      ? `Bar ${bar}${player.range.loop ? ', looping' : ''}`
+      : `Bar ${bar} of ${parsed.bars}`
+    : player.pausedAt !== null
+      ? `Paused at bar ${bar}`
+      : song.composer || 'Tap play to hear it again';
 
   return (
     <View style={styles.box}>
