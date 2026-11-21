@@ -587,6 +587,8 @@ function Help({ asText, onExample }: { asText: boolean; onExample: () => void })
     asText
       ? 'Key change: tap Key on the keypad and pick the new doh. It starts at the first bar of the lines you’re in, and shows as “Doh is F”. (Bridge notes as printed, s=d, work too.)'
       : 'Key change: while writing in a line, tap Key on the keypad and pick the new doh. It starts at that line’s first bar.',
+    'Marks on the keypad: dynamics like p or ff, cresc., and tempo like Andante or M. 72, written before the note they start on.',
+    'Slur: notes sung to one syllable go in brackets, (m.d), as a sheet underlines them.',
     'Write tenor as on the sheet; SolfaScores plays it an octave lower.',
   ];
   return (

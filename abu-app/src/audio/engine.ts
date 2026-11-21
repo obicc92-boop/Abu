@@ -2,12 +2,24 @@
  * Plays a parsed song with a small synth: every part at once, with per-part
  * mute, solo and "focus my part", tempo and key changes while playing, and loop.
  * Ported from the audio engine in prototype/index.html (voice, tick, startPlay).
+ * It follows the song's musical markings too (expression-curve.ts): louder and
+ * softer for the dynamics, faster and slower for the tempo marks, and notes
+ * under a slur joined, as a choir sings them.
  *
  * Works on any AudioContextLike, so the same code runs on the web (browser
  * Web Audio) and on phones (react-native-audio-api).
  */
-import { dohAt, dohTimeline, midiToHz, noteMidi, type DohPoint, type ParsedSong } from '@/solfa';
+import { dohAt, dohTimeline, midiToHz, noteMidi, type DohPoint, type NoteEvent, type ParsedSong } from '@/solfa';
 
+import {
+  FULL_LOUDNESS,
+  loudnessCurve,
+  startingTempo,
+  steadyTempo,
+  tempoCurve,
+  type LoudnessCurve,
+  type TempoCurve,
+} from './expression-curve';
 import type { AudioContextLike, GainNodeLike, OscillatorNodeLike } from './types';
 
 /** How often the scheduler runs. */
@@ -16,6 +28,14 @@ export const TICK_MS = 25;
 export const LOOKAHEAD_S = 0.2;
 /** Gap between pressing play and the first note. */
 export const START_DELAY_S = 0.08;
+/** A note's rise to full and its fade at the end. */
+export const ATTACK_S = 0.05;
+export const RELEASE_S = 0.1;
+/**
+ * Under a slur, the note before a slurred note fades out over this while the slurred note fades in, so the two are
+ * joined with no fresh attack (no more than half the slurred note, in a quick run).
+ */
+export const LEGATO_S = 0.1;
 /** Other parts' volume when "focus my part" is on. */
 export const FOCUS_LEVEL = 0.28;
 /** Per-part volume, so four voices together don't clip. */
@@ -50,11 +70,12 @@ export function partLevel(part: string, mix: MixSettings): number {
   return 1;
 }
 
-/** Starting tempo: the song's own, else 96 for 3/4 and 84 otherwise, as in the prototype. */
+/**
+ * Starting tempo: the song's own (its `tempo:` heading, else a tempo mark such as {Andante} in its first bar),
+ * else 96 for 3/4 and 84 otherwise, as in the prototype.
+ */
 export function defaultTempo(song: ParsedSong): number {
-  const bpm = song.meta.tempo?.bpm;
-  if (bpm) return clamp(Math.round(bpm), MIN_TEMPO, MAX_TEMPO);
-  return song.beatsPerBar === 3 ? 96 : 84;
+  return clamp(Math.round(startingTempo(song)), MIN_TEMPO, MAX_TEMPO);
 }
 
 export interface PlayerCallbacks {
@@ -75,6 +96,13 @@ export class SongPlayer {
   private song: ParsedSong | null = null;
   /** Where doh sits through the song, for each part (parts can change key at their own bridge notes). */
   private doh: Record<string, DohPoint[]> = {};
+  /** How loud each part's notes play, from the song's dynamics (1 throughout a song with none). */
+  private loud: LoudnessCurve = FULL_LOUDNESS;
+  /**
+   * The song's tempo marks, as a factor of its starting tempo (1 throughout a song with none). The beat sounding
+   * goes at `tempo` (the person's setting) times the factor there; the anchor is a beat and the time it sounds.
+   */
+  private pace: TempoCurve = steadyTempo(84);
   private anchorTime = 0;
   private anchorBeat = 0;
   private ptr: Record<string, number> = {};
@@ -97,9 +125,12 @@ export class SongPlayer {
     this.stop();
     this.song = song;
     this.doh = Object.fromEntries(song.parts.map((p) => [p, dohTimeline(song, fallbackKey, p)]));
+    this.loud = loudnessCurve(song);
+    // Measured from the tempo the player starts at, so with the person's tempo left alone a mark plays at its own speed.
+    this.pace = tempoCurve(song, defaultTempo(song));
   }
 
-  /** Changing tempo while playing carries on from the current beat. */
+  /** Changing tempo while playing carries on from the current beat. The song's tempo marks go faster or slower from it. */
   setTempo(bpm: number): void {
     const next = clamp(Math.round(bpm), MIN_TEMPO, MAX_TEMPO);
     if (this.playing && this.ctx) {
@@ -126,7 +157,7 @@ export class SongPlayer {
   /** Beats since the start of the song, as heard now. Negative just after pressing play. */
   beatNow(): number {
     if (!this.ctx) return 0;
-    return this.anchorBeat + ((this.ctx.currentTime - this.anchorTime) * this.tempo) / 60;
+    return this.pace.beatAfter(this.anchorBeat, ((this.ctx.currentTime - this.anchorTime) * this.tempo) / 60);
   }
 
   /**
@@ -190,19 +221,33 @@ export class SongPlayer {
     const ctx = this.ctx;
     const song = this.song;
     if (!ctx || !song || !this.playing) return;
+    // Seconds a beat at the song's starting tempo, at the person's setting. Where the song's tempo marks make it
+    // faster or slower, `pace` says how many of those beats a stretch of the song takes, so a note scheduled ahead
+    // lands where it should even across a change of tempo.
     const spb = 60 / this.tempo;
     const now = this.beatNow();
-    const horizon = now + LOOKAHEAD_S / spb;
+    const horizon = this.pace.beatAfter(now, LOOKAHEAD_S / spb);
 
     for (const part of song.parts) {
       const events = song.events[part];
       let i = this.ptr[part] ?? 0;
       while (i < events.length && events[i].start < horizon) {
         const e = events[i];
-        const t = this.anchorTime + (e.start - this.anchorBeat) * spb;
+        const t = this.anchorTime + this.pace.span(this.anchorBeat, e.start - this.anchorBeat) * spb;
         if (t >= ctx.currentTime - 0.02) {
           const midi = noteMidi(part, e, dohAt(this.doh[part] ?? [], e.start), this.transpose);
-          this.voice(part, midi, Math.max(t, ctx.currentTime), Math.max(0.08, e.dur * spb * 0.95));
+          const seconds = (n: NoteEvent) => this.pace.span(n.start, n.dur) * spb;
+          // Notes stop a touch early, so each is heard on its own; under a slur (owner's request, 21 November 2026)
+          // the note before a slurred note sounds its full length into it and the slurred one comes in gently.
+          const into = slurredOn(events, i) ? Math.min(LEGATO_S, seconds(events[i + 1]) / 2) : 0;
+          const from = slurredOn(events, i - 1) ? Math.min(LEGATO_S, seconds(e) / 2) : 0;
+          const len = into ? Math.max(0.08, seconds(e)) + into : Math.max(0.08, seconds(e) * 0.95);
+          this.voice(part, midi, Math.max(t, ctx.currentTime), len, {
+            peak: this.loud.at(part, e.start),
+            end: this.loud.heldTo(part, e.start, e.dur),
+            ...(from ? { attack: from } : {}),
+            ...(into ? { release: into } : {}),
+          });
         }
         i++;
       }
@@ -228,13 +273,25 @@ export class SongPlayer {
     }
   };
 
-  /** One note: three oscillators through an envelope and a soft low-pass, into the part's gain. */
-  private voice(part: string, midi: number, t: number, len: number): void {
+  /**
+   * One note, `len` seconds from `t` to silence: three oscillators through an envelope and a soft low-pass, into the
+   * part's gain. The envelope rises to `peak` over `attack` (how loud the song's dynamics make the note; 1 with
+   * none), a note held through a cresc. or dim. moves on to `end`, and it fades over `release`.
+   */
+  private voice(
+    part: string,
+    midi: number,
+    t: number,
+    len: number,
+    { peak = 1, end = peak, attack = ATTACK_S, release = RELEASE_S }: NoteShape = {},
+  ): void {
     const c = this.ctx!;
     const env = c.createGain();
+    const hold = t + Math.max(0.06, attack, len - release);
     env.gain.setValueAtTime(0, t);
-    env.gain.linearRampToValueAtTime(1, t + 0.05);
-    env.gain.setValueAtTime(1, t + Math.max(0.06, len - 0.1));
+    env.gain.linearRampToValueAtTime(peak, t + attack);
+    if (end === peak) env.gain.setValueAtTime(peak, hold);
+    else env.gain.linearRampToValueAtTime(end, hold);
     env.gain.linearRampToValueAtTime(0, t + len);
     const lp = c.createBiquadFilter();
     lp.type = 'lowpass';
@@ -316,6 +373,21 @@ export class SongPlayer {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
   }
+}
+
+/** How a note sounds: see `voice`. */
+interface NoteShape {
+  peak?: number;
+  end?: number;
+  attack?: number;
+  release?: number;
+}
+
+/** Whether the note after `events[i]` is slurred from it: under a slur, and starting as it ends (no rest between). */
+function slurredOn(events: NoteEvent[], i: number): boolean {
+  const a = events[i];
+  const b = events[i + 1];
+  return !!a && !!b?.slurred && Math.abs(a.start + a.dur - b.start) < 1e-6;
 }
 
 function clamp(n: number, lo: number, hi: number): number {

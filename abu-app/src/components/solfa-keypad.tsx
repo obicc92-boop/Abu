@@ -4,7 +4,8 @@
  * the field being edited, which keeps its cursor: a key is pressed without taking the focus from the field.
  * The sharps and flats have a row of their own under the notes. Used to fix a scanned line (`bridge`: an "="
  * key for the bridge notes sheets print) and to write a song (`parts`: keys for the parts' names and a new line;
- * `keyChange`: a key to change key). While the phone's keyboard is in use instead, `PhoneKeyboardBar` sits over
+ * `keyChange`: a key to change key). Marks, on both, opens the musical markings (dynamics, tempo) in place of the
+ * keys; a slur is a key of its own. While the phone's keyboard is in use instead, `PhoneKeyboardBar` sits over
  * it, to come back.
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -42,6 +43,39 @@ const BEATS: { insert: string; label: string; caption: string }[] = [
 /** A bridge note as sheets print it, where the key changes inside a line: the old name, =, the new (s=d). */
 const BRIDGE = { insert: '=', label: '=', caption: 'bridge' };
 const PARTS = ['S', 'A', 'T', 'B', 'W'];
+
+/**
+ * Musical markings, behind the Marks key (21 November 2026, as the reader learnt them): each is written in braces
+ * before the note it starts on (`{p}d`), as src/solfa/expressions.ts reads them, and shown as a sheet prints it.
+ */
+interface Marking {
+  insert: string;
+  label: string;
+  /** What a screen reader says. */
+  said: string;
+  /** Dynamics and accents in bold italic, gradual changes in italic, tempo words in bold. */
+  face: 'loud' | 'italic' | 'tempo';
+}
+const DYNAMICS: Marking[] = [
+  ['pp', 'pianissimo'],
+  ['p', 'piano'],
+  ['mp', 'mezzo-piano'],
+  ['mf', 'mezzo-forte'],
+  ['f', 'forte'],
+  ['ff', 'fortissimo'],
+].map(([text, said]) => ({ insert: `{${text}}`, label: text, said, face: 'loud' }));
+const CHANGES: Marking[] = [
+  { insert: '{cresc}', label: 'cresc.', said: 'crescendo, getting louder', face: 'italic' },
+  { insert: '{dim}', label: 'dim.', said: 'diminuendo, getting softer', face: 'italic' },
+  { insert: '{sfz}', label: 'sfz', said: 'sforzando, one note accented', face: 'loud' },
+];
+const TEMPO_CHANGES: Marking[] = [
+  { insert: '{rit}', label: 'rit.', said: 'ritardando, slowing down', face: 'italic' },
+  { insert: '{a tempo}', label: 'a tempo', said: 'a tempo, back to speed', face: 'italic' },
+];
+const TEMPOS: Marking[] = ['Largo', 'Adagio', 'Andante', 'Moderato', 'Allegro'].map((word) => ({ insert: `{${word}}`, label: word, said: word, face: 'tempo' }));
+/** Beats a minute, written as sheets print a metronome mark: `{M. 72}`. */
+const METRONOME = [60, 72, 84, 96, 108, 120];
 
 /** When the keys were last touched: a field's blur just then isn't the person leaving it (unless it was Done). */
 let lastTouch = 0;
@@ -104,10 +138,19 @@ export function SolfaKeypad({
   const hold = useHoldFocus();
   const insert = (text: string) => onKey({ insert: text });
   const [place, setPlace] = useState<KeyPlace | null>(null);
+  const [marking, setMarking] = useState(false);
   const beats = bridge ? [...BEATS.slice(0, 3), BRIDGE, BEATS[3]] : BEATS;
   return (
     <View ref={hold} style={styles.pad} accessibilityLabel="Sol-fa keypad">
-      {place && keyChange ? (
+      {marking ? (
+        <MarksPanel
+          onPick={(text) => {
+            insert(text);
+            setMarking(false);
+          }}
+          onCancel={() => setMarking(false)}
+        />
+      ) : place && keyChange ? (
         // Picking a new key: plainly where it starts, and doh there now.
         <>
           <Text style={styles.heading}>{place.bar ? `New key from bar ${place.bar}` : 'The song’s key'}</Text>
@@ -162,6 +205,8 @@ export function SolfaKeypad({
             {MARKS.map((m) => (
               <KeyButton key={m.caption} label={m.label} caption={m.caption} onPress={() => insert(m.insert)} />
             ))}
+            {/* A slur: "(" before its first note, then ")" after its last (lib/solfa-keys.ts knows which). */}
+            <KeyButton label="( )" caption="slur" onPress={() => onKey('slur')} accessibilityLabel="Slur: notes sung to one syllable" />
           </View>
           <View style={styles.row}>
             {beats.map((b) => (
@@ -173,12 +218,54 @@ export function SolfaKeypad({
             <KeyButton label="◀" onPress={() => onKey('left')} accessibilityLabel="Cursor left" />
             <KeyButton label="▶" onPress={() => onKey('right')} accessibilityLabel="Cursor right" />
             {keyChange && !parts ? <KeyButton label="Key" caption="change" onPress={() => setPlace(keyChange.where())} accessibilityLabel="Change key" /> : null}
+            <KeyButton label="p f" caption="marks" face="loud" onPress={() => setMarking(true)} accessibilityLabel="Marks: dynamics and tempo" />
             {onKeyboard ? <KeyButton label="ABC" caption="keyboard" onPress={onKeyboard} /> : null}
             <KeyButton label="Done" onPress={leaving(onDone)} done />
           </View>
         </>
       )}
     </View>
+  );
+}
+
+/**
+ * The musical markings, in place of the keys: one tapped is written at the cursor (lib/solfa-keys.ts puts it
+ * before the note the cursor is in) and the keys come back. Each group is named over its keys.
+ */
+function MarksPanel({ onPick, onCancel }: { onPick(text: string): void; onCancel(): void }) {
+  const styles = useStyles();
+  const keys = (marks: Marking[]) =>
+    marks.map((m) => <KeyButton key={m.insert} label={m.label} face={m.face} onPress={() => onPick(m.insert)} accessibilityLabel={m.said} />);
+  return (
+    <>
+      <View style={styles.group}>
+        <Text style={styles.groupName}>Dynamics</Text>
+        <View style={styles.row}>{keys(DYNAMICS)}</View>
+      </View>
+      <View style={styles.row}>
+        <View style={[styles.group, { flex: CHANGES.length }]}>
+          <Text style={styles.groupName}>Changes</Text>
+          <View style={styles.row}>{keys(CHANGES)}</View>
+        </View>
+        <View style={[styles.group, { flex: TEMPO_CHANGES.length }]}>
+          <Text style={styles.groupName}>Tempo</Text>
+          <View style={styles.row}>{keys(TEMPO_CHANGES)}</View>
+        </View>
+      </View>
+      <View style={styles.row}>{keys(TEMPOS)}</View>
+      <View style={styles.group}>
+        <Text style={styles.groupName}>Metronome ♩ =</Text>
+        <View style={styles.row}>
+          {METRONOME.map((n) => (
+            <KeyButton key={n} label={String(n)} onPress={() => onPick(`{M. ${n}}`)} accessibilityLabel={`Metronome, ${n} beats a minute`} />
+          ))}
+        </View>
+      </View>
+      <View style={[styles.row, styles.marksFoot]}>
+        <Text style={styles.marksHint}>Put the cursor just before the note it starts on.</Text>
+        <KeyButton label="Cancel" onPress={onCancel} word small />
+      </View>
+    </>
   );
 }
 
@@ -207,6 +294,7 @@ function KeyButton({
   done,
   word,
   on,
+  face,
   accessibilityLabel,
 }: {
   label: ReactNode;
@@ -221,6 +309,8 @@ function KeyButton({
   word?: boolean;
   /** The one chosen now. */
   on?: boolean;
+  /** A musical marking, set as sheets print it (`Marking['face']`). */
+  face?: Marking['face'];
   accessibilityLabel?: string;
 }) {
   const styles = useStyles();
@@ -242,7 +332,9 @@ function KeyButton({
       accessibilityLabel={accessibilityLabel ?? (caption ? `${String(label)} ${caption}` : String(label))}
       style={({ pressed }) => [styles.key, note && styles.noteKey, narrow && styles.narrowKey, small && styles.smallKey, done && styles.doneKey, on && styles.onKey, pressed && styles.pressed]}
     >
-      <Text style={[styles.label, note && styles.noteLabel, narrow && styles.narrowLabel, (done || word) && styles.doneLabel, color ? { color } : null]}>{label}</Text>
+      <Text style={[styles.label, note && styles.noteLabel, narrow && styles.narrowLabel, (done || word) && styles.doneLabel, face && styles[`${face}Label`], color ? { color } : null]}>
+        {label}
+      </Text>
       {caption ? <Text style={[styles.caption, narrow && styles.narrowCaption, color ? { color } : null]}>{caption}</Text> : null}
     </Pressable>
   );
@@ -282,4 +374,14 @@ const useStyles = makeStyles((colors) => ({
   heading: { fontFamily: fonts.bold, fontSize: 14, lineHeight: 18, color: colors.ink, paddingHorizontal: 2, paddingTop: 2 },
   hint: { fontFamily: fonts.body, fontSize: 12, lineHeight: 16, color: colors.muted, paddingHorizontal: 2 },
   narrowCaption: { fontSize: 11, lineHeight: 12 },
+  // The markings: a dynamic as a sheet prints it, bold italic; cresc., dim., rit. in italic; tempo words in bold
+  // (small enough for "Moderato" on a narrow phone).
+  loudLabel: { fontFamily: fonts.heavy, fontStyle: 'italic', fontSize: 18, lineHeight: 21 },
+  italicLabel: { fontFamily: fonts.bold, fontStyle: 'italic', fontSize: 14, lineHeight: 18 },
+  tempoLabel: { fontFamily: fonts.bold, fontSize: 12.5, lineHeight: 16 },
+  /** A group of markings with its name over its keys. */
+  group: { gap: 2 },
+  groupName: { fontFamily: fonts.bold, fontSize: 11, lineHeight: 13, color: colors.muted, paddingHorizontal: 2 },
+  marksFoot: { alignItems: 'center' },
+  marksHint: { flex: 2.6, fontFamily: fonts.body, fontSize: 12, lineHeight: 16, color: colors.muted, paddingHorizontal: 2 },
 }));

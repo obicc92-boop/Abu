@@ -1,5 +1,7 @@
 import { describe, expect, it } from '@jest/globals';
 
+import { parseSolfa } from '@/solfa';
+
 import { applyKey, keyChangePlace, lowMarksShown, lowMarksTyped, songLowMarksShown, songLowMarksTyped, withKeyChange, type Key, type Selection } from '../solfa-keys';
 
 /** Types the keys in turn from an empty row (or `from`, cursor at its end), and gives the text. */
@@ -92,5 +94,101 @@ describe('a key change while writing a song', () => {
 
   it('writes a bridge note with no spaces round its =', () => {
     expect(type([ins('s'), ins('='), ins('d')]).text).toBe('s=d');
+  });
+});
+
+describe('musical markings from the Marks key', () => {
+  const at = (text: string, find: string, plus = 0) => ({ start: text.indexOf(find) + plus, end: text.indexOf(find) + plus });
+
+  it('writes one at the cursor in the middle of a row, before the note it starts on, with the cursor after it', () => {
+    const row = 'd :r | m :f |';
+    expect(applyKey(row, at(row, 'm'), ins('{p}'))).toEqual({ text: 'd :r | {p}m :f |', sel: { start: 10, end: 10 } });
+    expect(applyKey(row, at(row, 'f'), ins('{cresc}')).text).toBe('d :r | m :{cresc}f |');
+    expect(applyKey(row, { start: 0, end: 0 }, ins('{M. 72}')).text).toBe('{M. 72}d :r | m :f |');
+    // Typed as the music goes: the beat mark, the marking, then its note.
+    expect(type([ins('d'), ins(':'), ins('{mf}'), ins('r')]).text).toBe('d :{mf}r');
+  });
+
+  it('never splits a note or another marking: inside one, it goes just before it', () => {
+    expect(applyKey('d :re :m', { start: 4, end: 4 }, ins('{dim}')).text).toBe('d :{dim}re :m');
+    expect(applyKey("d' :r", { start: 1, end: 1 }, ins('{f}')).text).toBe("{f}d' :r");
+    expect(applyKey('m :s=d', at('m :s=d', '=', 1), ins('{ff}')).text).toBe('m :{ff}s=d');
+    const got = applyKey('{mf}d :r', { start: 2, end: 2 }, ins('{Andante}'));
+    expect(got).toEqual({ text: '{Andante}{mf}d :r', sel: { start: 9, end: 9 } });
+  });
+
+  it('in place of the text chosen, so a marking can be changed', () => {
+    expect(applyKey('{mf}d :r', { start: 0, end: 4 }, ins('{ff}'))).toEqual({ text: '{ff}d :r', sel: { start: 4, end: 4 } });
+  });
+
+  it('deletes a marking all at once', () => {
+    expect(type(['erase'], 'd :{a tempo}').text).toBe('d :');
+    expect(applyKey('d :{p}r', { start: 6, end: 6 }, 'erase')).toEqual({ text: 'd :r', sel: { start: 3, end: 3 } });
+    expect(type(['erase'], 'd }').text).toBe('d ');
+  });
+
+  it('is read on the note it was written before, in the song editor’s text too', () => {
+    const song = 'time: 2/4\nS  d :r |m :f |\nA  d :d |d :d |';
+    const written = applyKey(song, at(song, 'f |'), ins('{p}'));
+    expect(written.text).toBe('time: 2/4\nS  d :r |m :{p}f |\nA  d :d |d :d |');
+    const read = parseSolfa(written.text);
+    expect(read.errors).toEqual([]);
+    expect(read.expressions.map((e) => [e.text, e.part, e.beat])).toEqual([['p', 'S', 3]]);
+  });
+});
+
+describe('a slur from the keypad', () => {
+  const at = (text: string, find: string, plus = 0) => ({ start: text.indexOf(find) + plus, end: text.indexOf(find) + plus });
+
+  it('opens with "(" before the note at the cursor, and closes with ")" after the last', () => {
+    const row = 'd :r |m.d :r |';
+    const opened = applyKey(row, at(row, 'm'), 'slur');
+    expect(opened).toEqual({ text: 'd :r |(m.d :r |', sel: { start: 7, end: 7 } });
+    expect(applyKey(opened.text, at(opened.text, 'm.d', 3), 'slur').text).toBe('d :r |(m.d) :r |');
+    // Typed as the music goes: the key before the slur's first note, and again after its last.
+    expect(type([ins('d'), ins(':'), 'slur', ins('m'), ins('.'), ins('d'), 'slur']).text).toBe('d :(m.d)');
+    // Or straight after its first note: the "(" goes before it, and the cursor stays after it.
+    expect(type(['slur', ins('.'), ins('r'), 'slur'], 'd').text).toBe('(d.r)');
+  });
+
+  it('closes after the note, not after a beat mark or bar line, with the cursor where it was', () => {
+    expect(type(['slur'], '(s :f :')).toEqual({ text: '(s :f) :', sel: { start: 8, end: 8 } });
+    expect(type(['slur'], '(s :f | ').text).toBe('(s :f) | ');
+    // Across a bar line, as the reader takes it.
+    expect(type(['slur', ins(':'), ins('r')], '(s :f |m').text).toBe('(s :f |m) :r');
+  });
+
+  it('never splits a note: "(" goes before it, ")" after its octave mark', () => {
+    expect(applyKey('d :re.m', { start: 4, end: 4 }, 'slur').text).toBe('d :(re.m');
+    expect(applyKey("(m'.d' :r", { start: 5, end: 5 }, 'slur').text).toBe("(m'.d') :r");
+    expect(applyKey('(m.s=d :r', at('(m.s=d', '=', 0), 'slur').text).toBe('(m.s=d) :r');
+  });
+
+  it('puts brackets round the notes chosen, leaving out spaces and beat marks at their ends', () => {
+    expect(applyKey('d :m.d :r', { start: 3, end: 6 }, 'slur')).toEqual({ text: 'd :(m.d) :r', sel: { start: 8, end: 8 } });
+    expect(applyKey('d :m.d :r', { start: 2, end: 7 }, 'slur').text).toBe('d :(m.d) :r');
+    // Chosen from inside one note to inside another: round both, whole.
+    expect(applyKey("d :re.m' :r", { start: 4, end: 7 }, 'slur').text).toBe("d :(re.m') :r");
+  });
+
+  it('a second tap straight after opening takes it back', () => {
+    expect(type(['slur', 'slur'], 'd :').text).toBe('d :');
+  });
+
+  it('is read with the notes after the first under the slur, sharing its syllable', () => {
+    let song = 'time: 2/4\nS  d :r |m.d :r |d :- |\nW  give thanks to Thee, O';
+    song = applyKey(song, at(song, 'm.d'), 'slur').text;
+    song = applyKey(song, at(song, 'd :r |d', 1), 'slur').text;
+    expect(song).toBe('time: 2/4\nS  d :r |(m.d) :r |d :- |\nW  give thanks to Thee, O');
+    const read = parseSolfa(song);
+    expect(read.errors).toEqual([]);
+    expect(read.events.S.map((e) => [e.text, e.lyric ?? '', !!e.slurred])).toEqual([
+      ['d', 'give', false],
+      ['r', 'thanks', false],
+      ['m', 'to', false],
+      ['d', '', true],
+      ['r', 'Thee,', false],
+      ['d', 'O', false],
+    ]);
   });
 });
