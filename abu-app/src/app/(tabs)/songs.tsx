@@ -5,10 +5,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, TextInput, View } from 'react-native';
+import { ScrollView, Text, TextInput, View } from 'react-native';
 
 import { api, type Song } from '@/api/client';
 import { SearchIcon } from '@/components/icons';
+import { Shelf, SongTile, type TileSong } from '@/components/shelf';
 import { SongRow } from '@/components/song-row';
 import { Body, Button, Chip, Loading, Page, TopBar } from '@/components/ui';
 import { DEMO_SONGS } from '@/data/demo-songs';
@@ -40,6 +41,11 @@ export default function Songs() {
     queryFn: () => api.repertoire(listGroup!),
     enabled: !!listGroup,
   });
+
+  // Browsing (no search, no filter): shelves first, as on Suno's Discover, then every song.
+  const browsing = !query.trim() && view === 'all' && !tag;
+  const ourShelf = useQuery({ queryKey: ['repertoire', choir?.id], queryFn: () => api.repertoire(choir!.id), enabled: browsing && !!choir });
+  const myShelf = useQuery({ queryKey: ['repertoire', s.personal?.id], queryFn: () => api.repertoire(s.personal!.id), enabled: browsing && !!s.personal });
 
   const source = listGroup ? repertoire : library;
   const q = query.trim().toLowerCase();
@@ -85,6 +91,22 @@ export default function Songs() {
         ))}
       </ScrollView>
 
+      {browsing && choir && ourShelf.data?.length ? (
+        <Shelf title="Our repertoire" note={choir.name} onSeeAll={() => setView('ours')}>
+          {ourShelf.data.slice(0, 12).map((x) => (
+            <SongTile key={x.id} song={tileOf(x)} />
+          ))}
+        </Shelf>
+      ) : null}
+      {browsing && myShelf.data?.length ? (
+        <Shelf title="My songs" onSeeAll={() => setView('mine')}>
+          {myShelf.data.slice(0, 12).map((x) => (
+            <SongTile key={x.id} song={tileOf(x)} />
+          ))}
+        </Shelf>
+      ) : null}
+      {browsing && (ourShelf.data?.length || myShelf.data?.length) ? <Text style={styles.heading}>All songs</Text> : null}
+
       {source.isPending && source.fetchStatus !== 'idle' ? <Loading /> : null}
       {offline ? (
         <>
@@ -128,4 +150,17 @@ const useStyles = makeStyles((colors) => ({
   },
   searchInput: { flex: 1, minHeight: 46, fontFamily: fonts.body, fontSize: 16, color: colors.ink },
   chips: { gap: 8 },
+  heading: { fontFamily: fonts.heavy, fontSize: 20, color: colors.ink, marginTop: 4 },
 }));
+
+/** A library song as a shelf's tile. */
+const tileOf = (x: Song): TileSong => ({
+  id: x.id,
+  title: x.title,
+  composer: x.composer,
+  sub: x.composer || (x.solfa.trim() ? x.time_signature : 'Sheet only'),
+  doh: x.doh,
+  time: x.time_signature,
+  solfa: x.solfa,
+  countable: true,
+});

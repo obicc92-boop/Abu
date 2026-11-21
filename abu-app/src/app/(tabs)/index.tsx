@@ -16,7 +16,7 @@ import { InviteCard } from '@/components/invite';
 import { NoticesSection } from '@/components/notices';
 import { Readiness } from '@/components/readiness';
 import { ReplyButtons } from '@/components/reply-buttons';
-import { SongRow } from '@/components/song-row';
+import { Shelf, SongTile } from '@/components/shelf';
 import { LeaderTodo } from '@/components/todo';
 import { Avatar, Body, Button, Card, ErrorText, Kicker, Loading, Page, PartTag } from '@/components/ui';
 import { DEMO_SONGS } from '@/data/demo-songs';
@@ -203,14 +203,7 @@ export default function Home() {
 
       {g.type !== 'personal' && g.status === 'active' && g.role === 'leader' && g.invite_code ? <InviteCard groupName={g.name} code={g.invite_code} /> : null}
 
-      {!toLearn.length ? (
-        <>
-          <Kicker>Try a song</Kicker>
-          {DEMO_SONGS.map((d) => (
-            <SongRow key={d.id} song={{ id: d.id, title: d.title, composer: d.composer, doh: d.key, time: d.time, playable: true }} />
-          ))}
-        </>
-      ) : null}
+      {!toLearn.length ? <TrySongs /> : null}
     </Page>
   );
 }
@@ -308,42 +301,55 @@ function LearnForUpcoming({
   part: string | null;
   type: GroupType;
 }) {
-  const styles = useStyles();
-  const colors = useColors();
+  const queryClient = useQueryClient();
   const bySong = new Map((practice ?? []).map((p) => [p.song_id, p]));
+  // The songs themselves are kept on the phone for the services coming up (src/lib/keep-offline.ts): their
+  // sol-fa draws each tile and lets it play.
+  const solfaOf = (id: string) => queryClient.getQueryData<{ solfa?: string }>(['song', id])?.solfa;
   return (
-    <View style={{ gap: 8 }}>
-      <View style={styles.learnHead}>
-        <Kicker>Learn for upcoming</Kicker>
-        {part ? <Text style={styles.small}>{partName(part)}</Text> : null}
-      </View>
+    <>
       {groups.map(({ event, items }) => {
         const known = items.filter((i) => bySong.get(i.song_id)?.knows_part).length;
         return (
-          <View key={event.id} style={{ gap: 8 }}>
-            <View style={styles.learnHead}>
-              <Text style={styles.learnTitle} numberOfLines={1}>
-                {event.title || kindLabel(type, event.kind)} · {fmtDate(event.starts_at)}
-              </Text>
-              <Text style={[styles.small, known === items.length && { color: colors.ok }]}>
-                {known} of {items.length} known
-              </Text>
-            </View>
-            {items.slice(0, 8).map((item) => {
+          <Shelf
+            key={event.id}
+            title={`Learn for ${event.title || kindLabel(type, event.kind)}`}
+            note={[fmtDate(event.starts_at), `${known} of ${items.length} known`, part ? partName(part) : null].filter(Boolean).join(' · ')}
+          >
+            {items.slice(0, 12).map((item) => {
               const p = bySong.get(item.song_id);
-              const note = p?.knows_part ? '✓ Know it' : p?.plays ? `${p.plays} ${p.plays === 1 ? 'play' : 'plays'}` : 'New';
               return (
-                <SongRow
+                <SongTile
                   key={item.song_id}
-                  song={{ id: item.song_id, title: item.title, composer: item.composer, doh: item.doh, time: item.time_signature, playable: item.playable }}
-                  note={note}
+                  song={{
+                    id: item.song_id,
+                    title: item.title,
+                    composer: item.composer,
+                    doh: item.doh,
+                    time: item.time_signature,
+                    solfa: item.playable ? solfaOf(item.song_id) : undefined,
+                    countable: true,
+                    sub: p?.knows_part ? 'You know your part' : p?.plays ? `${p.plays} ${p.plays === 1 ? 'play' : 'plays'}` : item.playable ? 'New to you' : 'Sheet only',
+                  }}
+                  badge={p?.knows_part ? 'known' : undefined}
                 />
               );
             })}
-          </View>
+          </Shelf>
         );
       })}
-    </View>
+    </>
+  );
+}
+
+/** Songs to try, built in so they play with no connection. */
+function TrySongs() {
+  return (
+    <Shelf title="Try a song">
+      {DEMO_SONGS.map((d) => (
+        <SongTile key={d.id} song={{ id: d.id, title: d.title, composer: d.composer, sub: d.composer, doh: d.key, time: d.time, solfa: d.solfa, countable: true }} />
+      ))}
+    </Shelf>
   );
 }
 
@@ -369,10 +375,7 @@ function LookingAround() {
           }}
         />
       </Card>
-      <Kicker>Try a song</Kicker>
-      {DEMO_SONGS.map((d) => (
-        <SongRow key={d.id} song={{ id: d.id, title: d.title, composer: d.composer, doh: d.key, time: d.time, playable: true }} />
-      ))}
+      <TrySongs />
     </Page>
   );
 }
@@ -389,7 +392,6 @@ const useStyles = makeStyles((colors) => ({
   onHero: { fontFamily: fonts.body, fontSize: 14.5, lineHeight: 20, color: colors.onHeroSoft },
   row: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginTop: 4 },
   learnHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
-  learnTitle: { flex: 1, fontFamily: fonts.heavy, fontSize: 14, color: colors.ink },
   countdown: { fontFamily: fonts.heavy, fontSize: 14, color: colors.onHero, marginTop: 2 },
   small: { fontFamily: fonts.body, fontSize: 12.5, color: colors.muted },
 }));

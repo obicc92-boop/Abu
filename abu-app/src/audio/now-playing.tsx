@@ -8,7 +8,7 @@
  */
 import { useQueryClient } from '@tanstack/react-query';
 import { usePathname } from 'expo-router';
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { api } from '@/api/client';
 import { dayKey } from '@/lib/dates';
@@ -16,6 +16,7 @@ import { queuePlay } from '@/lib/outbox';
 import type { ParsedSong } from '@/solfa';
 import { useSession } from '@/state/session';
 
+import { getAudioContext } from './context';
 import { useSongPlayer } from './use-song-player';
 
 export interface NowPlayingSong {
@@ -36,6 +37,8 @@ interface NowPlaying {
   song: NowPlayingSong | null;
   player: Player;
   open(song: NowPlayingSong): void;
+  /** Open the song and play it (a tile's play button). Call it straight from the tap. */
+  play(song: NowPlayingSong): void;
   /** Stop, and take the song away (the bar over the tabs goes). */
   close(): void;
 }
@@ -64,6 +67,25 @@ export function NowPlayingProvider({ children }: { children: ReactNode }) {
     stop();
     setSong(null);
   }, [stop]);
+
+  // A tile's play button: the sound is let in now, during the tap (browsers allow sound only from a tap), and the
+  // song starts as soon as it has loaded; one already open carries on at once.
+  const startWhenOpen = useRef<string | null>(null);
+  const play = (next: NowPlayingSong) => {
+    if (same(song, next)) {
+      if (!player.playing) player.togglePlay();
+      return;
+    }
+    void getAudioContext()?.resume().catch(() => {});
+    startWhenOpen.current = next.id;
+    open(next);
+  };
+  const { togglePlay } = player;
+  useEffect(() => {
+    if (!song || startWhenOpen.current !== song.id) return;
+    startWhenOpen.current = null;
+    togglePlay();
+  }, [song, togglePlay]);
 
   // Perform: no sound, ever.
   const path = usePathname();
@@ -95,7 +117,7 @@ export function NowPlayingProvider({ children }: { children: ReactNode }) {
       .catch((e: { status?: number }) => e.status === 0 && queuePlay({ songId: id, day }));
   }, [player.timesPlayed, status, song, queryClient]);
 
-  const value = useMemo(() => ({ song, player, open, close }), [song, player, open, close]);
+  const value = { song, player, open, play, close };
   return <NowPlayingContext.Provider value={value}>{children}</NowPlayingContext.Provider>;
 }
 
