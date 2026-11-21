@@ -112,7 +112,7 @@ function instrument(name, kbps, sr, items, { tune = false } = {}) {
     return { note: f.split('_')[0], x: out, loop: [s, e] };
   }));
 }
-// OLD CHOIR ("Choir (old)" in the app, until the owner has compared): FluidR3 "Ahh Choir" raw samples pulled
+// OLD CHOIR ("Choir (old)" in the app, kept as a choice): FluidR3 "Ahh Choir" raw samples pulled
 // losslessly from FluidR3_GM.sf2 (sf2pull.mjs): L+R mixed to mono,
 // exact SF2 loop points, file = attack + one loop + 0.15 s of the loop's continuation, resampled to 32 kHz
 function writeWav(file, rate, x) {

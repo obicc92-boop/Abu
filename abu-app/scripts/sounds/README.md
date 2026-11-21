@@ -1,6 +1,6 @@
 # The player's instrument sounds
 
-`public/sounds/` holds the recordings the player uses when someone picks Piano, Strings, Choir or Choir (old) under Me → Settings → Sound (the synth needs none). Choir (old) is the first choir, kept so the owner can compare the two in the app; once they confirm the new one, it goes (see `INSTRUMENTS` in `src/audio/instruments.ts`). They download only when chosen, once, and the service worker keeps them on the phone. These scripts rebuild them.
+`public/sounds/` holds the recordings the player uses when someone picks Piano, Strings, Choir or Choir (old) under Me → Settings → Sound (the synth needs none). Choir (old) is the first choir, kept as a choice for anyone who prefers it (owner's decision, 21 November 2026). They download only when chosen, once, and the service worker keeps them on the phone. These scripts rebuild them.
 
 ## Sources
 

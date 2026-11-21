@@ -30,8 +30,7 @@ export interface InstrumentInfo {
 
 /**
  * In the order Me shows them. The sizes are checked against public/sounds by a test. "Choir (old)" is the first
- * choir (FluidR3's), kept for now so the owner can hear both in the app; once they confirm the new one, remove it here,
- * in NOTE_SHAPES, its files (public/sounds/choir-old), its part of the manifest and of LICENSES.txt, and Me's credit.
+ * choir (FluidR3's), kept as a choice for anyone who prefers it (owner's decision, 21 November 2026).
  */
 export const INSTRUMENTS: readonly InstrumentInfo[] = [
   { name: 'synth', label: 'Synth', bytes: 0 },

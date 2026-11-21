@@ -689,8 +689,8 @@ function LookPreview({ sides }: { sides: Palette[] }) {
 
 /**
  * The player's sound (owner's request, 21 November 2026): the synth, or a recorded piano, strings or choir, each
- * downloaded once when chosen and kept on the phone (and, until the owner has compared them, the first choir as
- * "Choir (old)"). Every player follows it from its next note.
+ * downloaded once when chosen and kept on the phone (and the first choir, kept as "Choir (old)" for anyone who
+ * prefers it). Every player follows it from its next note.
  */
 function SoundChoices({ chosen }: { chosen: Instrument }) {
   const styles = useStyles();

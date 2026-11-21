@@ -508,7 +508,7 @@ describe('SongPlayer playing recorded instruments', () => {
     expect(tenor.loopStart).toBeCloseTo(gb3.loopStart! + DELAY, 6);
     expect((tenor.to[0] as FakeGain).to[0]).toBe(choir.ctx.gains[2]); // into the tenors' gain
 
-    // The old choir, while it's kept: one set for every part.
+    // The old choir: one set for every part.
     const old = setup('S  d :- |\nT  d :- |', { time: '2/4', key: 7 }, sounds);
     await sounds.library.load(asCtx(old.ctx), 'choir-old');
     old.player.setInstrument('choir-old');
