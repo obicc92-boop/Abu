@@ -330,3 +330,51 @@ describe('lines laid out by the room their bars need', () => {
     expect(layoutScore(busy, { maxBeats: 12 })).toEqual(systems);
   });
 });
+
+describe('hairpins and directions on the score', () => {
+  const lay = (text: string, opts?: Parameters<typeof layoutScore>[1]) => layoutScore(parseSolfa(text, { time: '4/4' }), opts);
+
+  it('draws a hairpin from its beat to the part’s next dynamic, as a wedge rather than a mark', () => {
+    const [sys] = lay('S  {p}{<}d :r /m :{f}f |\nA  d :d /d :d |');
+    expect(sys.rows[0].hairpins).toEqual([{ from: 0, to: 3, open: [0, 1] }]);
+    expect(sys.rows[0].marks.map((m) => m.text)).toEqual(['p', 'f']);
+    expect(sys.rows[1].hairpins).toEqual([]);
+  });
+
+  it('runs to the end of its bar when no mark ends it', () => {
+    const [sys] = lay('S  d :{>}r /m :f | s :- /- :- |');
+    expect(sys.rows[0].hairpins).toEqual([{ from: 1, to: 4, open: [1, 0] }]);
+  });
+
+  it('runs on into the next line when the mark that ends it is there', () => {
+    const systems = lay('S  d :r /{<}m :f | s :{f}- /- :- |', { maxBeats: 4 });
+    expect(systems.map((s) => s.rows[0].hairpins)).toEqual([[{ from: 2, to: 4, open: [0, 2 / 3] }], [{ from: 4, to: 5, open: [2 / 3, 1] }]]);
+  });
+
+  it('stops at the end of its bar when the mark that ends it is further on than the next line', () => {
+    const systems = lay('S  d :{<}r /m :f | s :- /- :- | {f}d :- /- :- |', { maxBeats: 4 });
+    expect(systems.map((s) => s.rows[0].hairpins)).toEqual([[{ from: 1, to: 4, open: [0, 1] }], [], []]);
+  });
+
+  it('ends at a dynamic for every part, and puts a hairpin for every part on the line itself', () => {
+    const [own] = lay('S  {<}d :r /m :f |\n{f}\nS  s :- /- :- |', { maxBeats: 8 });
+    expect(own.rows[0].hairpins).toEqual([{ from: 0, to: 4, open: [0, 1] }]);
+    const [all] = lay('{>}\nS  d :r /m :f |\nA  d :d /d :d |\n{p}\nS  s :- /- :- |\nA  d :- /- :- |', { maxBeats: 8 });
+    expect(all.hairpins).toEqual([{ from: 0, to: 4, open: [1, 0] }]);
+    expect(all.rows.every((r) => r.hairpins.length === 0)).toBe(true);
+  });
+
+  it('leaves out another part’s hairpins with my part only', () => {
+    const [sys] = lay('S  {<}d :r /m :{f}f |\nA  {>}d :d /d :{p}d |', { only: 'A' });
+    expect(sys.rows.map((r) => [r.part, r.hairpins])).toEqual([['A', [{ from: 0, to: 3, open: [1, 0] }]]]);
+  });
+
+  it('puts accel. with the tempo marks, and directions in a part’s row or on the line', () => {
+    const [sys] = lay('{Maestoso}\nS  {dolce}d :r /{accel}m :f |\nA  d :d /d :d |');
+    expect(sys.marks.map((m) => [m.kind, m.text, m.beat])).toEqual([
+      ['direction', 'Maestoso', 0],
+      ['accel', 'accel.', 2],
+    ]);
+    expect(sys.rows[0].marks.map((m) => [m.kind, m.text, m.beat])).toEqual([['direction', 'dolce', 0]]);
+  });
+});

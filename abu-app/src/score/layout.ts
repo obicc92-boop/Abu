@@ -36,6 +36,20 @@ export interface ScoreMark {
 }
 
 /**
+ * A hairpin ("<" getting louder, ">" softer) on one line of the score, drawn
+ * as a wedge in its marks' line. It runs from its beat to the part's next
+ * dynamic, accent, cresc., dim. or hairpin; if that isn't on its line or the
+ * next, to the end of its bar.
+ */
+export interface ScoreHairpin {
+  /** The beats it runs between on this line (`to`: the start of the beat it reaches). */
+  from: number;
+  to: number;
+  /** How far open the wedge is where it starts and ends on this line: 0 its point, 1 its mouth. */
+  open: [number, number];
+}
+
+/**
  * A slur under a row's notes on one line of the score: written in brackets ("(m'.d')", "(s :f |m)"), drawn as a
  * sheet does in sol-fa, as a line under the notes from the first to the last.
  */
@@ -56,8 +70,10 @@ export interface ScoreRow {
   cells: ScoreCell[];
   /** Words under this row, or null when the part has none. */
   lyrics: LyricSegment[] | null;
-  /** This part's own markings starting on this line (dynamics, accents, cresc., dim.), drawn just above its notes. */
+  /** This part's own markings starting on this line (dynamics, accents, cresc., dim., directions), drawn just above its notes. */
   marks: ScoreMark[];
+  /** This part's hairpins on this line, drawn as wedges with its markings. */
+  hairpins: ScoreHairpin[];
   /** Slurs under this row's notes on this line, in order. */
   slurs: ScoreSlur[];
 }
@@ -74,10 +90,12 @@ export interface ScoreSystem {
   /** Key changes starting on this line: the beat, and the new doh (semitones above C, before any transpose). */
   keys: { beat: number; semitone: number }[];
   /**
-   * Markings for every part starting on this line: tempo, rit., a tempo, and dynamics written on a line of their
-   * own. Drawn above the line, beside the key changes.
+   * Markings for every part starting on this line: tempo, rit., accel., a tempo, and dynamics and directions
+   * written on a line of their own. Drawn above the line, beside the key changes.
    */
   marks: ScoreMark[];
+  /** Hairpins for every part on this line, drawn as wedges with those markings. */
+  hairpins: ScoreHairpin[];
 }
 
 export interface LayoutOptions {
@@ -136,10 +154,10 @@ export function layoutScore(song: ParsedSong, opts: LayoutOptions = {}): ScoreSy
           });
         }
         const lp = lyricsFrom(p);
-        return { part: p, cells, lyrics: lp ? lyricSegments(sec.lyrics[lp], start, n) : null, marks: marksOn(song, p, start, n), slurs: [] };
+        return { part: p, cells, lyrics: lp ? lyricSegments(sec.lyrics[lp], start, n) : null, marks: marksOn(song, p, start, n), hairpins: [], slurs: [] };
       });
       const marks = marksOn(song, null, start, n);
-      return { start, beats: n, widths: columnWidths(lineRows, start, n, marks, keys, gutter), rows: lineRows, keys, marks };
+      return { start, beats: n, widths: columnWidths(lineRows, start, n, marks, keys, gutter), rows: lineRows, keys, marks, hairpins: [] };
     };
 
     const lines = maxChars ? linesByRoom(bars.length, barStarts, line, maxChars, maxBeats) : linesByBeats(bars, maxBeats);
@@ -157,7 +175,51 @@ export function layoutScore(song: ParsedSong, opts: LayoutOptions = {}): ScoreSy
       from += count;
     }
   });
+  addHairpins(song, systems);
   return systems;
+}
+
+/** A hairpin, as the reader gives it: a cresc. or dim. written "<" or ">". */
+export const isHairpin = (e: { kind: ExpressionKind; text: string }): boolean => (e.kind === 'cresc' && e.text === '<') || (e.kind === 'dim' && e.text === '>');
+
+/** What ends a hairpin: the next change of loudness written for its part. */
+const ENDS_HAIRPIN: ReadonlySet<ExpressionKind> = new Set<ExpressionKind>(['dynamic', 'accent', 'cresc', 'dim']);
+
+/**
+ * Puts each hairpin on the lines it runs over, as a sheet draws it: from its
+ * beat to the part's next dynamic, accent, cresc., dim. or hairpin (or one for
+ * every part), running on into the next line when that mark is there; else to
+ * the end of its bar. A part's hairpin goes in its row, one for every part on
+ * the line itself; one for a part not shown ("my part only") is left out.
+ */
+function addHairpins(song: ParsedSong, systems: ScoreSystem[]): void {
+  const lineAt = (beat: number) => systems.findIndex((s) => beat >= s.start - 1e-6 && beat < s.start + s.beats - 1e-6);
+  for (const e of song.expressions) {
+    if (!isHairpin(e)) continue;
+    const at = lineAt(e.beat);
+    if (at < 0) continue;
+    const line = systems[at];
+    const next = systems[at + 1];
+    const lineEnd = line.start + line.beats;
+    const until = song.expressions.find((x) => x.beat > e.beat + 1e-6 && ENDS_HAIRPIN.has(x.kind) && (x.part === e.part || x.part === null));
+    let end: number;
+    // On its line (or at the start of the next), or on the next line: the wedge runs to it.
+    if (until && (until.beat <= lineEnd + 1e-6 || (next && until.beat < next.start + next.beats - 1e-6))) end = until.beat;
+    else {
+      const cells = (line.rows.find((r) => r.part === e.part) ?? line.rows[0])?.cells ?? [];
+      end = cells.find((c) => c.barStart && c.beat > e.beat + 1e-6)?.beat ?? lineEnd;
+    }
+    const share = (beat: number) => (beat - e.beat) / (end - e.beat);
+    for (const sys of [line, next]) {
+      if (!sys) continue;
+      const from = Math.max(e.beat, sys.start);
+      const to = Math.min(end, sys.start + sys.beats);
+      if (to - from < 1e-6) continue;
+      const open: [number, number] = e.text === '<' ? [share(from), share(to)] : [1 - share(from), 1 - share(to)];
+      const into = e.part === null ? sys.hairpins : sys.rows.find((r) => r.part === e.part)?.hairpins;
+      into?.push({ from, to, open });
+    }
+  }
 }
 
 /**
@@ -249,7 +311,8 @@ function slursIn(cells: ScoreCell[], open: boolean): { slurs: ScoreSlur[]; open:
 function marksOn(song: ParsedSong, part: string | null, start: number, n: number): ScoreMark[] {
   const marks: ScoreMark[] = [];
   for (const e of song.expressions) {
-    if (e.part !== part || e.beat < start - 1e-6 || e.beat >= start + n - 1e-6) continue;
+    // Hairpins are drawn as wedges, not words (addHairpins).
+    if (e.part !== part || isHairpin(e) || e.beat < start - 1e-6 || e.beat >= start + n - 1e-6) continue;
     if (marks.some((m) => m.text === e.text && Math.abs(m.beat - e.beat) < 1e-6)) continue;
     marks.push({ beat: e.beat, text: e.text, kind: e.kind });
   }

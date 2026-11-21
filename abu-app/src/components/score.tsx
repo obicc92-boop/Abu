@@ -1,7 +1,8 @@
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ScrollView, StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
+import Svg, { Line } from 'react-native-svg';
 
-import { displayBeat, layoutScore, type ScoreCell, type ScoreSlur, type ScoreSystem } from '@/score/layout';
+import { displayBeat, layoutScore, type ScoreCell, type ScoreHairpin, type ScoreSlur, type ScoreSystem } from '@/score/layout';
 import { isTempo, KEY_NAMES, mod12, partName, type ExpressionKind, type ParsedSong } from '@/solfa';
 import { useTheme } from '@/theme/theme';
 import { fonts, lightColors, partColor, partInk, partLetter, type Palette } from '@/theme/tokens';
@@ -153,14 +154,25 @@ const System = memo(function System({ system, activeBeat, silent, palette, size,
   // Parts sharing a colour on this line (S1 and S2, or parts with no name) keep a small label.
   const shared = system.rows.map((r) => partColor(r.part)).filter((c, i, all) => all.indexOf(c) !== i);
   // Above the line, from the beat each starts: where the key changes ("Doh is A" from that beat on), and markings
-  // for every part (tempo, rit., a dynamic written on a line of its own), in the headings' colour.
+  // for every part (tempo, rit., accel., a dynamic, hairpin or direction written on a line of its own), in the
+  // headings' colour.
   const lineMarks: LineMark[] = [
     ...system.keys.map((k) => ({ beat: k.beat, text: `Doh is ${KEY_NAMES[mod12(k.semitone + transpose)]}`, style: [styles.keyMark, { color: palette.heading }] })),
     ...system.marks.map((m) => ({ beat: m.beat, text: m.text, style: markLook(m.kind, palette.heading, palette) })),
   ];
   const lines = (
     <>
-      {lineMarks.length ? <MarkLine marks={lineMarks} start={start} widths={widths} fontSize={markSize} lead={<View style={{ width: edge.width + edge.gap }} />} /> : null}
+      {lineMarks.length || system.hairpins.length ? (
+        <MarkLine
+          marks={lineMarks}
+          hairpins={system.hairpins}
+          ink={palette.heading}
+          start={start}
+          widths={widths}
+          fontSize={markSize}
+          lead={<View style={{ width: edge.width + edge.gap }} />}
+        />
+      ) : null}
       {system.rows.map((row) => {
         const missing = widths.slice(row.cells.length).reduce((a, b) => a + b, 0);
         const ink = partInk(row.part, palette.dark);
@@ -177,10 +189,12 @@ const System = memo(function System({ system, activeBeat, silent, palette, size,
               style={[styles.edge, { width: edge.width, marginRight: edge.gap, backgroundColor: color }]}
             />
             <View style={styles.partBody}>
-              {row.marks.length ? (
-                // The part's own markings (p, f, sfz, cresc.), just above its notes, in its colour.
+              {row.marks.length || row.hairpins.length ? (
+                // The part's own markings (p, f, sfz, cresc., dolce) and hairpins, just above its notes, in its colour.
                 <MarkLine
                   marks={row.marks.map((m) => ({ beat: m.beat, text: m.text, style: markLook(m.kind, ink, palette) }))}
+                  hairpins={row.hairpins}
+                  ink={ink}
                   start={start}
                   widths={widths}
                   fontSize={markSize}
@@ -264,8 +278,9 @@ interface LineMark {
 
 /**
  * How a marking is set, as printed sheets set them: dynamics and accents (p, ff,
- * sfz) bold italic, cresc. and dim. italic, both in the part's colour (`ink`);
- * tempo, rit. and a tempo italic in the headings' colour, like a key change.
+ * sfz) bold italic, cresc., dim. and directions (dolce, Maestoso) italic, all in
+ * the part's colour (`ink`); tempo, rit., accel. and a tempo italic in the
+ * headings' colour, like a key change.
  */
 function markLook(kind: ExpressionKind, ink: string, palette: Look): StyleProp<TextStyle> {
   if (isTempo(kind)) return [styles.markTempo, { color: palette.heading }];
@@ -274,6 +289,9 @@ function markLook(kind: ExpressionKind, ink: string, palette: Look): StyleProp<T
 
 interface MarkLineProps {
   marks: LineMark[];
+  /** Hairpins on this line, drawn as wedges in `ink`. */
+  hairpins: ScoreHairpin[];
+  ink: string;
   start: number;
   widths: number[];
   fontSize: number;
@@ -287,7 +305,7 @@ interface MarkLineProps {
  * over the beats after it rather than being squashed (the layout widens its
  * column when even that isn't enough); ones on the same beat sit side by side.
  */
-function MarkLine({ marks, start, widths, fontSize, lead }: MarkLineProps) {
+function MarkLine({ marks, hairpins, ink, start, widths, fontSize, lead }: MarkLineProps) {
   const span = (from: number, to: number) => widths.slice(from, to).reduce((a, b) => a + b, 0);
   const cols: { col: number; marks: LineMark[] }[] = [];
   for (const m of marks) {
@@ -299,7 +317,7 @@ function MarkLine({ marks, start, widths, fontSize, lead }: MarkLineProps) {
   cols.sort((a, b) => a.col - b.col);
   const before = span(0, cols[0]?.col ?? 0);
   return (
-    <View style={styles.line}>
+    <View style={[styles.line, hairpins.length > 0 && { minHeight: Math.round(fontSize * 1.35) }]}>
       {lead}
       {before > 0 ? <View style={{ flex: before }} /> : null}
       {cols.map((c, i) => (
@@ -316,7 +334,38 @@ function MarkLine({ marks, start, widths, fontSize, lead }: MarkLineProps) {
           </Text>
         </View>
       ))}
+      {hairpins.map((h, k) => {
+        // Each wedge over the same columns as the markings, laid on top of them so it takes no room of its own.
+        const from = Math.floor(h.from - start + 1e-6);
+        const to = Math.max(from + 1, Math.round(h.to - start));
+        // A marking printed on the beat it starts ("p <") comes first, and the wedge after it.
+        const first = cols.find((c) => c.col === from);
+        const chars = first ? first.marks.reduce((a, m) => a + m.text.length, 0) + 2 * (first.marks.length - 1) : 0;
+        return (
+          <View key={k} style={[StyleSheet.absoluteFill, styles.line]}>
+            {lead}
+            {span(0, from) > 0 ? <View style={{ flex: span(0, from) }} /> : null}
+            <View style={[styles.wedgeBox, { flex: Math.max(1, span(from, to)), paddingLeft: first ? 5 + chars * fontSize * 0.65 : 2, paddingRight: 3 + fontSize * 0.25 }]}>
+              <Wedge open={h.open} height={Math.round(fontSize * 0.9)} color={ink} />
+            </View>
+            {span(to, widths.length) > 0 ? <View style={{ flex: span(to, widths.length) }} /> : null}
+          </View>
+        );
+      })}
     </View>
+  );
+}
+
+/** A hairpin's wedge, as sheets draw it: two thin lines from `open[0]` to `open[1]` of its full mouth (0 its point). */
+function Wedge({ open, height, color }: { open: [number, number]; height: number; color: string }) {
+  const mid = height / 2;
+  // Half the gap between the lines at each end, kept inside the drawing so the lines aren't cut.
+  const [a, b] = open.map((o) => o * (mid - 0.75));
+  return (
+    <Svg width="100%" height={height}>
+      <Line x1="0%" y1={mid - a} x2="100%" y2={mid - b} stroke={color} strokeWidth={1.1} strokeLinecap="round" />
+      <Line x1="0%" y1={mid + a} x2="100%" y2={mid + b} stroke={color} strokeWidth={1.1} strokeLinecap="round" />
+    </Svg>
   );
 }
 
@@ -459,6 +508,8 @@ const styles = StyleSheet.create({
   markGradual: { fontFamily: fonts.body, fontStyle: 'italic' },
   markTempo: { fontFamily: fonts.bold, fontStyle: 'italic' },
   unseen: { opacity: 0 },
+  /** A wedge's room: from its beat's column, a little short of the column it reaches (an italic f leans back). */
+  wedgeBox: { minWidth: 0, justifyContent: 'center' },
   slurred: { flexDirection: 'row', alignSelf: 'stretch' },
   slurRun: { flex: 1 },
   slurLine: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 1.5, borderRadius: 1 },
