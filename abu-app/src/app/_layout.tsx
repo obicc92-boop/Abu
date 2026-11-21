@@ -14,7 +14,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 
 import { NowPlayingProvider } from '@/audio/now-playing';
-import { BrandMark } from '@/components/brand';
+import { BrandFill, BrandMark } from '@/components/brand';
 import { ConnectionBars } from '@/components/connection-bars';
 import { useKeepOffline } from '@/lib/keep-offline';
 import { persistOptions, queryClient } from '@/lib/offline';
@@ -60,8 +60,12 @@ export default function RootLayout() {
   // If a font fails, carry on with system fonts rather than a blank screen.
   if (!loaded && !error) {
     return (
-      <View style={{ flex: 1, backgroundColor: brand.red, alignItems: 'center', justifyContent: 'center' }}>
-        <BrandMark size={MARK_WIDTH} />
+      <View style={{ flex: 1, backgroundColor: brand.orange, alignItems: 'center', justifyContent: 'center' }}>
+        <BrandFill />
+        {/* In a view of its own, so it sits over the gradient (on the web an svg alone is drawn under it). */}
+        <View>
+          <BrandMark size={MARK_WIDTH} />
+        </View>
       </View>
     );
   }

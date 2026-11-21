@@ -168,16 +168,16 @@ export const darkColors: Palette = {
 
 export const palettes: Readonly<Record<Scheme, Palette>> = { light: lightColors, dark: darkColors };
 
-/** Colours that don't change with light or dark: the red icon, splash and first paint, and WhatsApp's green. */
+/**
+ * Colours that don't change with light or dark: the icon's, splash's and first paint's gradient (the main colour,
+ * orange at the top left running into pink at the bottom right; red until 21 November 2026), and WhatsApp's green.
+ */
 export const brand = {
-  red: '#D93A1E',
-  redDeep: '#A3261A',
+  orange,
+  pink,
   gold: '#E6A325',
   white: '#FFFFFF',
   ink: '#22160F',
-  onRedSoft: '#FFE7E0',
-  /** Kickers on red. */
-  onRedKicker: '#FFD9CF',
   /** The WhatsApp share button's green (white text on it). */
   whatsapp: '#1F8F4E',
 } as const;

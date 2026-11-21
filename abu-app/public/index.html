@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
-    <meta name="theme-color" content="#D93A1E" />
+    <meta name="theme-color" content="#D14617" />
     <script>
       // SolfaScores lives at solfascores.com. A browser on the old address (abu.adalingo.workers.dev)
       // or on www goes there, to the same page. Not the app installed from the old address, which
@@ -72,14 +72,15 @@
         height: 100%;
         flex: 1;
       }
-      /* Shown until the app loads: the same red screen and s:s mark as the
-         phone splash, so slow connections never see a blank page. */
+      /* Shown until the app loads: the same screen and s:s mark as the splash
+         (the brand's orange running into pink, as on the app icon), so slow
+         connections never see a blank page. */
       #first-paint {
         flex: 1;
         display: flex;
         align-items: center;
         justify-content: center;
-        background: #d93a1e;
+        background: #d14617 linear-gradient(to bottom right, #d14617, #da2f6e);
       }
     </style>
   </head>

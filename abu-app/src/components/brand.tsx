@@ -1,5 +1,6 @@
 /**
- * Brand pieces drawn in SVG: the mark from the app icon and the background for red screens and feature cards.
+ * Brand pieces drawn in SVG: the mark from the app icon, the icon's orange-to-pink background (`BrandFill`), and the
+ * background for feature cards.
  * Sources and usage rules: design/brand/ and design/brand-draft.html.
  */
 import { useId, useState } from 'react';
@@ -11,7 +12,7 @@ import { brand as colors } from '@/theme/tokens';
 /**
  * The mark from the app icon (design/brand/icon.svg and mark.svg): "s:s", soh,
  * the sol-fa colon in gold, soh, as a beat is written on a sol-fa sheet, in
- * Marcellus like the name. Drawn for a red background. `size` is the width.
+ * Marcellus like the name. Drawn for the brand's orange-to-pink background. `size` is the width.
  */
 export const MARK_ASPECT = 373 / 620;
 
@@ -143,6 +144,28 @@ export function MainFill({ from, to }: { from: string; to: string }) {
           </LinearGradient>
         </Defs>
         <Rect width="100%" height="100%" fill={`url(#f${id})`} />
+      </Svg>
+    </View>
+  );
+}
+
+/**
+ * The brand's background, as on the app icon (design/brand/icon.svg): the main colour, warm orange-red at the top
+ * left running into pink at the bottom right. Fills its parent: the splash animation and the loading screen, like
+ * the web's first paint (public/index.html).
+ */
+export function BrandFill() {
+  const id = useId().replace(/[^a-zA-Z0-9]/g, '');
+  return (
+    <View style={styles.fill}>
+      <Svg width="100%" height="100%" preserveAspectRatio="none">
+        <Defs>
+          <LinearGradient id={`b${id}`} x1="0" y1="0" x2="1" y2="1">
+            <Stop offset="0" stopColor={colors.orange} />
+            <Stop offset="1" stopColor={colors.pink} />
+          </LinearGradient>
+        </Defs>
+        <Rect width="100%" height="100%" fill={`url(#b${id})`} />
       </Svg>
     </View>
   );

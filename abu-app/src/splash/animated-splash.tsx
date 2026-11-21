@@ -1,6 +1,8 @@
 /**
  * The opening animation. Its first frame matches the still splash screen
- * (red, with the s:s mark in the middle), so the hand-over is seamless.
+ * (the brand's orange, with the s:s mark in the middle), so the hand-over is
+ * seamless; the orange then runs into pink as on the app icon (`BrandFill`).
+ * On the web it starts with the gradient, as the first paint has it.
  * Then the mark bounces, a glow and sound rings spread from it, the sol-fa
  * scale (d r m f s l t d', each syllable in its own soft colour) bursts out
  * of it and pops up all over the screen, "SolfaScores" rises in, and
@@ -20,7 +22,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Circle, Defs, Path, RadialGradient, Stop } from 'react-native-svg';
 
-import { BrandMark, MARK_ASPECT } from '@/components/brand';
+import { BrandFill, BrandMark, MARK_ASPECT } from '@/components/brand';
 import { brand as colors, fonts } from '@/theme/tokens';
 
 import { splashParticles, type Burst, type Pop } from './particles';
@@ -88,6 +90,7 @@ export function AnimatedSplash({ onDone }: { onDone: () => void }) {
 
   return (
     <Animated.View style={[styles.root, rootStyle]}>
+      <Sky />
       <Pressable style={styles.fill} onPress={skip} accessibilityRole="button" accessibilityLabel="SolfaScores. Tap to skip">
         {reduceMotion ? null : (
           <>
@@ -110,6 +113,23 @@ export function AnimatedSplash({ onDone }: { onDone: () => void }) {
 }
 
 /* ---------- Pieces ---------- */
+
+/**
+ * The orange-to-pink background. A phone's still splash can only be one colour (orange), so there it comes in
+ * over the first moments; the web's first paint already has it.
+ */
+function Sky() {
+  const a = useSharedValue(Platform.OS === 'web' ? 1 : 0);
+  useEffect(() => {
+    if (Platform.OS !== 'web') a.set(withTiming(1, { duration: 450, easing: Easing.out(Easing.quad) }));
+  }, [a]);
+  const style = useAnimatedStyle(() => ({ opacity: a.value }));
+  return (
+    <Animated.View style={[StyleSheet.absoluteFill, style]}>
+      <BrandFill />
+    </Animated.View>
+  );
+}
 
 function Mark({ animate }: { animate: boolean }) {
   const s = useSharedValue(1);
@@ -147,9 +167,9 @@ function Glow() {
       <Svg width={GLOW} height={GLOW}>
         <Defs>
           <RadialGradient id="splashGlow" cx="50%" cy="50%" r="50%">
-            <Stop offset="0" stopColor="#FF8A6B" stopOpacity={0.85} />
-            <Stop offset="0.45" stopColor="#F2603F" stopOpacity={0.45} />
-            <Stop offset="1" stopColor={colors.red} stopOpacity={0} />
+            <Stop offset="0" stopColor="#FF9A78" stopOpacity={0.85} />
+            <Stop offset="0.45" stopColor="#F2604F" stopOpacity={0.45} />
+            <Stop offset="1" stopColor={colors.orange} stopOpacity={0} />
           </RadialGradient>
         </Defs>
         <Circle cx={GLOW / 2} cy={GLOW / 2} r={GLOW / 2} fill="url(#splashGlow)" />
@@ -267,7 +287,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     zIndex: 1000,
-    backgroundColor: colors.red,
+    backgroundColor: colors.orange,
     overflow: 'hidden',
   },
   fill: { flex: 1 },

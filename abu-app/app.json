@@ -14,7 +14,7 @@
     "android": {
       "package": "com.solfascores.app",
       "adaptiveIcon": {
-        "backgroundColor": "#D93A1E",
+        "backgroundColor": "#D14617",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -30,7 +30,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#D93A1E",
+          "backgroundColor": "#D14617",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 140
         }
