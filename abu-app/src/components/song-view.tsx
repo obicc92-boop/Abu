@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { useCallback, useMemo, useRef, type ReactNode } from 'react';
+import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View, type ScrollViewInstance } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -8,19 +8,22 @@ import { api, type Song } from '@/api/client';
 import { partLevel } from '@/audio/engine';
 import { useSongPage } from '@/audio/now-playing';
 import { DEMO_SONGS, type DemoSong } from '@/data/demo-songs';
+import { barAt, rangeLabel, songBars } from '@/score/bars';
 import { KEY_NAMES, mod12, parseSolfa } from '@/solfa';
 import { useSession } from '@/state/session';
 import { makeStyles } from '@/theme/theme';
 import { fonts } from '@/theme/tokens';
 
 import { PartMixer, PlayButton, Stepper, ToggleRow } from './player-controls';
-import { Score } from './score';
+import { Score, type BarActions } from './score';
 import { SongActions } from './song-actions';
 
 /**
  * A song: the player with its score, mixer and transport, or, for a sheet-only
  * song, its sheet and actions. Used by the song page and by Rehearse, which
- * puts its own step-through bar in `banner`.
+ * puts its own step-through bar in `banner`. A bar of the score tapped can be
+ * played from, played or looped, and, for whoever can edit the song, opened in
+ * the song editor at its line (owner's request, 21 November 2026).
  */
 export function SongView({ id, banner }: { id: string; banner?: ReactNode }) {
   const styles = useStyles();
@@ -70,7 +73,7 @@ export function SongView({ id, banner }: { id: string; banner?: ReactNode }) {
 function Player({ song, apiSong, banner }: { song: DemoSong; apiSong?: Song; banner?: ReactNode }) {
   const styles = useStyles();
   const parsed = useMemo(() => parseSolfa(song.solfa, { time: song.time, key: song.key }), [song.solfa, song.time, song.key]);
-  const { group } = useSession();
+  const { group, status } = useSession();
   // The app's own player (src/audio/now-playing.tsx): the song keeps playing when you leave this page, and its
   // plays are counted there.
   const nowSong = useMemo(
@@ -79,6 +82,21 @@ function Player({ song, apiSong, banner }: { song: DemoSong; apiSong?: Song; ban
   );
   const p = useSongPage(nowSong);
   const insets = useSafeAreaInsets();
+  // Bars to play from, play or loop; and to edit, for whoever can edit the song (as its Edit button says).
+  const mine = useQuery({ queryKey: ['songForMe', song.id], queryFn: () => api.songForMe(song.id), enabled: status === 'signedIn' && !!apiSong });
+  const bars = useMemo(() => songBars(parsed), [parsed]);
+  const [fromBar, setFromBar] = useState<number | null>(null);
+  const barActions: BarActions = {
+    canPlay: true,
+    playFrom: (beat) => {
+      setFromBar(barAt(bars, beat)?.bar ?? null);
+      p.playFrom(beat);
+    },
+    playBar: (from, to, loop) => p.playRange(from, to, { loop }),
+    edit: mine.data?.can_edit ? (bar) => router.push({ pathname: '/song-editor', params: { id: song.id, bar: String(bar) } }) : undefined,
+  };
+  // What's playing, when it's part of the song: "Looping bar 5", "Playing from bar 5".
+  const playingPart = p.playing ? (p.range ? rangeLabel(p.range, bars) : fromBar && fromBar > 1 ? `Playing from bar ${fromBar}` : null) : null;
   const keyName = KEY_NAMES[mod12(song.key + p.transpose)];
   const silent = useMemo(() => Object.fromEntries(parsed.parts.map((part) => [part, partLevel(part, p.mix) === 0])), [parsed, p.mix]);
 
@@ -114,7 +132,15 @@ function Player({ song, apiSong, banner }: { song: DemoSong; apiSong?: Song; ban
             scoreTop.current = e.nativeEvent.layout.y;
           }}
         >
-          <Score song={parsed} activeBeat={p.beat} silent={silent} onActiveLine={followLine} transpose={p.transpose} mine={group?.part ? p.mix.mine : null} />
+          <Score
+            song={parsed}
+            activeBeat={p.beat}
+            silent={silent}
+            onActiveLine={followLine}
+            transpose={p.transpose}
+            mine={group?.part ? p.mix.mine : null}
+            barActions={barActions}
+          />
         </View>
 
         <PartMixer parts={parsed.parts} mix={p.mix} onMute={p.toggleMute} onSolo={p.toggleSolo} onMine={p.setMine} />
@@ -128,11 +154,25 @@ function Player({ song, apiSong, banner }: { song: DemoSong; apiSong?: Song; ban
         <SongActions songId={song.id} song={apiSong} />
       </ScrollView>
 
+      {playingPart ? (
+        <View style={styles.playingPart} accessibilityLiveRegion="polite">
+          <Text style={styles.playingText}>{playingPart}</Text>
+          <Pressable onPress={p.stop} accessibilityRole="button" hitSlop={8} style={styles.stopPill}>
+            <Text style={styles.stopText}>Stop</Text>
+          </Pressable>
+        </View>
+      ) : null}
       <View style={[styles.transport, { paddingBottom: 10 + insets.bottom }]}>
         <View style={styles.transportSide}>
           <Stepper label="Tempo" value={p.tempo} onStep={p.changeTempo} lessLabel="Slower" moreLabel="Faster" />
         </View>
-        <PlayButton playing={p.playing} onPress={p.togglePlay} />
+        <PlayButton
+          playing={p.playing}
+          onPress={() => {
+            if (p.pausedAt === null) setFromBar(null);
+            p.togglePlay();
+          }}
+        />
         <View style={styles.transportSide}>
           <Stepper label="Key (doh)" value={keyName} onStep={p.changeKey} lessLabel="Lower key" moreLabel="Higher key" />
         </View>
@@ -208,4 +248,18 @@ const useStyles = makeStyles((colors) => ({
     backgroundColor: colors.card,
   },
   transportSide: { flex: 1, alignItems: 'center' },
+  // Over the transport while part of the song plays: what, and Stop.
+  playingPart: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    paddingVertical: 6,
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
+    backgroundColor: colors.card,
+  },
+  playingText: { fontFamily: fonts.bold, fontSize: 13, color: colors.ink },
+  stopPill: { borderRadius: 999, borderWidth: 1.5, borderColor: colors.line, paddingHorizontal: 12, minHeight: 28, justifyContent: 'center' },
+  stopText: { fontFamily: fonts.bold, fontSize: 12.5, color: colors.ink },
 }));

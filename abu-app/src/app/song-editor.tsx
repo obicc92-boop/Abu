@@ -1,14 +1,19 @@
 /**
  * Add a song, or edit one (?id=...). Type or paste the sol-fa and it's checked
- * as you type; preview and play it before saving; attach the original sheet
- * (PDF or photo). A song can be saved as sheet only. After scanning a sheet
+ * as you type; play it while writing it; attach the original sheet (PDF or
+ * photo). A song can be saved as sheet only. After scanning a sheet
  * (?from=scan) it opens with what was read and checked, and the sheet attached.
  * From Write it (?from=write) it's step 2 of 2, the page for writing the music,
  * after the song's details (src/app/write.tsx): it opens on a first line of
  * music with the sol-fa keys up, and what's written is kept until it's saved
  * (src/lib/new-song.ts). The page reads top to bottom as the work goes (owner's
  * request, 21 November 2026): the song (title, key, time, with Change), the
- * sol-fa, the preview, then what goes with saving it.
+ * music, then what goes with saving it.
+ *
+ * The music is one card, the song's score, edited in place (owner's request, 21
+ * November 2026: "edit inside the preview… and then play what they edited"): a
+ * bar tapped can be played from, played or looped, or its line of music opened
+ * right there to write in (?bar=5 opens bar 5's line, from a song's page).
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as DocumentPicker from 'expo-document-picker';
@@ -19,16 +24,17 @@ import { Linking, Platform, Pressable, Switch, Text, TextInput, View, type TextI
 import { api, type PickedFile, type Song } from '@/api/client';
 import { useSongPlayer } from '@/audio/use-song-player';
 import { PlayButton } from '@/components/player-controls';
-import { Score } from '@/components/score';
+import { Score, type BarActions } from '@/components/score';
 import { SolfaCheck } from '@/components/solfa-check';
 import { keysJustTouched, PhoneKeyboardBar, SolfaKeypad, type KeyPlace } from '@/components/solfa-keypad';
-import { SongRows, type ActiveRow } from '@/components/song-rows';
+import { AddLine, SongLine, type ActiveRow } from '@/components/song-rows';
 import { keepCursor, placeCursor } from '@/lib/field-cursor';
 import { applyKey, keyChangePlace, songLowMarksShown, songLowMarksTyped, withKeyChange, type Key, type Selection } from '@/lib/solfa-keys';
 import { ChevronIcon } from '@/components/icons';
 import { Body, Button, Card, Chip, ErrorText, Field, Kicker, Loading, Page, Steps, TopBar } from '@/components/ui';
 import { clearNewSong, hasMusic, isFirstPageOpen, NEW_SONG_PARTS, newSong, setNewSong, WRITE_STEPS, type NewSong } from '@/lib/new-song';
 import { musicPiece, songPieces, withKeyBefore, withNewLine, withRow } from '@/lib/song-pieces';
+import { barAt, lineBeats, lineOfBar, musicLines, rangeLabel, songBars } from '@/score/bars';
 import { TAG_GROUPS } from '@/lib/tags';
 import { takePastedDraft } from '@/lib/paste-draft';
 import { clearScanDraft, scanDraft, type ScanDraft } from '@/scan/draft';
@@ -49,7 +55,7 @@ T  m :- /f :r  | d :d  /m :r  | s :- /- :-  |
 B  d1:- /f1:s1 | l1:m1 /d1:s1 | d1:- /- :-  |`;
 
 export default function SongEditorScreen() {
-  const { id, from } = useLocalSearchParams<{ id?: string; from?: string }>();
+  const { id, from, bar } = useLocalSearchParams<{ id?: string; from?: string; bar?: string }>();
   // A song from a scan, or pasted on the Paste sol-fa screen (src/app/paste.tsx).
   const [draft] = useState(() => (id ? null : from === 'scan' ? scanDraft() : from === 'paste' ? takePastedDraft() : null));
   // A song being written from Write it: its details from step 1, and what's written so far.
@@ -65,10 +71,10 @@ export default function SongEditorScreen() {
       </Page>
     );
   }
-  return <Editor song={existing.data} draft={draft} pasted={from === 'paste'} written={written} />;
+  return <Editor song={existing.data} draft={draft} pasted={from === 'paste'} written={written} startBar={Number(bar) || null} />;
 }
 
-function Editor({ song, draft, pasted, written }: { song?: Song; draft: ScanDraft | null; pasted: boolean; written: NewSong | null }) {
+function Editor({ song, draft, pasted, written, startBar }: { song?: Song; draft: ScanDraft | null; pasted: boolean; written: NewSong | null; startBar: number | null }) {
   const styles = useStyles();
   const colors = useColors();
   const s = useSession();
@@ -105,6 +111,14 @@ function Editor({ song, draft, pasted, written }: { song?: Song; draft: ScanDraf
   const [writing, setWriting] = useState(false);
   const [keyboard, setKeyboard] = useState(false);
   const [sel, setSel] = useState<Selection>({ start: 0, end: 0 });
+  // The line of music open to write in, inside the score (counting lines of music from 0): a new song's first
+  // line from Write it, or the line of the bar a song's page asked for. And whether to start in its first row.
+  const [openLine, setOpenLine] = useState<number | null>(() => {
+    if (fresh) return 0;
+    const at = startBar ? lineOfBar(songPieces(solfa), startBar) : -1;
+    return at >= 0 ? at : null;
+  });
+  const [focusOpen, setFocusOpen] = useState(fresh);
   // In rows: the row being typed in, and each row's field (by line of music and row).
   const [active, setActive] = useState<ActiveRow | null>(null);
   const rowFields = useRef(new Map<string, TextInputInstance | null>());
@@ -160,7 +174,7 @@ function Editor({ song, draft, pasted, written }: { song?: Song; draft: ScanDraf
       if (asText) upTo = keyChangePlace(solfa, sel.start).at;
       else {
         const pieces = songPieces(solfa);
-        const p = pieces[musicPiece(pieces, active?.line ?? 0)];
+        const p = pieces[musicPiece(pieces, active?.line ?? openLine ?? 0)];
         upTo = p?.kind === 'music' ? solfa.split('\n').slice(0, p.from).join('\n').length : 0;
       }
       const before = parseSolfa(solfa.slice(0, upTo), { time, key: doh });
@@ -178,7 +192,7 @@ function Editor({ song, draft, pasted, written }: { song?: Song; draft: ScanDraf
         return;
       }
       const pieces = songPieces(solfa);
-      const at = musicPiece(pieces, active?.line ?? 0);
+      const at = musicPiece(pieces, active?.line ?? openLine ?? 0);
       if (!bar) {
         songKey();
         if (pieces[at - 1]?.kind === 'key') setSolfa(withKeyBefore(solfa, at, name));
@@ -200,7 +214,37 @@ function Editor({ song, draft, pasted, written }: { song?: Song; draft: ScanDraf
   const text = useDeferredValue(solfa);
   const parsed = useMemo(() => parseSolfa(text, { time, key: doh }), [text, time, doh]);
   const empty = !text.trim();
-  const player = useSongPlayer(empty || parsed.errors.length ? null : parsed, doh);
+  const canPlay = !empty && parsed.errors.length === 0;
+  const player = useSongPlayer(canPlay ? parsed : null, doh);
+  const bars = useMemo(() => songBars(parsed), [parsed]);
+  // The open line goes in the score where its bars are (or would be, for a line just added).
+  const lines = useMemo(() => musicLines(songPieces(text)), [text]);
+  const openBeats = openLine === null ? null : lines[openLine] ? lineBeats(bars, lines[openLine]) : { from: parsed.total, to: parsed.total };
+  // Played from a bar: which, to say so (a stretch of bars says itself, in the player's `range`).
+  const [fromBar, setFromBar] = useState<number | null>(null);
+  const playing = player.playing ? (player.range ? rangeLabel(player.range, bars) : fromBar && fromBar > 1 ? `Playing from bar ${fromBar}` : null) : null;
+  /** Open a bar's line of music to write in, in place in the score. */
+  const openBar = (n: number) => {
+    stopWriting();
+    setAsText(false);
+    setFocusOpen(false);
+    const at = lineOfBar(songPieces(solfa), n);
+    setOpenLine(at >= 0 ? at : null);
+  };
+  const barActions: BarActions = {
+    canPlay,
+    playFrom: (beat) => {
+      setFromBar(barAt(bars, beat)?.bar ?? null);
+      player.playFrom(beat);
+    },
+    playBar: (from, to, loop) => player.playRange(from, to, { loop }),
+    edit: openBar,
+  };
+  /** Done with the line open (the keypad's Done, or the line's own): back to the score. */
+  const closeLine = () => {
+    stopWriting();
+    setOpenLine(null);
+  };
 
   const fromGroup = choirs.find((g) => g.id === from);
   const canAddToRep = !editing && fromGroup?.role === 'leader';
@@ -281,9 +325,9 @@ function Editor({ song, draft, pasted, written }: { song?: Song; draft: ScanDraf
           ) : undefined
         ) : active && activePart ? (
           keyboard ? (
-            <PhoneKeyboardBar onSolfaKeys={() => switchKeys(false)} onDone={stopWriting} />
+            <PhoneKeyboardBar onSolfaKeys={() => switchKeys(false)} onDone={closeLine} />
           ) : (
-            <SolfaKeypad keyChange={keyChange} onKey={pressKey} onKeyboard={() => switchKeys(true)} onDone={stopWriting} />
+            <SolfaKeypad keyChange={keyChange} onKey={pressKey} onKeyboard={() => switchKeys(true)} onDone={closeLine} />
           )
         ) : undefined
       }
@@ -364,7 +408,7 @@ function Editor({ song, draft, pasted, written }: { song?: Song; draft: ScanDraf
 
       <Card>
         <View style={styles.headRow}>
-          <Kicker>Sol-fa</Kicker>
+          <Kicker>The music</Kicker>
           <View style={styles.links}>
             <Pressable onPress={() => setShowHelp(!showHelp)} accessibilityRole="button">
               <Text style={styles.link}>{showHelp ? 'Hide help' : 'Help'}</Text>
@@ -372,35 +416,16 @@ function Editor({ song, draft, pasted, written }: { song?: Song; draft: ScanDraf
             <Pressable
               onPress={() => {
                 stopWriting();
+                setOpenLine(null);
                 setAsText(!asText);
               }}
               accessibilityRole="button"
             >
-              <Text style={styles.link}>{asText ? 'Edit in rows' : 'Edit as text'}</Text>
+              <Text style={styles.link}>{asText ? 'Edit in the score' : 'Edit as text'}</Text>
             </Pressable>
           </View>
         </View>
         {showHelp ? <Help asText={asText} onExample={() => setSolfa(EXAMPLE)} /> : null}
-        {!asText ? (
-          <SongRows
-            focusFirst={fresh}
-            text={solfa}
-            time={time}
-            doh={doh}
-            active={active}
-            keyboard={keyboard}
-            onActive={(row) => {
-              if (row && (!active || active.line !== row.line || active.row !== row.row)) setKeyboard(false);
-              setActive(row);
-            }}
-            onLeave={(line, row) => setActive((a) => (a && a.line === line && a.row === row ? null : a))}
-            onChange={setSolfa}
-            onSelection={setSel}
-            onField={(line, row, f) => {
-              rowFields.current.set(`${line}:${row}`, f);
-            }}
-          />
-        ) : null}
         {asText ? <TextInput
           ref={field}
           // The parts' low octave marks shown as on a sheet, t₁ for t1; the text keeps t1.
@@ -438,19 +463,79 @@ function Editor({ song, draft, pasted, written }: { song?: Song; draft: ScanDraf
           style={styles.solfa}
           accessibilityLabel="Sol-fa"
         /> : null}
+        {/* Play the song as it's written, and what's playing (a bar, a bar round and round, from a bar). */}
+        {!empty ? (
+          <View style={styles.playRow}>
+            {canPlay ? (
+              <PlayButton
+                playing={player.playing}
+                onPress={() => {
+                  if (player.pausedAt === null) setFromBar(null);
+                  player.togglePlay();
+                }}
+                size={46}
+              />
+            ) : null}
+            <Text style={[styles.playNote, !!playing && styles.playNow]} numberOfLines={2}>
+              {playing ?? (canPlay ? 'Tap a bar to play from it, play it, loop it or change it.' : 'Fix the bars marked in red to play it. Tap a bar to change it.')}
+            </Text>
+            {playing ? <Button small kind="ghost" label="Stop" onPress={player.stop} /> : null}
+          </View>
+        ) : null}
+        {player.message ? <Body muted>{player.message}</Body> : null}
+        {/* The song's score, edited in place: a bar's Edit opens its line of music where it is. */}
+        {!empty || openLine !== null ? (
+          <Score
+            song={parsed}
+            activeBeat={player.beat}
+            barActions={barActions}
+            open={
+              openLine !== null && openBeats && !asText
+                ? {
+                    ...openBeats,
+                    node: (
+                      <SongLine
+                        key={openLine}
+                        text={solfa}
+                        time={time}
+                        doh={doh}
+                        line={openLine}
+                        active={active}
+                        keyboard={keyboard}
+                        focusFirst={focusOpen}
+                        onActive={(row) => {
+                          if (row && (!active || active.line !== row.line || active.row !== row.row)) setKeyboard(false);
+                          setActive(row);
+                        }}
+                        onLeave={(line, row) => setActive((a) => (a && a.line === line && a.row === row ? null : a))}
+                        onChange={setSolfa}
+                        onSelection={setSel}
+                        onField={(line, row, f) => {
+                          rowFields.current.set(`${line}:${row}`, f);
+                        }}
+                        onDone={closeLine}
+                        bars={bars}
+                        barActions={{ ...barActions, edit: undefined }}
+                      />
+                    ),
+                  }
+                : null
+            }
+          />
+        ) : null}
+        {!asText ? (
+          <AddLine
+            text={solfa}
+            onAdd={(next, line) => {
+              stopWriting();
+              setSolfa(next);
+              setFocusOpen(true);
+              setOpenLine(line);
+            }}
+          />
+        ) : null}
         <SolfaCheck parsed={parsed} empty={empty} />
       </Card>
-
-      {!empty && parsed.errors.length === 0 ? (
-        <Card>
-          <View style={styles.headRow}>
-            <Kicker>Preview</Kicker>
-            <PlayButton playing={player.playing} onPress={player.togglePlay} size={46} />
-          </View>
-          {player.message ? <Body muted>{player.message}</Body> : null}
-          <Score song={parsed} activeBeat={player.beat} />
-        </Card>
-      ) : null}
 
       <Card>
         <Kicker>Before you save</Kicker>
@@ -578,7 +663,7 @@ function Help({ asText, onExample }: { asText: boolean; onExample: () => void })
   const rules = [
     asText
       ? 'Start each line with the part: S, A, T, B or Solo. A W line under a part holds its words.'
-      : 'Each line of music has a row for each part, by its colour, and rows of words under them. Tap a row to write in it with the sol-fa keys.',
+      : 'Tap a bar of the score to play from it, play it or loop it, or Edit to open its line of music right there: a row for each part, by its colour, and rows of words under them. Tap a row to write in it with the sol-fa keys; Done puts it back in the score.',
     ': between beats, / for the half-bar accent, | between bars.',
     '. splits a beat in two (s.l); , splits a half beat (d.,r).',
     '- holds a note on; an empty beat or x is a rest.',
@@ -627,6 +712,9 @@ const useStyles = makeStyles((colors) => ({
     ...({ whiteSpace: 'pre', overflowX: 'auto' } as object),
   },
   help: { backgroundColor: colors.sand, borderRadius: 12, padding: 12, gap: 4 },
+  playRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  playNote: { flex: 1, minWidth: 0, fontFamily: fonts.body, fontSize: 13, lineHeight: 18, color: colors.muted },
+  playNow: { fontFamily: fonts.bold, color: colors.ink },
   helpText: { fontFamily: fonts.body, fontSize: 13.5, lineHeight: 19, color: colors.ink },
   toggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   titleBox: { flex: 1, minWidth: 0 },

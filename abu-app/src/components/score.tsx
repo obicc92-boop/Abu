@@ -1,11 +1,14 @@
-import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ScrollView, StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
-import Svg, { Line } from 'react-native-svg';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View, type AccessibilityActionEvent, type StyleProp, type TextStyle } from 'react-native';
+import Svg, { Line, Path } from 'react-native-svg';
 
+import { songBars, type BarSpan } from '@/score/bars';
 import { displayBeat, layoutScore, type ScoreCell, type ScoreHairpin, type ScoreSlur, type ScoreSystem } from '@/score/layout';
 import { isTempo, KEY_NAMES, mod12, partName, type ExpressionKind, type ParsedSong } from '@/solfa';
-import { useTheme } from '@/theme/theme';
+import { makeStyles, useColors, useTheme } from '@/theme/theme';
 import { fonts, lightColors, partColor, partInk, partLetter, type Palette } from '@/theme/tokens';
+
+import { AgainIcon, CloseIcon, PencilIcon } from './icons';
 
 /** How the score is drawn: the player's small sand cards, or Perform mode's big type on dark or light. */
 export type ScoreTheme = 'player' | 'dark' | 'light';
@@ -16,6 +19,8 @@ interface Look {
   barline: string;
   lyric: string;
   heading: string;
+  /** Behind a bar that's been tapped. */
+  picked: string;
   /** A dark background: parts' colours in their lighter shades. */
   dark: boolean;
 }
@@ -26,12 +31,36 @@ interface Look {
  * Notes are in their part's colour.
  */
 const PERFORM_LOOKS: Record<'dark' | 'light', Look> = {
-  dark: { system: '#241914', faint: '#7D6A60', barline: '#5A4A42', lyric: '#BFAEA5', heading: '#E2B25A', dark: true },
-  light: { system: lightColors.sand, faint: '#A8968C', barline: '#BFAEA5', lyric: '#3A2B24', heading: '#7A4F00', dark: false },
+  // Bars can't be tapped in Perform: `picked` is never drawn there.
+  dark: { system: '#241914', faint: '#7D6A60', barline: '#5A4A42', lyric: '#BFAEA5', heading: '#E2B25A', picked: '#241914', dark: true },
+  light: { system: lightColors.sand, faint: '#A8968C', barline: '#BFAEA5', lyric: '#3A2B24', heading: '#7A4F00', picked: lightColors.sand, dark: false },
 };
 
 /** The player's look: the app's own palette (its look, light or dark). */
-const playerLook = (c: Palette, dark: boolean): Look => ({ system: dark ? c.board : c.sand, faint: c.faint, barline: c.barline, lyric: c.muted, heading: c.accent, dark });
+const playerLook = (c: Palette, dark: boolean): Look => ({
+  system: dark ? c.board : c.sand,
+  faint: c.faint,
+  barline: c.barline,
+  lyric: c.muted,
+  heading: c.accent,
+  picked: c.accentTint,
+  dark,
+});
+
+/**
+ * What can be done from a bar that's tapped (owner's request, 21 November 2026: "easily choose from where they
+ * start playing… play only one bar, or start in a certain bar").
+ */
+export interface BarActions {
+  /** The song can play now (not while its sol-fa has problems): the playing buttons wait till then. */
+  canPlay: boolean;
+  /** Play from a beat to the end. Called straight from the tap, so browsers allow the sound. */
+  playFrom(beat: number): void;
+  /** Play a bar's beats, once or round and round. */
+  playBar(from: number, to: number, loop: boolean): void;
+  /** Where the song can be edited: open the line of music holding the bar. */
+  edit?(bar: number): void;
+}
 
 interface ScoreProps {
   song: ParsedSong;
@@ -52,6 +81,13 @@ interface ScoreProps {
   transpose?: number;
   /** The listener's own part, marked in the key to the colours. */
   mine?: string | null;
+  /**
+   * Bars can be tapped, in the player's look (never in Perform, which has no sound): a tapped bar is lit across
+   * its line, with a row of what can be done from it under the line. Tapped again, or ×, it's let go.
+   */
+  barActions?: BarActions | null;
+  /** A line of music open to edit (the song editor), drawn in place of its bars: the beats they take, and it. */
+  open?: { from: number; to: number; node: ReactNode } | null;
 }
 
 /**
@@ -60,7 +96,7 @@ interface ScoreProps {
  * a letter that could be read as a note, with a key to the colours on top.
  * Layout comes from src/score/layout.ts (a port of scoreHTML in the prototype).
  */
-export function Score({ song, activeBeat, silent, only, maxBeats, onActiveLine, theme = 'player', size = 12.5, transpose = 0, mine = null }: ScoreProps) {
+export function Score({ song, activeBeat, silent, only, maxBeats, onActiveLine, theme = 'player', size = 12.5, transpose = 0, mine = null, barActions, open }: ScoreProps) {
   const { scheme, colors } = useTheme();
   const big = theme !== 'player';
   const shown = only && song.parts.includes(only) ? [only] : song.parts;
@@ -73,7 +109,36 @@ export function Score({ song, activeBeat, silent, only, maxBeats, onActiveLine, 
   const twins = shown.some((p, i) => shown.findIndex((q) => partColor(q) === partColor(p)) !== i);
   const room = width - 2 * (big ? PAD_BIG : PAD) - edge.width - edge.gap - (twins ? twinRoom(big) : 0);
   const maxChars = width > 0 ? Math.max(MIN_COLUMN_CHARS, Math.floor(room / charWidth)) : 0;
-  const systems = useMemo(() => layoutScore(song, maxChars ? { only, maxChars } : { only, maxBeats }), [song, only, maxBeats, maxChars]);
+  const skipFrom = open?.from;
+  const skipTo = open?.to;
+  const systems = useMemo(() => {
+    const skip = skipFrom !== undefined && skipTo !== undefined ? { from: skipFrom, to: skipTo } : null;
+    return layoutScore(song, maxChars ? { only, maxChars, skip } : { only, maxBeats, skip });
+  }, [song, only, maxBeats, maxChars, skipFrom, skipTo]);
+  // Bars to tap: each line's, the one tapped (while it's still there to see), and what a tap does.
+  const tappable = !!barActions && !big;
+  const bars = useMemo(() => songBars(song), [song]);
+  const barsOf = useMemo(
+    () => (tappable ? Object.fromEntries(systems.map((s) => [s.id, bars.filter((b) => b.from >= s.start - 1e-6 && b.from < s.start + s.beats - 1e-6)])) : {}),
+    [tappable, systems, bars],
+  );
+  const [picked, setPicked] = useState<number | null>(null);
+  const pickedBar = tappable && picked !== null ? Object.values(barsOf).flat().find((b) => b.bar === picked) : undefined;
+  // The latest actions, for a screen reader's action on a bar (the lines don't draw again for a new set of them).
+  const actions = useRef(barActions);
+  useEffect(() => {
+    actions.current = barActions;
+  });
+  const onBar = useCallback((bar: number, action?: string) => {
+    const span = bars.find((b) => b.bar === bar);
+    const act = actions.current;
+    if (!action || action === 'activate') return setPicked((now) => (now === bar ? null : bar));
+    if (!span || !act) return;
+    if (action === 'edit') act.edit?.(bar);
+    else if (!act.canPlay) return;
+    else if (action === 'play') act.playFrom(span.from);
+    else act.playBar(span.from, span.to, action === 'loop');
+  }, [bars]);
   const positions = useRef<Record<string, { y: number; height: number }>>({});
   const activeId = systems.find((s) => activeBeat >= s.start && activeBeat < s.start + s.beats)?.id ?? null;
   // Perform chooses its own look; the player follows the app's light or dark.
@@ -106,30 +171,125 @@ export function Score({ song, activeBeat, silent, only, maxBeats, onActiveLine, 
           ))}
         </View>
       ) : null}
-      {systems.map((s) => (
-        <View
-          key={s.id}
-          onLayout={(e) => {
-            positions.current[s.id] = { y: e.nativeEvent.layout.y, height: e.nativeEvent.layout.height };
-          }}
-        >
-          {s.heading ? <Text style={[styles.heading, { color: palette.heading }, big && { fontSize: 13 }]}>{s.heading}</Text> : null}
-          <System
-            system={s}
-            activeBeat={s.id === activeId ? activeBeat : -1}
-            silent={silent}
-            palette={palette}
-            size={size}
-            big={big}
-            transpose={transpose}
-            maxChars={maxChars}
-            charWidth={charWidth}
-          />
-        </View>
-      ))}
+      {withOpen(
+        systems.map((s) => {
+          const here = pickedBar && barsOf[s.id]?.includes(pickedBar) ? pickedBar : undefined;
+          return (
+            <View
+              key={s.id}
+              onLayout={(e) => {
+                positions.current[s.id] = { y: e.nativeEvent.layout.y, height: e.nativeEvent.layout.height };
+              }}
+            >
+              {s.heading ? <Text style={[styles.heading, { color: palette.heading }, big && { fontSize: 13 }]}>{s.heading}</Text> : null}
+              <System
+                system={s}
+                activeBeat={s.id === activeId ? activeBeat : -1}
+                silent={silent}
+                palette={palette}
+                size={size}
+                big={big}
+                transpose={transpose}
+                maxChars={maxChars}
+                charWidth={charWidth}
+                bars={tappable ? barsOf[s.id] : undefined}
+                picked={here?.bar ?? null}
+                canEdit={!!barActions?.edit}
+                onBar={onBar}
+              />
+              {here && barActions ? <BarToolbar bar={here} actions={barActions} onClose={() => setPicked(null)} /> : null}
+            </View>
+          );
+        }),
+        // The line open to edit goes where its bars were: before the first line after them.
+        open ? { at: systems.findIndex((s) => s.start >= open.to - 1e-6), node: <View key="open-line">{open.node}</View> } : null,
+      )}
     </View>
   );
 }
+
+/** The lines, with something put in among them (`at` -1: after them all). */
+function withOpen(lines: ReactNode[], put: { at: number; node: ReactNode } | null): ReactNode[] {
+  if (!put) return lines;
+  const all = [...lines];
+  all.splice(put.at < 0 ? all.length : put.at, 0, put.node);
+  return all;
+}
+
+/**
+ * What can be done from a tapped bar, under its line: play from it, play it, loop it, and (where the song can be
+ * edited) open its line of music to change it. Also under a line's rows (LineRows), for its tapped bar number.
+ */
+export function BarToolbar({ bar, actions, onClose }: { bar: BarSpan; actions: BarActions; onClose(): void }) {
+  const styles = useToolStyles();
+  const colors = useColors();
+  const off = !actions.canPlay;
+  return (
+    <View style={styles.toolbar} accessibilityRole="toolbar" accessibilityLabel={`Bar ${bar.bar}`}>
+      <Text style={styles.barName}>Bar {bar.bar}</Text>
+      <Tool label="Play from here" off={off} onPress={() => actions.playFrom(bar.from)}>
+        <Svg width={11} height={11} viewBox="0 0 12 12">
+          <Path d="M3 1.5v9l7.5-4.5z" fill={colors.ink} />
+        </Svg>
+      </Tool>
+      <Tool label="Play this bar" off={off} onPress={() => actions.playBar(bar.from, bar.to, false)} />
+      <Tool label="Loop this bar" off={off} onPress={() => actions.playBar(bar.from, bar.to, true)}>
+        <AgainIcon size={14} color={colors.ink} />
+      </Tool>
+      {actions.edit ? (
+        <Tool
+          label="Edit"
+          onPress={() => {
+            onClose();
+            actions.edit?.(bar.bar);
+          }}
+        >
+          <PencilIcon size={14} color={colors.ink} />
+        </Tool>
+      ) : null}
+      <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel={`Let go of bar ${bar.bar}`} hitSlop={8} style={styles.close}>
+        <CloseIcon size={13} color={colors.muted} />
+      </Pressable>
+    </View>
+  );
+}
+
+function Tool({ label, off, onPress, children }: { label: string; off?: boolean; onPress(): void; children?: ReactNode }) {
+  const styles = useToolStyles();
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={off}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: !!off }}
+      style={({ pressed }) => [styles.tool, pressed && styles.toolPressed, off && styles.toolOff]}
+    >
+      {children}
+      <Text style={styles.toolText}>{label}</Text>
+    </Pressable>
+  );
+}
+
+const useToolStyles = makeStyles((colors) => ({
+  toolbar: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, paddingTop: 6, paddingHorizontal: 2 },
+  barName: { fontFamily: fonts.heavy, fontSize: 12, letterSpacing: 0.4, color: colors.accent, marginRight: 2 },
+  tool: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    minHeight: 32,
+    paddingHorizontal: 11,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: colors.line,
+    backgroundColor: colors.card,
+  },
+  toolPressed: { backgroundColor: colors.board },
+  toolOff: { opacity: 0.45 },
+  toolText: { fontFamily: fonts.bold, fontSize: 12.5, color: colors.ink },
+  close: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+}));
 
 interface SystemProps {
   system: ScoreSystem;
@@ -142,10 +302,22 @@ interface SystemProps {
   /** Room across a line in note characters (0 before the score knows its width), and one character's width. */
   maxChars: number;
   charWidth: number;
+  /** The line's bars, when they can be tapped; the one tapped; whether bars can be edited; and what a tap does. */
+  bars?: BarSpan[];
+  picked: number | null;
+  canEdit: boolean;
+  onBar(bar: number, action?: string): void;
 }
 
+/** A screen reader's ways to act on a bar without its row of buttons. */
+const BAR_ACTIONS = [
+  { name: 'play', label: 'Play from here' },
+  { name: 'bar', label: 'Play this bar' },
+  { name: 'loop', label: 'Loop this bar' },
+];
+
 /** One line of the score. Memoised: only the line being played re-renders each beat. */
-const System = memo(function System({ system, activeBeat, silent, palette, size, big, transpose, maxChars, charWidth }: SystemProps) {
+const System = memo(function System({ system, activeBeat, silent, palette, size, big, transpose, maxChars, charWidth, bars, picked, canEdit, onBar }: SystemProps) {
   const { widths, start } = system;
   const need = widths.reduce((a, b) => a + b, 0);
   const lyricSize = big ? size * 0.72 : 9.5;
@@ -251,6 +423,52 @@ const System = memo(function System({ system, activeBeat, silent, palette, size,
       })}
     </>
   );
+  const span = (from: number, to: number) => widths.slice(Math.max(0, from), Math.max(0, to)).reduce((a, b) => a + b, 0);
+  /** A box over each bar's columns, after the parts' edge, as `box` makes it. */
+  const overBars = (box: (b: BarSpan, flex: number) => ReactNode) => {
+    if (!bars?.length) return null;
+    const first = Math.round(bars[0].from - start);
+    const last = Math.round(bars[bars.length - 1].to - start);
+    return (
+      <>
+        <View style={{ width: edge.width + edge.gap }} />
+        {span(0, first) > 0 ? <View style={{ flex: span(0, first) }} /> : null}
+        {bars.map((b) => box(b, Math.max(1, span(Math.round(b.from - start), Math.round(b.to - start)))))}
+        {span(last, widths.length) > 0 ? <View style={{ flex: span(last, widths.length) }} /> : null}
+      </>
+    );
+  };
+  const body = bars?.length ? (
+    <View style={[styles.lines, big && styles.linesBig]}>
+      {/* Behind the notes: the bar tapped, lit across the line. */}
+      {picked !== null ? (
+        <View style={[StyleSheet.absoluteFill, styles.line]} aria-hidden importantForAccessibility="no-hide-descendants">
+          {overBars((b, flex) => (
+            <View key={b.bar} style={[{ flex, minWidth: 0 }, b.bar === picked && [styles.pickedBar, { backgroundColor: palette.picked }]]} />
+          ))}
+        </View>
+      ) : null}
+      {lines}
+      {/* Over the notes: each bar, to tap. */}
+      <View style={[StyleSheet.absoluteFill, styles.line]}>
+        {overBars((b, flex) => (
+          <Pressable
+            key={b.bar}
+            onPress={() => onBar(b.bar)}
+            accessibilityRole="button"
+            accessibilityLabel={`Bar ${b.bar}`}
+            accessibilityHint="Shows Play from here, Play this bar and Loop this bar"
+            accessibilityState={{ selected: b.bar === picked }}
+            accessibilityActions={canEdit ? [...BAR_ACTIONS, { name: 'edit', label: 'Edit' }] : BAR_ACTIONS}
+            onAccessibilityAction={(e: AccessibilityActionEvent) => onBar(b.bar, e.nativeEvent.actionName)}
+            style={{ flex, minWidth: 0 }}
+          />
+        ))}
+      </View>
+    </View>
+  ) : (
+    lines
+  );
   return (
     <View style={[styles.system, { backgroundColor: palette.system }, big && styles.systemBig]}>
       {maxChars && need > maxChars ? (
@@ -260,10 +478,10 @@ const System = memo(function System({ system, activeBeat, silent, palette, size,
           horizontal
           contentContainerStyle={[styles.lines, big && styles.linesBig, { width: need * charWidth + edge.width + edge.gap + (shared.length ? twinRoom(big) : 0) }]}
         >
-          {lines}
+          {body}
         </ScrollView>
       ) : (
-        lines
+        body
       )}
     </View>
   );
@@ -508,6 +726,7 @@ const styles = StyleSheet.create({
   markGradual: { fontFamily: fonts.body, fontStyle: 'italic' },
   markTempo: { fontFamily: fonts.bold, fontStyle: 'italic' },
   unseen: { opacity: 0 },
+  pickedBar: { borderRadius: 6 },
   /** A wedge's room: from its beat's column, a little short of the column it reaches (an italic f leans back). */
   wedgeBox: { minWidth: 0, justifyContent: 'center' },
   slurred: { flexDirection: 'row', alignSelf: 'stretch' },

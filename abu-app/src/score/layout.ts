@@ -110,6 +110,11 @@ export interface LayoutOptions {
   maxChars?: number;
   /** Show only this part ("my part only"). Words come from another part if it has none. */
   only?: string | null;
+  /**
+   * Beats to leave out: the bars starting in them aren't laid out, and no line runs across them (a line of music
+   * open to edit in the song editor goes there). With `from` and `to` the same, lines only break there.
+   */
+  skip?: { from: number; to: number } | null;
 }
 
 /** Narrowest column, in characters: a lone "d" gets the same room as "s.l". */
@@ -160,19 +165,31 @@ export function layoutScore(song: ParsedSong, opts: LayoutOptions = {}): ScoreSy
       return { start, beats: n, widths: columnWidths(lineRows, start, n, marks, keys, gutter), rows: lineRows, keys, marks, hairpins: [] };
     };
 
-    const lines = maxChars ? linesByRoom(bars.length, barStarts, line, maxChars, maxBeats) : linesByBeats(bars, maxBeats);
+    // The bars laid out, in runs that no line crosses: those before the beats left out, and those after.
+    const { skip } = opts;
+    const runs: [number, number][] = [[0, bars.length]];
+    if (skip) {
+      const before = barStarts.slice(0, bars.length).filter((b) => b < skip.from - 1e-6).length;
+      const after = barStarts.slice(0, bars.length).findIndex((b) => b >= skip.to - 1e-6);
+      runs.splice(0, 1, [0, before], [after < 0 ? bars.length : Math.max(before, after), bars.length]);
+    }
     // Parts with a slur still open at the end of the line before, so it runs on from the next line's start.
     const slurOpen: Record<string, boolean> = {};
-    let from = 0;
-    for (const count of lines) {
-      const made = line(from, from + count);
-      for (const row of made.rows) {
-        const got = slursIn(row.cells, !!slurOpen[row.part]);
-        slurOpen[row.part] = got.open;
-        row.slurs = got.slurs;
+    for (const [first, end] of runs) {
+      const lines = maxChars
+        ? linesByRoom(end - first, barStarts.slice(first), (a, b) => line(first + a, first + b), maxChars, maxBeats)
+        : linesByBeats(bars.slice(first, end), maxBeats);
+      let from = first;
+      for (const count of lines) {
+        const made = line(from, from + count);
+        for (const row of made.rows) {
+          const got = slursIn(row.cells, !!slurOpen[row.part]);
+          slurOpen[row.part] = got.open;
+          row.slurs = got.slurs;
+        }
+        systems.push({ id: `${si}-${from}`, heading: from === 0 && sec.name ? sec.name : null, ...made });
+        from += count;
       }
-      systems.push({ id: `${si}-${from}`, heading: from === 0 && sec.name ? sec.name : null, ...made });
-      from += count;
     }
   });
   addHairpins(song, systems);

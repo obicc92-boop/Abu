@@ -41,6 +41,7 @@ import { PartSheet } from '@/components/part-sheet';
 import { AgainIcon, CameraIcon, CheckIcon, CloseIcon, FileIcon, PlusIcon, ScanIcon, ZoomIcon } from '@/components/icons';
 import { LineRows } from '@/components/line-rows';
 import { PlayButton } from '@/components/player-controls';
+import { BarToolbar, type BarActions } from '@/components/score';
 import { PhoneKeyboardBar, SolfaKeypad } from '@/components/solfa-keypad';
 import { Body, Button, Card, Chip, ErrorText, Kicker, MAX_WIDTH, Page, TopBar } from '@/components/ui';
 import { setScanDraft } from '@/scan/draft';
@@ -53,6 +54,7 @@ import { readSetting, writeSetting } from '@/lib/storage';
 import { placeCursor } from '@/lib/field-cursor';
 import { applyKey, type Key, type Selection } from '@/lib/solfa-keys';
 import { findLinesOwn, readLineOwn } from '@/scan/own-reader';
+import { barAt, rangeLabel, songBars } from '@/score/bars';
 import { cutLine, cutPieces, loadPages, MAX_PAGES, pageForFinding, scanningHere, takePhoto } from '@/scan/pages';
 import { readTypedSheet, type PageText } from '@/scan/pdf-text';
 import type { Box, FoundLine } from '@/scan/types';
@@ -972,7 +974,23 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
   const [pickingKey, setPickingKey] = useState(false);
   const parsed = useMemo(() => parseSolfa(line.text, { time, key: lineDoh }), [line.text, time, lineDoh]);
   const empty = !rows.some((r) => r.part && r.text.trim());
-  const player = useSongPlayer(empty || parsed.errors.length ? null : parsed, lineDoh);
+  const canPlay = !empty && !parsed.errors.length;
+  const player = useSongPlayer(canPlay ? parsed : null, lineDoh);
+  // A bar's number tapped (owner's request, 21 November 2026): play from it, play it or loop it, as on the score.
+  // Kept with its line, so another line starts with none picked.
+  const bars = useMemo(() => songBars(parsed), [parsed]);
+  const [picked, setPicked] = useState<{ id: string; bar: number } | null>(null);
+  const pickedBar = picked?.id === line.id ? bars.find((b) => b.bar === picked.bar) : undefined;
+  const [fromBar, setFromBar] = useState<number | null>(null);
+  const barActions: BarActions = {
+    canPlay,
+    playFrom: (beat) => {
+      setFromBar(barAt(bars, beat)?.bar ?? null);
+      player.playFrom(beat);
+    },
+    playBar: (from, to, loop) => player.playRange(from, to, { loop }),
+  };
+  const playingNow = player.playing ? (player.range ? rangeLabel(player.range, bars) : fromBar && fromBar > 1 ? `Playing from bar ${fromBar}` : null) : null;
   // Where the key changes, said plainly, so a misread bridge note or key is easy to spot.
   const keyNotes = useMemo(() => {
     const all = Object.values(parsed.events).flat();
@@ -1119,7 +1137,24 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
               </View>
               <PartSheet open={partRow !== null} onClose={() => setPartRow(null)} current={partRow !== null ? (rows[partRow]?.part ?? null) : null} onChoose={(p) => partRow !== null && setPart(partRow, p)} />
             </View>
-            {!empty && !parsed.errors.length ? <PlayButton playing={player.playing} onPress={player.togglePlay} size={42} /> : null}
+            {canPlay ? (
+              // The line's Play, and what's playing of it ("Looping bar 6").
+              <View style={styles.playBox}>
+                <PlayButton
+                  playing={player.playing}
+                  onPress={() => {
+                    if (player.pausedAt === null) setFromBar(null);
+                    player.togglePlay();
+                  }}
+                  size={42}
+                />
+                {playingNow ? (
+                  <Text style={styles.playingNow} numberOfLines={2} accessibilityLiveRegion="polite">
+                    {playingNow}
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
           </View>
           {line.status === 'failed' ? (
             <View style={styles.pad}>
@@ -1150,7 +1185,14 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
             onScroll={(e) => follow('reading', e)}
             onWidths={(w) => (readingWidths.current = w)}
             onPart={(i) => setPartRow(i)}
+            onBar={canPlay ? (bar) => setPicked((p) => (p?.id === line.id && p.bar === bar ? null : { id: line.id, bar })) : undefined}
+            pickedBar={pickedBar?.bar ?? null}
           />
+          {pickedBar && canPlay ? (
+            <View style={styles.pad}>
+              <BarToolbar bar={pickedBar} actions={barActions} onClose={() => setPicked(null)} />
+            </View>
+          ) : null}
           <View style={[styles.pad, { gap: 6 }]}>
             {Object.entries(byPart).map(([part, messages]) => (
               <Text key={part} style={styles.problem}>
@@ -1376,6 +1418,8 @@ const useStyles = makeStyles((colors) => ({
   dotText: { fontFamily: fonts.bold, fontSize: 12.5, color: colors.ink },
   flush: { padding: 0, gap: 0, overflow: 'hidden' },
   pad: { paddingHorizontal: 14, paddingVertical: 10 },
+  playBox: { alignItems: 'center', gap: 3, maxWidth: 96 },
+  playingNow: { fontFamily: fonts.bold, fontSize: 11.5, lineHeight: 14, color: colors.ink, textAlign: 'center' },
   iconOnly: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.sand },
   rowsBox: { flexDirection: 'row', borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.line, backgroundColor: colors.sand },
   tags: { width: 18, borderRightWidth: 1, borderColor: colors.line, backgroundColor: colors.card },

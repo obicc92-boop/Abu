@@ -7,6 +7,7 @@
  */
 import { useMemo, useRef, useState, type Ref } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollViewInstance, type TextInputInstance } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 
 import { keepCursor } from '@/lib/field-cursor';
 import { lowMarksShown, lowMarksTyped, type Selection } from '@/lib/solfa-keys';
@@ -29,8 +30,9 @@ const ROW_PAD = 12;
 const BAR_LINE = 2;
 /** What's measured for that width: long, so rounding hardly matters. */
 const MEASURED = '0'.repeat(100);
-/** The strip of bar numbers above the rows. */
+/** The strip of bar numbers above the rows; taller where the numbers can be tapped, to be easy to tap. */
 const NUMBERS_HEIGHT = 18;
+const TAP_NUMBERS_HEIGHT = 30;
 /** The column of the parts' colours. */
 const TAGS = 18;
 
@@ -64,11 +66,20 @@ export interface LineRowsProps {
   onWidths?(widths: { content: number; view: number }): void;
   /** A row's colour is tapped, to change who sings it (src/components/part-sheet.tsx). */
   onPart?(row: number): void;
+  /**
+   * The bars' numbers can be tapped, to play from a bar, play it or loop it (owner's request, 21 November 2026):
+   * which bar, as numbered. Only the numbers: the rows stay for typing in.
+   */
+  onBar?(bar: number): void;
+  /** The bar tapped, as numbered, shown picked. */
+  pickedBar?: number | null;
 }
 
 export function LineRows(props: LineRowsProps) {
-  const { rows, editing, keyboard, errors, beatsPerBar, firstBar = 1, label, scroller, onScroll, onWidths, onPart, ...handlers } = props;
+  const { rows, editing, keyboard, errors, beatsPerBar, firstBar = 1, label, scroller, onScroll, onWidths, onPart, onBar, pickedBar = null, ...handlers } = props;
   const styles = useStyles();
+  const colors = useColors();
+  const numbersHeight = onBar ? TAP_NUMBERS_HEIGHT : NUMBERS_HEIGHT;
   // A character's width in the rows' type, as drawn on this screen, so the bar lines land on the typed "|".
   const [charWidth, setCharWidth] = useState(CHAR);
   const [view, setView] = useState(0);
@@ -130,7 +141,7 @@ export function LineRows(props: LineRowsProps) {
       </View>
       {/* Each part by its colour, not its name. */}
       <View style={styles.tags}>
-        {numbers.length ? <View style={styles.numbersTop} /> : null}
+        {numbers.length ? <View style={[styles.numbersTop, { height: numbersHeight }]} /> : null}
         {rows.map((r, i) =>
           r.part && onPart ? (
             <Pressable
@@ -163,7 +174,36 @@ export function LineRows(props: LineRowsProps) {
         onContentSizeChange={(w) => onWidths?.({ content: w, view })}
       >
         <View style={{ width: textWidth }}>
-          {numbers.length ? (
+          {numbers.length && onBar ? (
+            // Each bar's number, to tap: across the bar's width over the rows, its number in a pill with a play mark.
+            <View style={[styles.numbers, { height: numbersHeight }]}>
+              {numbers.map((n, j) => {
+                const bar = n.bar + firstBar - 1;
+                const left = ROW_PAD + n.at * charWidth;
+                const next = numbers[j + 1];
+                const width = Math.max(34, (next ? ROW_PAD + next.at * charWidth : textWidth) - left);
+                const on = pickedBar === bar;
+                return (
+                  <Pressable
+                    key={n.bar}
+                    onPress={() => onBar(bar)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Bar ${bar}`}
+                    accessibilityHint="Shows Play from here, Play this bar and Loop this bar"
+                    accessibilityState={{ selected: on }}
+                    style={[styles.numberTap, { left: left - 4, width }]}
+                  >
+                    <View style={[styles.numberPill, on && styles.numberPicked]}>
+                      <Text style={[styles.numberText, on && styles.numberTextPicked]}>{bar}</Text>
+                      <Svg width={7} height={8} viewBox="0 0 7 8">
+                        <Path d="M0.5 0.5v7l6-3.5z" fill={on ? colors.accent : colors.muted} />
+                      </Svg>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : numbers.length ? (
             <View style={styles.numbers} aria-hidden importantForAccessibility="no-hide-descendants">
               {numbers.map((n) => (
                 <Text key={n.bar} style={[styles.number, { left: ROW_PAD + n.at * charWidth }]}>
@@ -293,6 +333,21 @@ const useStyles = makeStyles((colors) => ({
   numbersTop: { height: NUMBERS_HEIGHT, borderBottomWidth: 1, borderColor: colors.line },
   numbers: { height: NUMBERS_HEIGHT, borderBottomWidth: 1, borderColor: colors.line },
   number: { position: 'absolute', top: 0, fontFamily: fonts.bold, fontSize: 10.5, lineHeight: NUMBERS_HEIGHT - 1, color: colors.muted },
+  numberTap: { position: 'absolute', top: 0, bottom: 0, justifyContent: 'center', alignItems: 'flex-start' },
+  numberPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    height: 22,
+    paddingHorizontal: 7,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.card,
+  },
+  numberPicked: { borderColor: colors.accent, backgroundColor: colors.accentTint },
+  numberText: { fontFamily: fonts.bold, fontSize: 11, color: colors.muted },
+  numberTextPicked: { color: colors.accent },
   tagCell: { height: ROW_HEIGHT, alignItems: 'center', justifyContent: 'center' },
   tag: { width: 6, height: ROW_HEIGHT - 12, borderRadius: 3 },
   tagPressed: { backgroundColor: colors.board },
