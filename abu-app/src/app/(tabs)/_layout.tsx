@@ -1,6 +1,6 @@
 /**
- * The five tabs: Home, Songs, Schedule, Group, Me (docs/app-plan.md), in a bar like Suno's with Add a song's
- * "+" in the middle (src/components/tab-bar.tsx).
+ * The five tabs: Home, Songs, Schedule, Group, Me (docs/app-plan.md), in a bar like Suno's
+ * (src/components/tab-bar.tsx). Add a song's "+" floats on the Songs tab.
  * Without a group, Schedule reads "Setlists" and Group reads "Groups".
  * People who are neither signed in nor looking around go to the welcome screen.
  */

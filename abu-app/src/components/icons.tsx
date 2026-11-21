@@ -142,3 +142,36 @@ export function ScanIcon({ size = 44, color }: IconProps) {
     </Svg>
   );
 }
+
+/** Add a song's ways in (the design canvas's "One place to add a song" board). */
+export function PencilIcon({ size = 24, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d="M4 20h4L19 9l-4-4L4 16z M13.5 6.5l4 4" {...line(color)} />
+    </Svg>
+  );
+}
+
+export function ScanLineIcon({ size = 24, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d="M4 8V5a1 1 0 0 1 1-1h3 M16 4h3a1 1 0 0 1 1 1v3 M20 16v3a1 1 0 0 1-1 1h-3 M8 20H5a1 1 0 0 1-1-1v-3 M4 12h16" {...line(color)} />
+    </Svg>
+  );
+}
+
+export function ClipboardIcon({ size = 24, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d="M9 4h6v3H9z M8 5.5H6a1 1 0 0 0-1 1V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V6.5a1 1 0 0 0-1-1h-2 M9 12h6 M9 16h4" {...line(color)} />
+    </Svg>
+  );
+}
+
+export function ChevronIcon({ size = 18, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d="M9.5 6l6 6-6 6" {...line(color)} strokeWidth={2.2} />
+    </Svg>
+  );
+}

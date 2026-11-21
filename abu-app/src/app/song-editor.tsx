@@ -42,7 +42,7 @@ B  d1:- /f1:s1 | l1:m1 /d1:s1 | d1:- /- :-  |`;
 
 export default function SongEditorScreen() {
   const { id, from } = useLocalSearchParams<{ id?: string; from?: string }>();
-  // A song from a scan, or pasted on the Add a song screen (src/app/create.tsx).
+  // A song from a scan, or pasted on the Paste sol-fa screen (src/app/paste.tsx).
   const [draft] = useState(() => (id ? null : from === 'scan' ? scanDraft() : from === 'paste' ? takePastedDraft() : null));
   const { status } = useSession();
   const existing = useQuery({ queryKey: ['song', id], queryFn: () => api.song(id!), enabled: !!id });

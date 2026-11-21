@@ -1,6 +1,7 @@
 /**
- * Sol-fa pasted on the Add a song screen, handed to the song editor (song-editor?from=paste) like a scan's draft:
- * the text as pasted, with the title, composer, key and time its heading gives. Kept in memory, once.
+ * Sol-fa pasted on the Paste sol-fa screen (src/app/paste.tsx), handed to the song editor (song-editor?from=paste)
+ * like a scan's draft: the text as pasted, with the title, composer, key and time its heading gives. Kept in
+ * memory, once.
  */
 import type { ScanDraft } from '@/scan/draft';
 import { parseSolfa } from '@/solfa';

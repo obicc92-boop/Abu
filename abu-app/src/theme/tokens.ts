@@ -68,6 +68,8 @@ export interface Palette {
   faint: string;
   barline: string;
   switchOff: string;
+  /** Over the page behind a sheet rising from the bottom (Add a song). */
+  scrim: string;
 }
 
 export type Scheme = 'light' | 'dark';
@@ -118,6 +120,7 @@ export const lightColors: Palette = {
   faint: '#A1A1AA',
   barline: '#D4D4D8',
   switchOff: '#D4D4D8',
+  scrim: 'rgba(17,17,19,0.45)',
 };
 
 /** Dark: Suno's plain, slightly cool black with grey cards; brighter orange for text. */
@@ -160,6 +163,7 @@ export const darkColors: Palette = {
   faint: '#6B6B73',
   barline: '#3A3A40',
   switchOff: '#3A3A40',
+  scrim: 'rgba(0,0,0,0.7)',
 };
 
 export const palettes: Readonly<Record<Scheme, Palette>> = { light: lightColors, dark: darkColors };

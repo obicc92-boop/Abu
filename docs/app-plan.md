@@ -96,6 +96,7 @@ Goal: a new member hears their own part within a minute.
   - **Actions:** add to repertoire, add to a song order, download for offline, edit the sol-fa.
   - **Share to WhatsApp:** the link opens the web player even without the app.
 - **Add a song:**
+  - The round gradient **+** floating at the bottom right of the Songs tab (and the leader's To do on Home) opens a sheet from the bottom with four ways in: Write it, Scan a sheet, Paste sol-fa, From the library (built, 21 November 2026).
   - Type or paste sol-fa, checked as you type (built).
   - Attach the PDF or a photo of the original sheet.
   - Preview and play before saving.

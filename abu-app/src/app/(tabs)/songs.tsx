@@ -1,17 +1,19 @@
 /**
  * Songs: the library. Every song shared on SolfaScores is open to everyone, signed in
  * or not. Filters: your group's repertoire, My songs, songs with sol-fa, tags.
+ * Signed in, a round "+" floats at the bottom right and opens Add a song's sheet
+ * (src/components/add-song-sheet.tsx; owner's request, 21 November 2026).
  */
 import { useQuery } from '@tanstack/react-query';
-import { router } from 'expo-router';
-import { useState } from 'react';
-import { ScrollView, Text, TextInput, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { ScrollView, Text, TextInput, View, type TextInputInstance } from 'react-native';
 
 import { api, type Song } from '@/api/client';
+import { AddSongSheet, CLOSE_MS, FloatingAdd } from '@/components/add-song-sheet';
 import { SearchIcon } from '@/components/icons';
 import { Shelf, SongTile, type TileSong } from '@/components/shelf';
 import { SongRow } from '@/components/song-row';
-import { Body, Button, Chip, Loading, Page, TopBar } from '@/components/ui';
+import { Body, Chip, Loading, Page, TopBar } from '@/components/ui';
 import { DEMO_SONGS } from '@/data/demo-songs';
 import { FILTER_TAGS } from '@/lib/tags';
 import { useSession } from '@/state/session';
@@ -27,6 +29,8 @@ export default function Songs() {
   const [query, setQuery] = useState('');
   const [view, setView] = useState<View_>('all');
   const [tag, setTag] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const search = useRef<TextInputInstance | null>(null);
   const signedIn = s.status === 'signedIn';
   const choir = s.group && s.group.type !== 'personal' && s.group.status === 'active' ? s.group : null;
 
@@ -56,20 +60,29 @@ export default function Songs() {
   // Offline or the API unreachable: the demo songs still work.
   const offline = !!source.error && !listGroup;
 
+  // Add a song → From the library: every song, and the search ready, once the sheet has gone.
+  const fromLibrary = () => {
+    setView('all');
+    setTag(null);
+    setTimeout(() => search.current?.focus(), CLOSE_MS + 80);
+  };
+
   return (
-    <Page>
-      <TopBar
-        title="Songs"
-        subtitle="Every song shared on SolfaScores is open to you."
-        right={
-          signedIn ? (
-            <Button small label="Add a song" onPress={() => router.push('/create')} />
-          ) : undefined
-        }
-      />
+    <Page
+      floating={
+        signedIn ? (
+          <>
+            <FloatingAdd onPress={() => setAdding(true)} />
+            <AddSongSheet open={adding} onClose={() => setAdding(false)} onLibrary={fromLibrary} />
+          </>
+        ) : undefined
+      }
+    >
+      <TopBar title="Songs" subtitle="Every song shared on SolfaScores is open to you." />
       <View style={styles.search}>
         <SearchIcon color={colors.muted} />
         <TextInput
+          ref={search}
           value={query}
           onChangeText={setQuery}
           placeholder="Search title, composer or words"

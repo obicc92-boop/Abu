@@ -4,7 +4,7 @@
  */
 import { useQuery } from '@tanstack/react-query';
 import { router, useFocusEffect, type Href } from 'expo-router';
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { api, type MyGroup, type TodoItem } from '@/api/client';
@@ -14,6 +14,7 @@ import { partPlural } from '@/solfa';
 import { makeStyles, useColors } from '@/theme/theme';
 import { fonts } from '@/theme/tokens';
 
+import { AddSongSheet } from './add-song-sheet';
 import { Button, Card, Kicker } from './ui';
 
 function line(item: TodoItem, group: MyGroup): { text: string; action: string; href: Href } {
@@ -47,6 +48,7 @@ export function LeaderTodo({ group }: { group: MyGroup }) {
   const styles = useStyles();
   const colors = useColors();
   const leader = group.role === 'leader';
+  const [adding, setAdding] = useState(false);
   const todo = useQuery({ queryKey: ['todo', group.id], queryFn: () => api.todo(group.id) });
   // Home stays open underneath while you mark attendance or add songs: check again on coming back.
   const { refetch } = todo;
@@ -74,8 +76,9 @@ export function LeaderTodo({ group }: { group: MyGroup }) {
       <View style={styles.quick}>
         {leader ? <Button small kind="ghost" label={`Plan a ${kindNoun(group.type, 'service')}`} onPress={() => router.push('/event-editor')} /> : null}
         <Button small kind="ghost" label="Post a notice" onPress={() => router.push('/group')} />
-        <Button small kind="ghost" label="Add a song" onPress={() => router.push('/create')} />
+        <Button small kind="ghost" label="Add a song" onPress={() => setAdding(true)} />
       </View>
+      <AddSongSheet open={adding} onClose={() => setAdding(false)} />
     </Card>
   );
 }
