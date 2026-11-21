@@ -40,6 +40,7 @@ export function SongRows({
   onChange,
   onSelection,
   onField,
+  focusFirst = false,
 }: {
   text: string;
   time: string;
@@ -52,6 +53,8 @@ export function SongRows({
   onChange(text: string): void;
   onSelection(sel: Selection): void;
   onField(line: number, row: number, field: TextInputInstance | null): void;
+  /** Start in the first row, the sol-fa keys up (a new song's first line, from Write it). */
+  focusFirst?: boolean;
 }) {
   const styles = useStyles();
   const colors = useColors();
@@ -71,7 +74,7 @@ export function SongRows({
   // A line just added: its first row is typed in straight away. (Lines of music are known by their place among
   // the lines of music, which a key change or a section's name put before one doesn't change.)
   const fields = useRef(new Map<string, TextInputInstance | null>());
-  const [focusNext, setFocusNext] = useState<number | null>(null);
+  const [focusNext, setFocusNext] = useState<number | null>(focusFirst ? 0 : null);
   useEffect(() => {
     if (focusNext === null) return;
     const field = fields.current.get(`${focusNext}:0`);
@@ -187,7 +190,7 @@ export function SongRows({
         <Text style={styles.label}>Parts in a new line</Text>
         <View style={styles.wrap}>
           {PART_CHOICES.map((p) => (
-            <Chip key={p} label={partName(p)} on={parts.includes(p)} onPress={() => setParts(parts.includes(p) ? parts.filter((x) => x !== p) : [...parts, p])} />
+            <Chip key={p} label={partName(p)} dot={partColor(p)} on={parts.includes(p)} onPress={() => setParts(parts.includes(p) ? parts.filter((x) => x !== p) : [...parts, p])} />
           ))}
         </View>
         <Button small kind="ghost" label="+ Add a line of music" onPress={addLine} disabled={!parts.length} style={{ alignSelf: 'flex-start' }} />

@@ -231,13 +231,32 @@ export function PartPicker({ value, onChange, allowNone }: { value: string | nul
 }
 
 /** A rounded toggle, for filters and tags. */
-export function Chip({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) {
+/** A choice that's on or off; `dot` puts a colour before the label (a part's colour). */
+export function Chip({ label, on, onPress, dot }: { label: string; on: boolean; onPress: () => void; dot?: string }) {
   const styles = useStyles();
   const colors = useColors();
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityState={{ selected: on }} style={[styles.chip, on && styles.chipOn]}>
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityState={{ selected: on }} style={[styles.chip, dot ? styles.chipDotted : null, on && styles.chipOn]}>
+      {dot ? <View style={[styles.chipDot, { backgroundColor: dot }]} /> : null}
       <Text style={[styles.chipText, on && { color: colors.onInk }]}>{label}</Text>
     </Pressable>
+  );
+}
+
+/** Where you are in a few steps, as a bar for each and "Step 1 of 2 · The song". */
+export function Steps({ at, names }: { at: number; names: string[] }) {
+  const styles = useStyles();
+  return (
+    <View style={styles.steps} accessibilityLabel={`Step ${at} of ${names.length}: ${names[at - 1]}`}>
+      <View style={styles.stepBars}>
+        {names.map((n, i) => (
+          <View key={n} style={[styles.stepBar, i < at && styles.stepBarOn]} />
+        ))}
+      </View>
+      <Text style={styles.stepText}>
+        Step {at} of {names.length} · <Text style={styles.stepName}>{names[at - 1]}</Text>
+      </Text>
+    </View>
   );
 }
 
@@ -309,4 +328,12 @@ const useStyles = makeStyles((colors) => ({
   chip: { paddingHorizontal: 13, paddingVertical: 7, borderRadius: 999, borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.card },
   chipOn: { backgroundColor: colors.ink, borderColor: colors.ink },
   chipText: { fontFamily: fonts.bold, fontSize: 13, color: colors.ink },
+  chipDotted: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  chipDot: { width: 9, height: 9, borderRadius: 4.5 },
+  steps: { gap: 8, marginTop: -4 },
+  stepBars: { flexDirection: 'row', gap: 6 },
+  stepBar: { flex: 1, height: 4, borderRadius: 2, backgroundColor: colors.line },
+  stepBarOn: { backgroundColor: colors.primary },
+  stepText: { fontFamily: fonts.bold, fontSize: 13, color: colors.muted },
+  stepName: { fontFamily: fonts.heavy, color: colors.ink },
 }));

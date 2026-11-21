@@ -97,6 +97,7 @@ Goal: a new member hears their own part within a minute.
   - **Share to WhatsApp:** the link opens the web player even without the app.
 - **Add a song:**
   - The round gradient **+** floating at the bottom right of the Songs tab (and the leader's To do on Home) opens a sheet from the bottom with four ways in: Write it, Scan a sheet, Paste sol-fa, From the library (built, 21 November 2026).
+  - Write it is two steps (built, 21 November 2026): the song's details (title, composer, key, time, parts), then a page for writing the music, opening with the sol-fa keys up on the first line.
   - Type or paste sol-fa, checked as you type (built).
   - Attach the PDF or a photo of the original sheet.
   - Preview and play before saving.

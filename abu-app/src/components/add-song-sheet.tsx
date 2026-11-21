@@ -1,10 +1,10 @@
 /**
  * Add a song, as a sheet that rises from the bottom (owner's request, 21 November 2026, from the design canvas's
- * "One place to add a song" board): four ways in, each a row with its own coloured icon. Write it opens the song
- * editor; Scan a sheet, the sheet reader (web only); Paste sol-fa, src/app/paste.tsx; From the library, the Songs
- * tab's search (songs other choirs have shared, to save or add to the repertoire). Opened by the floating "+" at the
- * bottom right of the Songs tab (`FloatingAdd`) and by the leader's To do on Home. Drag it down, tap above it, or
- * press Back or Escape to put it away.
+ * "One place to add a song" board): four ways in, each a row with its own coloured icon. Write it opens the song's
+ * details, then the song editor (src/app/write.tsx); Scan a sheet, the sheet reader (web only); Paste sol-fa,
+ * src/app/paste.tsx; From the library, the Songs tab's search (songs other choirs have shared, to save or add to
+ * the repertoire). Opened by the floating "+" at the bottom right of the Songs tab (`FloatingAdd`) and by the
+ * leader's To do on Home. Drag it down, tap above it, or press Back or Escape to put it away.
  */
 import { router } from 'expo-router';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -93,7 +93,7 @@ function Sheet({ open, onClose, onLibrary }: { open: boolean; onClose: () => voi
 
   const wash = (c: string) => `${c}${dark ? '38' : '1F'}`;
   const ways: Way[] = [
-    { title: 'Write it', sub: 'Part by part, with the sol-fa keys', icon: <PencilIcon color={ink('A')} />, wash: wash(colors.gold), go: () => router.push('/song-editor') },
+    { title: 'Write it', sub: 'Part by part, with the sol-fa keys', icon: <PencilIcon color={ink('A')} />, wash: wash(colors.gold), go: () => router.push('/write') },
     ...(Platform.OS === 'web'
       ? [{ title: 'Scan a sheet', sub: 'A PDF or photos, typed or handwritten', icon: <ScanLineIcon color={ink('T')} />, wash: wash(ink('T')), go: () => router.push('/scan') }]
       : []),

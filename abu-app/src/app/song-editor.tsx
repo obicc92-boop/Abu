@@ -3,12 +3,18 @@
  * as you type; preview and play it before saving; attach the original sheet
  * (PDF or photo). A song can be saved as sheet only. After scanning a sheet
  * (?from=scan) it opens with what was read and checked, and the sheet attached.
+ * From Write it (?from=write) it's step 2 of 2, the page for writing the music,
+ * after the song's details (src/app/write.tsx): it opens on a first line of
+ * music with the sol-fa keys up, and what's written is kept until it's saved
+ * (src/lib/new-song.ts). The page reads top to bottom as the work goes (owner's
+ * request, 21 November 2026): the song (title, key, time, with Change), the
+ * sol-fa, the preview, then what goes with saving it.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as DocumentPicker from 'expo-document-picker';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
-import { useDeferredValue, useMemo, useRef, useState } from 'react';
-import { Platform, Pressable, Switch, Text, TextInput, View, type TextInputInstance } from 'react-native';
+import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Pressable, Switch, Text, TextInput, View, type TextInputInstance } from 'react-native';
 
 import { api, type PickedFile, type Song } from '@/api/client';
 import { useSongPlayer } from '@/audio/use-song-player';
@@ -19,8 +25,10 @@ import { keysJustTouched, PhoneKeyboardBar, SolfaKeypad, type KeyPlace } from '@
 import { SongRows, type ActiveRow } from '@/components/song-rows';
 import { keepCursor, placeCursor } from '@/lib/field-cursor';
 import { applyKey, keyChangePlace, songLowMarksShown, songLowMarksTyped, withKeyChange, type Key, type Selection } from '@/lib/solfa-keys';
-import { Body, Button, Card, Chip, ErrorText, Field, Kicker, Loading, Page, TopBar } from '@/components/ui';
-import { musicPiece, songPieces, withKeyBefore, withRow } from '@/lib/song-pieces';
+import { ChevronIcon } from '@/components/icons';
+import { Body, Button, Card, Chip, ErrorText, Field, Kicker, Loading, Page, Steps, TopBar } from '@/components/ui';
+import { clearNewSong, hasMusic, isFirstPageOpen, NEW_SONG_PARTS, newSong, setNewSong, WRITE_STEPS, type NewSong } from '@/lib/new-song';
+import { musicPiece, songPieces, withKeyBefore, withNewLine, withRow } from '@/lib/song-pieces';
 import { TAG_GROUPS } from '@/lib/tags';
 import { takePastedDraft } from '@/lib/paste-draft';
 import { clearScanDraft, scanDraft, type ScanDraft } from '@/scan/draft';
@@ -44,6 +52,8 @@ export default function SongEditorScreen() {
   const { id, from } = useLocalSearchParams<{ id?: string; from?: string }>();
   // A song from a scan, or pasted on the Paste sol-fa screen (src/app/paste.tsx).
   const [draft] = useState(() => (id ? null : from === 'scan' ? scanDraft() : from === 'paste' ? takePastedDraft() : null));
+  // A song being written from Write it: its details from step 1, and what's written so far.
+  const [written] = useState(() => (!id && from === 'write' ? newSong() : null));
   const { status } = useSession();
   const existing = useQuery({ queryKey: ['song', id], queryFn: () => api.song(id!), enabled: !!id });
   if (status === 'signedOut') return <Redirect href={{ pathname: '/auth', params: { mode: 'sign-in' } }} />;
@@ -55,10 +65,10 @@ export default function SongEditorScreen() {
       </Page>
     );
   }
-  return <Editor song={existing.data} draft={draft} pasted={from === 'paste'} />;
+  return <Editor song={existing.data} draft={draft} pasted={from === 'paste'} written={written} />;
 }
 
-function Editor({ song, draft, pasted }: { song?: Song; draft: ScanDraft | null; pasted: boolean }) {
+function Editor({ song, draft, pasted, written }: { song?: Song; draft: ScanDraft | null; pasted: boolean; written: NewSong | null }) {
   const styles = useStyles();
   const colors = useColors();
   const s = useSession();
@@ -67,12 +77,26 @@ function Editor({ song, draft, pasted }: { song?: Song; draft: ScanDraft | null;
   const choirs = s.groups.filter((g) => g.type !== 'personal' && g.status === 'active');
   const defaultFrom = s.group && s.group.type !== 'personal' && s.group.status === 'active' ? s.group.id : null;
 
-  const [title, setTitle] = useState(song?.title ?? draft?.title ?? '');
-  const [composer, setComposer] = useState(song?.composer ?? draft?.composer ?? '');
-  const [doh, setDoh] = useState(song?.doh ?? draft?.doh ?? 0);
-  const [time, setTime] = useState(song?.time_signature ?? draft?.time ?? '4/4');
+  const [title, setTitle] = useState(song?.title ?? draft?.title ?? written?.title ?? '');
+  const [composer, setComposer] = useState(song?.composer ?? draft?.composer ?? written?.composer ?? '');
+  const [doh, setDoh] = useState(song?.doh ?? draft?.doh ?? written?.doh ?? 0);
+  const [time, setTime] = useState(song?.time_signature ?? draft?.time ?? written?.time ?? '4/4');
   const [tags, setTags] = useState<string[]>(song?.tags ?? []);
-  const [solfa, setSolfa] = useState(song?.solfa ?? draft?.solfa ?? '');
+  // A new song from Write it starts with a line of music with a row for each part chosen, and the first row
+  // ready to write in; carried on with, it's as it was left.
+  const [fresh] = useState(() => !!written && !hasMusic(written.solfa));
+  const [solfa, setSolfa] = useState(
+    () => song?.solfa ?? draft?.solfa ?? (written ? (fresh ? withNewLine('', written.parts.length ? written.parts : NEW_SONG_PARTS) : written.solfa) : ''),
+  );
+  // Kept as it's written, until it's saved.
+  useEffect(() => {
+    if (written) setNewSong({ title, composer, doh, time, solfa });
+  }, [written, title, composer, doh, time, solfa]);
+  // The song's details: shown as a line with Change, or open to change them (open at first where there's no
+  // title yet, and for a scan, whose title, key and time are to be checked).
+  const [details, setDetails] = useState(() => (!!draft && !pasted) || !(song?.title ?? draft?.title ?? written?.title ?? '').trim());
+  const [showTags, setShowTags] = useState(false);
+  const [showSheet, setShowSheet] = useState(!!draft?.sheet);
   // The sol-fa is written in rows, one for each part by its colour, as on Check the reading (owner's request,
   // 20 November 2026), or as text ("Edit as text", for pasting). Either way with the sol-fa keypad; "ABC" swaps
   // in the phone's keyboard, with a bar over it to come back.
@@ -194,6 +218,7 @@ function Editor({ song, draft, pasted }: { song?: Song; draft: ScanDraft | null;
       return saved;
     },
     onSuccess: async (saved) => {
+      if (written) clearNewSong();
       if (draft) {
         clearScanDraft();
         // The scan is done with: no longer offered to carry on with.
@@ -203,7 +228,14 @@ function Editor({ song, draft, pasted }: { song?: Song; draft: ScanDraft | null;
       await queryClient.invalidateQueries({ queryKey: ['repertoire'] });
       await queryClient.invalidateQueries({ queryKey: ['song', saved.id] });
       await queryClient.invalidateQueries({ queryKey: ['songForMe', saved.id] });
-      router.replace({ pathname: '/song/[id]', params: { id: saved.id } });
+      const home = { pathname: '/song/[id]', params: { id: saved.id } } as const;
+      // An edit goes back to the song's page it came from (fetched afresh), so Back from there leaves the song;
+      // from Write it, step 1 is under this page: both make way for the song.
+      if (editing && router.canGoBack()) router.back();
+      else if (written && isFirstPageOpen()) {
+        router.dismiss(2);
+        router.push(home);
+      } else router.replace(home);
     },
   });
   const remove = useMutation({
@@ -227,6 +259,7 @@ function Editor({ song, draft, pasted }: { song?: Song; draft: ScanDraft | null;
   };
 
   const blocked = !title.trim() || (!empty && parsed.errors.length > 0);
+  const why = !title.trim() ? 'Give the song a title to save it: tap Change at the top.' : blocked ? 'Fix the sol-fa problems above to save.' : null;
 
   return (
     <Page
@@ -248,35 +281,76 @@ function Editor({ song, draft, pasted }: { song?: Song; draft: ScanDraft | null;
     >
       <TopBar
         back
-        title={editing ? 'Edit song' : draft && !pasted ? 'Save the scanned song' : 'Add a song'}
-        subtitle={editing ? song!.title : draft ? 'Check the title, key and time, then save.' : 'Type or paste the sol-fa; it’s checked as you type.'}
+        title={editing ? 'Edit song' : written ? 'Write the music' : draft && !pasted ? 'Save the scanned song' : 'Add a song'}
+        subtitle={
+          editing
+            ? song!.title
+            : written
+              ? 'Each part in its own row, with the sol-fa keys. Every bar is checked as you go.'
+              : draft && !pasted
+                ? 'Check the title, key and time, then save.'
+                : pasted
+                  ? 'Check what you pasted, then save.'
+                  : 'Type or paste the sol-fa; it’s checked as you type.'
+        }
       />
-      {!editing && !draft && Platform.OS === 'web' ? (
-        <Card tone="sand">
-          <Body>Have the sheet as a PDF or photo? SolfaScores can read it for you to check.</Body>
-          <Button small kind="ghost" label="Scan a sheet instead" onPress={() => router.push('/scan')} style={{ alignSelf: 'flex-start' }} />
-        </Card>
-      ) : null}
+      {written ? <Steps at={2} names={WRITE_STEPS} /> : null}
 
       <Card>
-        <Field label="Title" value={title} onChangeText={setTitle} placeholder="e.g. Ekele Diri Chukwu" />
-        <Field label="Composer or arranger (optional)" value={composer} onChangeText={setComposer} placeholder="e.g. Arr. N. Eze" />
-        <View style={styles.group}>
-          <Text style={styles.label}>Key (doh is)</Text>
-          <View style={styles.wrap}>
-            {KEY_NAMES.map((k, i) => (
-              <Chip key={k} label={k} on={doh === i} onPress={() => setDoh(i)} />
-            ))}
-          </View>
+        <View style={styles.headRow}>
+          {details ? (
+            <Kicker>The song</Kicker>
+          ) : (
+            <View style={styles.titleBox}>
+              <Text style={[styles.songTitle, !title.trim() && styles.untitled]} numberOfLines={2}>
+                {title.trim() || 'No title yet'}
+              </Text>
+              {composer.trim() ? (
+                <Text style={styles.songSub} numberOfLines={1}>
+                  {composer.trim()}
+                </Text>
+              ) : null}
+            </View>
+          )}
+          <Button
+            small
+            kind="ghost"
+            label={details ? 'Done' : 'Change'}
+            onPress={() => setDetails(!details)}
+            accessibilityLabel={details ? 'Done with the song’s details' : 'Change the title, key or time'}
+          />
         </View>
-        <View style={styles.group}>
-          <Text style={styles.label}>Time</Text>
+        {details ? (
+          <>
+            <Field label="Title" value={title} onChangeText={setTitle} placeholder="e.g. Ekele Diri Chukwu" />
+            <Field label="Composer or arranger (optional)" value={composer} onChangeText={setComposer} placeholder="e.g. Arr. N. Eze" />
+            <View style={styles.group}>
+              <Text style={styles.label}>Key (doh is)</Text>
+              <View style={styles.wrap}>
+                {KEY_NAMES.map((k, i) => (
+                  <Chip key={k} label={k} on={doh === i} onPress={() => setDoh(i)} />
+                ))}
+              </View>
+            </View>
+            <View style={styles.group}>
+              <Text style={styles.label}>Time</Text>
+              <View style={styles.wrap}>
+                {TIMES.map((t) => (
+                  <Chip key={t} label={t} on={time === t} onPress={() => setTime(t)} />
+                ))}
+              </View>
+            </View>
+          </>
+        ) : (
           <View style={styles.wrap}>
-            {TIMES.map((t) => (
-              <Chip key={t} label={t} on={time === t} onPress={() => setTime(t)} />
-            ))}
+            <View style={styles.fact}>
+              <Text style={styles.factText}>Doh is {KEY_NAMES[doh]}</Text>
+            </View>
+            <View style={styles.fact}>
+              <Text style={styles.factText}>{time}</Text>
+            </View>
           </View>
-        </View>
+        )}
       </Card>
 
       <Card>
@@ -300,6 +374,7 @@ function Editor({ song, draft, pasted }: { song?: Song; draft: ScanDraft | null;
         {showHelp ? <Help asText={asText} onExample={() => setSolfa(EXAMPLE)} /> : null}
         {!asText ? (
           <SongRows
+            focusFirst={fresh}
             text={solfa}
             time={time}
             doh={doh}
@@ -369,66 +444,66 @@ function Editor({ song, draft, pasted }: { song?: Song; draft: ScanDraft | null;
       ) : null}
 
       <Card>
-        <Kicker>Tags</Kicker>
-        {TAG_GROUPS.map((g) => (
-          <View key={g.label} style={styles.group}>
-            <Text style={styles.label}>{g.label}</Text>
+        <Kicker>Before you save</Kicker>
+        {!editing ? (
+          <View style={styles.group}>
+            <Text style={styles.label}>Shared by</Text>
             <View style={styles.wrap}>
-              {g.tags.map((t) => (
-                <Chip key={t} label={t} on={tags.includes(t)} onPress={() => setTags(tags.includes(t) ? tags.filter((x) => x !== t) : [...tags, t])} />
+              {choirs.map((g) => (
+                <Chip key={g.id} label={g.name} on={from === g.id} onPress={() => setFrom(g.id)} />
               ))}
+              <Chip label="Just me" on={from === null} onPress={() => setFrom(null)} />
             </View>
+            <Body muted>
+              {from ? 'Everyone in the group can fix the sol-fa later.' : 'Saved to My songs. Every song on SolfaScores is open to everyone.'}
+            </Body>
+            {canAddToRep ? (
+              <View style={styles.toggle}>
+                <Text style={styles.toggleText}>Add to our repertoire</Text>
+                <Switch
+                  value={addToRep}
+                  onValueChange={setAddToRep}
+                  accessibilityLabel="Add to our repertoire"
+                  trackColor={{ false: colors.switchOff, true: colors.primary }}
+                  thumbColor={colors.onPrimary}
+                  {...({ activeThumbColor: colors.onPrimary } as object)}
+                />
+              </View>
+            ) : null}
           </View>
-        ))}
-      </Card>
-
-      <Card>
-        <Kicker>Original sheet (optional)</Kicker>
-        <Body muted>A PDF or a photo of the printed sheet, so members can see the original. Up to 10 MB.</Body>
-        {picked ? (
-          <Body>Attaching: {picked.name}</Body>
-        ) : song?.sheet_key && !removeSheet ? (
-          <Body>A sheet is attached.</Body>
         ) : null}
-        <View style={styles.wrap}>
-          <Button small kind="ghost" label={picked || song?.sheet_key ? 'Choose another file' : 'Attach PDF or photo'} onPress={pick} />
-          {picked ? <Button small kind="ghost" label="Don’t attach" onPress={() => setPicked(null)} /> : null}
-          {!picked && song?.sheet_key && !removeSheet ? <Button small kind="danger" label="Remove the sheet" onPress={() => setRemoveSheet(true)} /> : null}
-        </View>
-        {pickError ? <ErrorText message={pickError} /> : null}
-      </Card>
-
-      {!editing ? (
-        <Card>
-          <Kicker>Shared by</Kicker>
-          <View style={styles.wrap}>
-            {choirs.map((g) => (
-              <Chip key={g.id} label={g.name} on={from === g.id} onPress={() => setFrom(g.id)} />
-            ))}
-            <Chip label="Just me" on={from === null} onPress={() => setFrom(null)} />
-          </View>
-          <Body muted>
-            {from ? 'Everyone in the group can fix the sol-fa later.' : 'Saved to My songs. Every song on SolfaScores is open to everyone.'}
-          </Body>
-          {canAddToRep ? (
-            <View style={styles.toggle}>
-              <Text style={styles.toggleText}>Add to our repertoire</Text>
-              <Switch
-                value={addToRep}
-                onValueChange={setAddToRep}
-                accessibilityLabel="Add to our repertoire"
-                trackColor={{ false: colors.switchOff, true: colors.primary }}
-                thumbColor={colors.onPrimary}
-                {...({ activeThumbColor: colors.onPrimary } as object)}
-              />
+        <Folding label="Tags (optional)" value={tags.length ? tags.join(', ') : 'None yet'} open={showTags} onToggle={() => setShowTags(!showTags)}>
+          {TAG_GROUPS.map((g) => (
+            <View key={g.label} style={styles.group}>
+              <Text style={styles.label}>{g.label}</Text>
+              <View style={styles.wrap}>
+                {g.tags.map((t) => (
+                  <Chip key={t} label={t} on={tags.includes(t)} onPress={() => setTags(tags.includes(t) ? tags.filter((x) => x !== t) : [...tags, t])} />
+                ))}
+              </View>
             </View>
-          ) : null}
-        </Card>
-      ) : null}
+          ))}
+        </Folding>
+        <Folding
+          label="Original sheet (optional)"
+          value={picked ? picked.name : song?.sheet_key && !removeSheet ? 'Attached' : 'None'}
+          open={showSheet}
+          onToggle={() => setShowSheet(!showSheet)}
+        >
+          <Body muted>A PDF or a photo of the printed sheet, so members can see the original. Up to 10 MB.</Body>
+          {picked ? <Body>Attaching: {picked.name}</Body> : song?.sheet_key && !removeSheet ? <Body>A sheet is attached.</Body> : null}
+          <View style={styles.wrap}>
+            <Button small kind="ghost" label={picked || song?.sheet_key ? 'Choose another file' : 'Attach PDF or photo'} onPress={pick} />
+            {picked ? <Button small kind="ghost" label="Don’t attach" onPress={() => setPicked(null)} /> : null}
+            {!picked && song?.sheet_key && !removeSheet ? <Button small kind="danger" label="Remove the sheet" onPress={() => setRemoveSheet(true)} /> : null}
+          </View>
+          {pickError ? <ErrorText message={pickError} /> : null}
+        </Folding>
+      </Card>
 
       {save.error ? <ErrorText message={save.error.message} /> : null}
-      <Button label={editing ? 'Save changes' : 'Save song'} onPress={() => save.mutate()} disabled={blocked} busy={save.isPending} />
-      {blocked && title.trim() ? <Body muted style={{ textAlign: 'center' }}>Fix the sol-fa problems above to save.</Body> : null}
+      <Button label={editing ? 'Save changes' : 'Save song'} onPress={() => save.mutate()} disabled={blocked} busy={save.isPending} style={styles.big} />
+      {why ? <Body muted style={{ textAlign: 'center' }}>{why}</Body> : null}
 
       {editing ? (
         confirmDelete ? (
@@ -445,6 +520,30 @@ function Editor({ song, draft, pasted }: { song?: Song; draft: ScanDraft | null;
         )
       ) : null}
     </Page>
+  );
+}
+
+/** A part of the page folded to one line (its name and what's chosen), opened with a tap. */
+function Folding({ label, value, open, onToggle, children }: { label: string; value: string; open: boolean; onToggle: () => void; children: ReactNode }) {
+  const styles = useStyles();
+  const colors = useColors();
+  return (
+    <View style={styles.folding}>
+      <Pressable onPress={onToggle} accessibilityRole="button" accessibilityState={{ expanded: open }} accessibilityLabel={label} style={styles.foldHead}>
+        <View style={styles.titleBox}>
+          <Text style={styles.foldLabel}>{label}</Text>
+          {!open ? (
+            <Text style={styles.foldValue} numberOfLines={1}>
+              {value}
+            </Text>
+          ) : null}
+        </View>
+        <View style={open ? styles.chevronOpen : null}>
+          <ChevronIcon color={colors.faint} />
+        </View>
+      </Pressable>
+      {open ? <View style={styles.foldBody}>{children}</View> : null}
+    </View>
   );
 }
 
@@ -502,5 +601,18 @@ const useStyles = makeStyles((colors) => ({
   help: { backgroundColor: colors.sand, borderRadius: 12, padding: 12, gap: 4 },
   helpText: { fontFamily: fonts.body, fontSize: 13.5, lineHeight: 19, color: colors.ink },
   toggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  titleBox: { flex: 1, minWidth: 0 },
+  songTitle: { fontFamily: fonts.heavy, fontSize: 19, lineHeight: 24, color: colors.ink },
+  untitled: { color: colors.muted },
+  songSub: { fontFamily: fonts.body, fontSize: 14, color: colors.muted, marginTop: 1 },
+  fact: { borderRadius: 999, borderWidth: 1.5, borderColor: colors.line, paddingHorizontal: 12, paddingVertical: 5 },
+  factText: { fontFamily: fonts.bold, fontSize: 13, color: colors.ink },
+  folding: { borderTopWidth: 1, borderTopColor: colors.line },
+  foldHead: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12 },
+  foldLabel: { fontFamily: fonts.bold, fontSize: 15, color: colors.ink },
+  foldValue: { fontFamily: fonts.body, fontSize: 13.5, color: colors.muted, marginTop: 1 },
+  chevronOpen: { transform: [{ rotate: '90deg' }] },
+  foldBody: { gap: 10, paddingBottom: 12 },
+  big: { minHeight: 56 },
   toggleText: { fontFamily: fonts.bold, fontSize: 15, color: colors.ink },
 }));
