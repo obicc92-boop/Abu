@@ -23,7 +23,7 @@ import { readSetting, writeSetting } from '@/lib/storage';
 import { partName } from '@/solfa';
 import { useSession } from '@/state/session';
 import { makeStyles, type ThemeChoice, useColors, useTheme } from '@/theme/theme';
-import { fonts, LOOKS, palettes, type Palette } from '@/theme/tokens';
+import { fonts, palettes, type Palette } from '@/theme/tokens';
 
 const PERFORM_THEME = 'abu.performTheme';
 
@@ -359,20 +359,20 @@ function Password() {
   );
 }
 
-/** "Match phone", then the five looks. */
-const LOOK_CHOICES: { value: ThemeChoice; label: string; about: string }[] = [
-  { value: 'system', label: 'Match phone', about: 'White by day, Ebony when your phone is dark' },
-  ...LOOKS.map((l) => ({ value: l.id, label: l.name, about: l.about })),
+const LOOK_CHOICES: { value: ThemeChoice; label: string }[] = [
+  { value: 'system', label: 'Match phone' },
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
 ];
 
-/** The app's look on this phone: one of the five, or following the phone's own light or dark. */
+/** Light or dark for the whole app on this phone: following the phone's own setting unless chosen. */
 function Appearance() {
   const styles = useStyles();
-  const { choice, setChoice, look } = useTheme();
+  const { choice, setChoice, scheme } = useTheme();
   return (
     <Card>
       <Kicker>Appearance</Kicker>
-      <Text style={styles.small}>Dark looks are easier on the eyes at night and in a dim church. “Match phone” is White by day and Ebony when your phone is dark.</Text>
+      <Text style={styles.small}>Dark is easier on the eyes at night and in a dim church. “Match phone” follows your phone’s own setting.</Text>
       <View style={styles.looks} accessibilityRole="radiogroup">
         {LOOK_CHOICES.map((c) => {
           const on = choice === c.value;
@@ -382,12 +382,12 @@ function Appearance() {
               onPress={() => setChoice(c.value)}
               accessibilityRole="radio"
               accessibilityState={{ checked: on }}
-              accessibilityLabel={c.value === 'system' ? `Match phone, now ${look === 'ebony' ? 'Ebony' : 'White'}` : `${c.label}: ${c.about}`}
+              accessibilityLabel={c.value === 'system' ? `Match phone, now ${scheme}` : c.label}
               style={[styles.look, on && styles.lookOn]}
             >
-              <LookPreview sides={c.value === 'system' ? [palettes.white, palettes.ebony] : [palettes[c.value]]} />
+              <LookPreview sides={c.value === 'system' ? [palettes.light, palettes.dark] : [palettes[c.value]]} />
               <Text style={[styles.lookLabel, on && styles.lookLabelOn]}>{c.label}</Text>
-              {c.value === 'system' && on ? <Text style={styles.lookNote}>Now {look === 'ebony' ? 'Ebony' : 'White'}</Text> : null}
+              {c.value === 'system' ? <Text style={styles.lookNote}>Now {scheme}</Text> : null}
             </Pressable>
           );
         })}
@@ -455,8 +455,8 @@ const useStyles = makeStyles((colors) => ({
   link: { fontFamily: fonts.heavy, fontSize: 13.5, color: colors.link },
   label: { fontFamily: fonts.heavy, fontSize: 13, color: colors.ink, marginTop: 4 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  looks: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  look: { flexGrow: 1, flexBasis: '30%', minWidth: 0, borderRadius: 12, borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.card, padding: 8, gap: 6, alignItems: 'center' },
+  looks: { flexDirection: 'row', gap: 8 },
+  look: { flex: 1, minWidth: 0, borderRadius: 12, borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.card, padding: 8, gap: 6, alignItems: 'center' },
   lookOn: { borderColor: colors.ink, borderWidth: 2, padding: 7.5 },
   lookLabel: { fontFamily: fonts.bold, fontSize: 13, color: colors.muted, textAlign: 'center' },
   lookLabelOn: { fontFamily: fonts.heavy, color: colors.ink },

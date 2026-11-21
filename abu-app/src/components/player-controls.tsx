@@ -5,6 +5,8 @@ import { partName } from '@/solfa';
 import { makeStyles, useColors, usePartInk } from '@/theme/theme';
 import { fonts, partColor } from '@/theme/tokens';
 
+import { MainFill } from './brand';
+
 /* ---------- Part mixer: tap a part to mute it; Solo; Mine ---------- */
 
 interface MixerProps {
@@ -128,8 +130,11 @@ export function PlayButton({ playing, onPress, size = 68 }: { playing: boolean; 
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={playing ? 'Stop' : 'Play'}
-      style={({ pressed }) => [styles.play, { width: size, height: size, borderRadius: size / 2 }, pressed && { backgroundColor: colors.primaryDeep }]}
+      style={({ pressed }) => [styles.play, { width: size, height: size, borderRadius: size / 2 }, pressed && { opacity: 0.85 }]}
     >
+      <View style={[styles.playFill, { borderRadius: size / 2 }]}>
+        <MainFill from={colors.primary} to={colors.primary2} />
+      </View>
       {playing ? <View style={styles.stopIcon} /> : <View style={styles.playIcon} />}
     </Pressable>
   );
@@ -201,5 +206,7 @@ const useStyles = makeStyles((colors) => ({
     borderBottomColor: 'transparent',
     borderLeftColor: colors.onPrimary,
   },
-  stopIcon: { width: 20, height: 20, borderRadius: 3, backgroundColor: colors.card },
+  stopIcon: { width: 20, height: 20, borderRadius: 3, backgroundColor: colors.onPrimary },
+  // The gradient, clipped to the circle (the button itself isn't clipped, so its shadow shows).
+  playFill: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, overflow: 'hidden' },
 }));

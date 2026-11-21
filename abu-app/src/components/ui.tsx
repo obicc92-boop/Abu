@@ -12,6 +12,7 @@ import { partName } from '@/solfa';
 import { makeStyles, useColors, usePartInk } from '@/theme/theme';
 import { brand, fonts, type Palette, partColor } from '@/theme/tokens';
 
+import { MainFill } from './brand';
 import { BackIcon } from './icons';
 
 export const MAX_WIDTH = 560;
@@ -90,6 +91,7 @@ export function Button({
       accessibilityState={{ disabled: disabled || busy, busy }}
       style={({ pressed }) => [styles.button, small && styles.buttonSmall, k.box, pressed && { opacity: 0.85 }, (disabled || busy) && { opacity: 0.55 }, style]}
     >
+      {kind === 'primary' ? <MainFill from={colors.primary} to={colors.primary2} /> : null}
       {busy ? <ActivityIndicator color={k.text.color} /> : <Text style={[styles.buttonText, small && styles.buttonTextSmall, k.text]}>{label}</Text>}
     </Pressable>
   );
@@ -97,7 +99,7 @@ export function Button({
 
 /** Each kind of button in a palette. "light" and "outlineLight" sit on the feature cards (`hero`). */
 const buttonsFor = (colors: Palette): Record<ButtonKind, { box: ViewStyle; text: { color: string } }> => ({
-  primary: { box: { backgroundColor: colors.primary }, text: { color: colors.onPrimary } },
+  primary: { box: { backgroundColor: colors.primary, overflow: 'hidden' }, text: { color: colors.onPrimary } },
   ghost: { box: { backgroundColor: colors.card, borderWidth: 1.5, borderColor: colors.line }, text: { color: colors.ink } },
   light: { box: { backgroundColor: colors.onHero }, text: { color: colors.hero } },
   outlineLight: { box: { borderWidth: 1.5, borderColor: colors.onHeroSoft }, text: { color: colors.onHero } },
@@ -239,8 +241,9 @@ const useStyles = makeStyles((colors) => ({
   back: { width: 38, height: 38, borderRadius: 10, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' },
   title: { fontFamily: fonts.heavy, fontSize: 21, lineHeight: 26, color: colors.ink },
   subtitle: { fontFamily: fonts.body, fontSize: 13.5, color: colors.muted, marginTop: 1 },
-  button: { minHeight: 50, borderRadius: 12, paddingHorizontal: 18, alignItems: 'center', justifyContent: 'center' },
-  buttonSmall: { minHeight: 38, borderRadius: 10, paddingHorizontal: 12 },
+  // Pills, as on Suno.
+  button: { minHeight: 50, borderRadius: 999, paddingHorizontal: 20, alignItems: 'center', justifyContent: 'center' },
+  buttonSmall: { minHeight: 38, borderRadius: 999, paddingHorizontal: 14 },
   buttonText: { fontFamily: fonts.heavy, fontSize: 15.5 },
   buttonTextSmall: { fontSize: 13.5 },
   field: { gap: 6 },

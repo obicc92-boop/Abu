@@ -126,6 +126,28 @@ export function Motif({ color, opacity, focus = { x: 0.5, y: 0.33 }, fade = fals
   );
 }
 
+/**
+ * The main buttons' fill, as on Suno's Create button: the main colour running into pink and back again, across
+ * and a little down. Put it first inside the button, which clips it (`overflow: 'hidden'`).
+ */
+export function MainFill({ from, to }: { from: string; to: string }) {
+  const id = useId().replace(/[^a-zA-Z0-9]/g, '');
+  return (
+    <View style={styles.fill}>
+      <Svg width="100%" height="100%" preserveAspectRatio="none">
+        <Defs>
+          <LinearGradient id={`f${id}`} x1="0" y1="0" x2="1" y2="0.4">
+            <Stop offset="0" stopColor={from} />
+            <Stop offset="0.5" stopColor={to} />
+            <Stop offset="1" stopColor={from} />
+          </LinearGradient>
+        </Defs>
+        <Rect width="100%" height="100%" fill={`url(#f${id})`} />
+      </Svg>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   fill: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, pointerEvents: 'none' },
 });

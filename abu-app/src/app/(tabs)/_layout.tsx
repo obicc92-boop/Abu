@@ -22,7 +22,7 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.primary,
+        tabBarActiveTintColor: colors.ink,
         tabBarInactiveTintColor: colors.muted,
         tabBarStyle: { backgroundColor: colors.card, borderTopColor: colors.line, height: 70, paddingTop: 6, paddingBottom: 12 },
         tabBarLabelStyle: { fontFamily: fonts.bold, fontSize: 11.5, lineHeight: 15 },

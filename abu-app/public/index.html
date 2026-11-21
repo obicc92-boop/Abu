@@ -18,21 +18,15 @@
         }
       } catch (e) {}
     </script>
-    <!-- The look (White, Ebony, Gold, Silver or Violet): the page follows the phone (White or Ebony) unless SolfaScores' own setting (Me → Appearance) says otherwise. -->
+    <!-- Light (white) and dark (black): the page follows the phone unless SolfaScores' own setting (Me → Appearance) says otherwise. -->
     <meta name="color-scheme" content="light dark" />
     <script>
       try {
-        // The look picked in Me (White is light; Ebony, Gold, Silver and Violet are dark), or the
-        // earlier "light" or "dark" (White or Ebony). None: follow the phone.
-        var l = localStorage.getItem('abu.look');
+        // Light or dark as picked in Me, or as the five looks of 21 November 2026 left it (White was light).
         var t = localStorage.getItem('abu.theme');
-        if (!l && t === 'light') l = 'white';
-        if (!l && t === 'dark') l = 'ebony';
-        if (l === 'white') document.documentElement.dataset.theme = 'light';
-        if (l === 'ebony' || l === 'gold' || l === 'silver' || l === 'violet') {
-          document.documentElement.dataset.theme = 'dark';
-          document.documentElement.dataset.look = l;
-        }
+        var l = localStorage.getItem('abu.look');
+        if (!t && l) t = l === 'white' ? 'light' : 'dark';
+        if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
       } catch (e) {}
     </script>
     <!-- Installable: Android offers "Install app"; iPhones use Share, then "Add to Home Screen". -->
@@ -61,10 +55,9 @@
       body {
         overflow: hidden;
         margin: 0;
-        /* The app's page colour in its look, so nothing red shows around it (the
-           red first paint below has its own background): the light page, or the
-           near-black in dark. */
-        background: #fbf7f1;
+        /* The app's page colour, so nothing red shows around it (the red first
+           paint below has its own background): white, or black in dark. */
+        background: #fbfaf8;
       }
       @media (prefers-color-scheme: dark) {
         html:not([data-theme='light']) body {
@@ -73,15 +66,6 @@
       }
       html[data-theme='dark'] body {
         background: #111113;
-      }
-      html[data-look='gold'] body {
-        background: #0d0907;
-      }
-      html[data-look='silver'] body {
-        background: #0b0c0f;
-      }
-      html[data-look='violet'] body {
-        background: #0d0b12;
       }
       #root {
         display: flex;
