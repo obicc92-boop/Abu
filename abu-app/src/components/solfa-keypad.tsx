@@ -4,7 +4,7 @@
  * the field being edited, which keeps its cursor: a key is pressed without taking the focus from the field.
  * The sharps and flats have a row of their own under the notes. Used to fix a scanned line (`bridge`: an "="
  * key for the bridge notes sheets print) and to write a song (`parts`: keys for the parts' names and a new line;
- * `keyChange`: a key to change key). Marks, on both, opens the musical markings (dynamics, tempo, and the repeats
+ * `keyChange`: a key to change key), with Undo beside delete where the screen keeps what's written (`onUndo`). Marks, on both, opens the musical markings (dynamics, tempo, and the repeats
  * and jumps) in place of the keys; a slur is a key of its own. While the phone's keyboard is in use instead, `PhoneKeyboardBar` sits over
  * it, to come back.
  */
@@ -170,9 +170,14 @@ export function SolfaKeypad({
   parts = false,
   bridge = false,
   keyChange,
+  onUndo,
+  canUndo = false,
 }: {
   onKey(key: Key): void;
   onDone(): void;
+  /** Undo (src/lib/undo.ts): takes back the last change to the row being written in; dimmed while there's none. */
+  onUndo?(): void;
+  canUndo?: boolean;
   onKeyboard?(): void;
   parts?: boolean;
   bridge?: boolean;
@@ -258,6 +263,7 @@ export function SolfaKeypad({
               <KeyButton key={b.caption} label={b.label} caption={b.caption} onPress={() => insert(b.insert)} />
             ))}
             <KeyButton label="⌫" caption="delete" onPress={() => onKey('erase')} accessibilityLabel="Delete" />
+            {onUndo ? <KeyButton label="↶" caption="undo" onPress={onUndo} off={!canUndo} accessibilityLabel="Undo" /> : null}
           </View>
           <View style={styles.row}>
             <KeyButton label="◀" onPress={() => onKey('left')} accessibilityLabel="Cursor left" />
@@ -448,6 +454,7 @@ function KeyButton({
   word,
   on,
   face,
+  off,
   accessibilityLabel,
 }: {
   label: ReactNode;
@@ -464,6 +471,8 @@ function KeyButton({
   on?: boolean;
   /** A musical marking, set as sheets print it (`Marking['face']`), or a sign drawn (`label` is the drawing). */
   face?: Marking['face'] | 'sign';
+  /** Nothing to do now (Undo with nothing to undo): dimmed, and a tap does nothing. */
+  off?: boolean;
   accessibilityLabel?: string;
 }) {
   const styles = useStyles();
@@ -474,16 +483,18 @@ function KeyButton({
     <Pressable
       onPressIn={() => {
         touched.current = true;
-        onPress();
+        if (!off) onPress();
       }}
       onPressOut={() => setTimeout(() => (touched.current = false), 400)}
       onPress={() => {
-        if (!touched.current) onPress();
+        if (!touched.current && !off) onPress();
       }}
       focusable={false}
       accessibilityRole="button"
+      // Said as off, and no press (the pad around it still keeps the field's focus).
+      disabled={off}
       accessibilityLabel={accessibilityLabel ?? (caption ? `${String(label)} ${caption}` : String(label))}
-      style={({ pressed }) => [styles.key, note && styles.noteKey, narrow && styles.narrowKey, small && styles.smallKey, done && styles.doneKey, on && styles.onKey, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.key, note && styles.noteKey, narrow && styles.narrowKey, small && styles.smallKey, done && styles.doneKey, on && styles.onKey, off && styles.offKey, pressed && !off && styles.pressed]}
     >
       {face === 'hairpin' ? (
         <Hairpin opening={label === '<'} />
@@ -523,6 +534,7 @@ const useStyles = makeStyles((colors) => ({
   doneKey: { flex: 1.4, backgroundColor: colors.primary, borderColor: colors.primary },
   onKey: { backgroundColor: colors.ink, borderColor: colors.ink },
   pressed: { opacity: 0.6 },
+  offKey: { opacity: 0.35 },
   /** The gap between the sharps and the flats. */
   split: { width: 4 },
   label: { fontFamily: fonts.mono, fontSize: 17, lineHeight: 20, color: colors.ink },

@@ -37,6 +37,7 @@ import { clearNewSong, hasMusic, isFirstPageOpen, NEW_SONG_PARTS, newSong, setNe
 import { musicPiece, songPieces, withKeyBefore, withNewLine, withRow } from '@/lib/song-pieces';
 import { barAt, lineBeats, lineOfBar, musicLines, rangeLabel, songBars } from '@/score/bars';
 import { TAG_GROUPS } from '@/lib/tags';
+import { useUndo } from '@/lib/undo';
 import { takePastedDraft } from '@/lib/paste-draft';
 import { askToCheckAgain, clearScanDraft, scanDraft, type ScanDraft } from '@/scan/draft';
 import { tidyNotes } from '@/scan/line-text';
@@ -92,7 +93,7 @@ function Editor({ song, draft, pasted, written, startBar }: { song?: Song; draft
   // A new song from Write it starts with a line of music with a row for each part chosen, and the first row
   // ready to write in; carried on with, it's as it was left.
   const [fresh] = useState(() => !!written && !hasMusic(written.solfa));
-  const [solfa, setSolfa] = useState(
+  const [solfa, setSolfaNow] = useState(
     () => song?.solfa ?? draft?.solfa ?? (written ? (fresh ? withNewLine('', written.parts.length ? written.parts : NEW_SONG_PARTS) : written.solfa) : ''),
   );
   // Kept as it's written, until it's saved.
@@ -132,6 +133,27 @@ function Editor({ song, draft, pasted, written, startBar }: { song?: Song; draft
   })();
   /** The field being written in: the text box, or the row. */
   const current = () => (asText ? field.current : activeField());
+  // Undo on the keypad (src/lib/undo.ts): the music as it was before each change to the row, or the text, being
+  // written in, with the row as typed and the cursor. Cleared when another row is started or writing stops.
+  const undo = useUndo<{ solfa: string; doh: number; value: string | null; sel: Selection }>();
+  /** A change to the music, kept for Undo (`typing`: with the phone's keyboard, where a run of it is one step). */
+  const setSolfa = (next: string, typing = false) => {
+    if (next === solfa) return;
+    undo.keep({ solfa, doh, value: active?.value ?? null, sel }, typing);
+    setSolfaNow(next);
+  };
+  /** Undo: the music as it was before the last change, with the cursor back where it was. */
+  const undoLast = () => {
+    const last = undo.take();
+    if (!last) return;
+    setSolfaNow(last.solfa);
+    setDoh(last.doh);
+    setSel(last.sel);
+    if (active && last.value !== null) setActive({ ...active, value: last.value });
+    const f = current();
+    if (f && !f.isFocused()) f.focus();
+    requestAnimationFrame(() => placeCursor(f, last.sel));
+  };
   /** The text as a key left it, with the cursor where the key put it. */
   const write = (next: { text: string; sel: Selection }) => {
     setSolfa(next.text);
@@ -161,6 +183,7 @@ function Editor({ song, draft, pasted, written, startBar }: { song?: Song; draft
     setTimeout(() => f?.focus(), 50);
   };
   const stopWriting = () => {
+    undo.clear();
     current()?.blur();
     setWriting(false);
     setActive(null);
@@ -185,18 +208,24 @@ function Editor({ song, draft, pasted, written, startBar }: { song?: Song; draft
     },
     pick: (name: string) => {
       const { bar } = keyChange.where();
-      const songKey = () => setDoh(Math.max(0, KEY_NAMES.indexOf(name as (typeof KEY_NAMES)[number])));
+      // The song's key; kept for Undo here when no key line changes with it (that change keeps it).
+      const songKey = (alone: boolean) => {
+        if (alone) undo.keep({ solfa, doh, value: active?.value ?? null, sel });
+        setDoh(Math.max(0, KEY_NAMES.indexOf(name as (typeof KEY_NAMES)[number])));
+      };
       if (asText) {
-        if (!bar) songKey();
+        const existing = keyChangePlace(solfa, sel.start).existing;
+        if (!bar) songKey(!existing);
         // The song's key: a key line already at the top is changed too, so the two agree.
-        if (bar || keyChangePlace(solfa, sel.start).existing) write(withKeyChange(solfa, sel, name));
+        if (bar || existing) write(withKeyChange(solfa, sel, name));
         return;
       }
       const pieces = songPieces(solfa);
       const at = musicPiece(pieces, active?.line ?? openLine ?? 0);
       if (!bar) {
-        songKey();
-        if (pieces[at - 1]?.kind === 'key') setSolfa(withKeyBefore(solfa, at, name));
+        const keyLine = pieces[at - 1]?.kind === 'key';
+        songKey(!keyLine);
+        if (keyLine) setSolfa(withKeyBefore(solfa, at, name));
         return;
       }
       setSolfa(withKeyBefore(solfa, at, name));
@@ -389,7 +418,7 @@ function Editor({ song, draft, pasted, written, startBar }: { song?: Song; draft
       footer={
         asText ? (
           withKeys ? (
-            <SolfaKeypad parts keyChange={keyChange} onKey={pressKey} onKeyboard={() => switchKeys(true)} onDone={stopWriting} />
+            <SolfaKeypad parts keyChange={keyChange} onKey={pressKey} onUndo={undoLast} canUndo={undo.canUndo} onKeyboard={() => switchKeys(true)} onDone={stopWriting} />
           ) : writing && keyboard ? (
             <PhoneKeyboardBar onSolfaKeys={() => switchKeys(false)} onDone={stopWriting} />
           ) : writing ? undefined : (
@@ -399,7 +428,7 @@ function Editor({ song, draft, pasted, written, startBar }: { song?: Song; draft
           keyboard ? (
             <PhoneKeyboardBar onSolfaKeys={() => switchKeys(false)} onDone={closeLine} />
           ) : (
-            <SolfaKeypad keyChange={keyChange} onKey={pressKey} onKeyboard={() => switchKeys(true)} onDone={closeLine} />
+            <SolfaKeypad keyChange={keyChange} onKey={pressKey} onUndo={undoLast} canUndo={undo.canUndo} onKeyboard={() => switchKeys(true)} onDone={closeLine} />
           )
         ) : (
           preview
@@ -514,12 +543,13 @@ function Editor({ song, draft, pasted, written, startBar }: { song?: Song; draft
           value={songLowMarksShown(solfa)}
           onChangeText={(t) => {
             const typed = songLowMarksTyped(t);
-            setSolfa(typed);
+            setSolfa(typed, true);
             keepCursor(field.current, t, songLowMarksShown(typed));
           }}
           onSelectionChange={(e) => setSel(e.nativeEvent.selection)}
           onFocus={() => {
             if (writing) return;
+            undo.clear();
             setKeyboard(false);
             setWriting(true);
             // In sight above the keypad, once it's up.
@@ -576,11 +606,16 @@ function Editor({ song, draft, pasted, written, startBar }: { song?: Song; draft
                         keyboard={keyboard}
                         focusFirst={focusOpen}
                         onActive={(row) => {
+                          // Another row (or none): Undo starts afresh there.
+                          if (!row || !active || active.line !== row.line || active.row !== row.row) undo.clear();
                           if (row && (!active || active.line !== row.line || active.row !== row.row)) setKeyboard(false);
                           setActive(row);
                         }}
-                        onLeave={(line, row) => setActive((a) => (a && a.line === line && a.row === row ? null : a))}
-                        onChange={setSolfa}
+                        onLeave={(line, row) => {
+                          if (active && active.line === line && active.row === row) undo.clear();
+                          setActive((a) => (a && a.line === line && a.row === row ? null : a));
+                        }}
+                        onChange={(next) => setSolfa(next, true)}
                         onSelection={setSel}
                         onField={(line, row, f) => {
                           rowFields.current.set(`${line}:${row}`, f);

@@ -53,6 +53,7 @@ import { withAiMarks, withWordsAndMarks } from '@/scan/ai-marks';
 import { readSetting, writeSetting } from '@/lib/storage';
 import { placeCursor } from '@/lib/field-cursor';
 import { applyKey, type Key, type Selection } from '@/lib/solfa-keys';
+import { useUndo } from '@/lib/undo';
 import { findLinesOwn, readLineOwn } from '@/scan/own-reader';
 import { barAt, rangeLabel, songBars } from '@/score/bars';
 import { cutLine, cutPieces, loadPages, MAX_PAGES, pageForFinding, scanningHere, takePhoto } from '@/scan/pages';
@@ -978,9 +979,25 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
   const keypad = editingRow >= 0 && !!rows[editingRow]?.part && !keyboard;
   // A row of notes being typed with the phone's keyboard: a bar over it, to come back to the keypad.
   const keyboardBar = editingRow >= 0 && !!rows[editingRow]?.part && keyboard;
+  // Undo on the keypad (src/lib/undo.ts): the line as it was before each change to the row being fixed, with the
+  // row as typed and the cursor. Cleared when another row is started or the row is left.
+  const undo = useUndo<{ text: string; checked: boolean; value: string; sel: Selection }>();
+  const keepForUndo = (typing = false) => editing && undo.keep({ text: line.text, checked: line.checked, value: editing.value, sel }, typing);
+  /** Undo: the row as it was before its last change, with the cursor back where it was. */
+  const undoLast = () => {
+    const last = undo.take();
+    if (!last || !editing || editingRow < 0) return;
+    update(line.id, { text: last.text, checked: last.checked });
+    setEditing({ ...editing, value: last.value });
+    setSel(last.sel);
+    const field = inputs.current[editingRow];
+    if (field && !field.isFocused()) field.focus();
+    requestAnimationFrame(() => placeCursor(field, last.sel));
+  };
   const pressKey = (key: Key) => {
     if (!editing || editingRow < 0) return;
     const next = applyKey(editing.value, sel, key);
+    if (next.text !== editing.value) keepForUndo();
     setEditing({ ...editing, value: next.text });
     setRow(editingRow, next.text);
     setSel(next.sel);
@@ -990,6 +1007,7 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
     requestAnimationFrame(() => placeCursor(field, next.sel));
   };
   const leaveRow = () => {
+    undo.clear();
     inputs.current[editingRow]?.blur();
     setEditing(null);
     setKeyboard(false);
@@ -1207,15 +1225,20 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
               activeBeat={player.beat}
               label={`line ${current + 1}`}
               onStart={(i, shown) => {
+                undo.clear();
                 setEditing({ id: line.id, row: i, value: shown });
                 setKeyboard(false);
               }}
               onType={(i, typed) => {
+                keepForUndo(true);
                 setEditing({ id: line.id, row: i, value: typed });
                 setRow(i, typed);
               }}
               onSelection={setSel}
-              onLeave={(i) => setEditing((e) => (e && e.row === i ? null : e))}
+              onLeave={(i) => {
+                if (editingRow === i) undo.clear();
+                setEditing((e) => (e && e.row === i ? null : e));
+              }}
               onField={(i, f) => {
                 inputs.current[i] = f;
               }}
@@ -1324,7 +1347,7 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
 
       <View style={[styles.footer, (keypad || keyboardBar) && styles.footerSolid]}>
         {keypad ? (
-          <SolfaKeypad bridge onKey={pressKey} onDone={leaveRow} onKeyboard={() => switchKeys(true)} />
+          <SolfaKeypad bridge onKey={pressKey} onUndo={undoLast} canUndo={undo.canUndo} onDone={leaveRow} onKeyboard={() => switchKeys(true)} />
         ) : keyboardBar ? (
           <PhoneKeyboardBar onSolfaKeys={() => switchKeys(false)} onDone={leaveRow} />
         ) : (
