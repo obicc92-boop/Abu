@@ -46,7 +46,7 @@ export function SongView({ id, banner }: { id: string; banner?: ReactNode }) {
   if (!song) {
     return (
       <SafeAreaView style={styles.page}>
-        <TopBar title={shared.isPending ? 'Loading…' : 'Song not found'} subtitle={shared.isPending ? '' : 'It may have been removed.'} />
+        <TopBar title={shared.isPending ? 'Loading…' : 'Song not found'} subtitle={shared.isPending ? '' : 'It may have been removed, or it isn’t shared with you.'} />
       </SafeAreaView>
     );
   }
