@@ -20,10 +20,11 @@ import * as DocumentPicker from 'expo-document-picker';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Linking, Platform, Pressable, Switch, Text, TextInput, View, type TextInputInstance } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { api, type Audience, type PickedFile, type Song } from '@/api/client';
 import { useSongPlayer } from '@/audio/use-song-player';
-import { PlayButton } from '@/components/player-controls';
+import { PlayButton, Stepper } from '@/components/player-controls';
 import { Score, type BarActions } from '@/components/score';
 import { SolfaCheck } from '@/components/solfa-check';
 import { keysJustTouched, PhoneKeyboardBar, SolfaKeypad, type KeyPlace } from '@/components/solfa-keypad';
@@ -235,6 +236,40 @@ function Editor({ song, draft, pasted, written, startBar }: { song?: Song; draft
   // Played from a bar: which, to say so (a stretch of bars says itself, in the player's `range`).
   const [fromBar, setFromBar] = useState<number | null>(null);
   const playing = player.playing ? (player.range ? rangeLabel(player.range, bars) : fromBar && fromBar > 1 ? `Playing from bar ${fromBar}` : null) : null;
+  // The preview's player at the foot of the page while no keypad is up (owner's request, 21 November 2026: "a
+  // central play button where I can play the song as a preview before I save it"), as on a song's page.
+  const insets = useSafeAreaInsets();
+  const barNow = barAt(bars, Math.max(0, player.beat))?.bar ?? 1;
+  const nowPlaying = player.playing ? (playing ?? `Bar ${barNow} of ${bars.length}`) : player.pausedAt !== null ? `Paused · bar ${barNow}` : null;
+  const preview = canPlay ? (
+    <View style={[styles.transport, { paddingBottom: 8 + insets.bottom }]}>
+      <View style={styles.transportSide}>
+        <Stepper label="Tempo" value={player.tempo} onStep={player.changeTempo} lessLabel="Slower" moreLabel="Faster" />
+      </View>
+      <PlayButton
+        playing={player.playing}
+        onPress={() => {
+          if (player.pausedAt === null) setFromBar(null);
+          player.togglePlay();
+        }}
+        size={60}
+      />
+      <View style={styles.transportSide}>
+        {nowPlaying ? (
+          <>
+            <Text style={styles.transportNow} numberOfLines={2} accessibilityLiveRegion="polite">
+              {nowPlaying}
+            </Text>
+            <Pressable onPress={player.stop} accessibilityRole="button" hitSlop={8} style={styles.stopPill}>
+              <Text style={styles.stopText}>Stop</Text>
+            </Pressable>
+          </>
+        ) : (
+          <Text style={styles.transportHint}>Play the song</Text>
+        )}
+      </View>
+    </View>
+  ) : undefined;
   /** Open a bar's line of music to write in, in place in the score. */
   const openBar = (n: number) => {
     stopWriting();
@@ -343,14 +378,18 @@ function Editor({ song, draft, pasted, written, startBar }: { song?: Song; draft
             <SolfaKeypad parts keyChange={keyChange} onKey={pressKey} onKeyboard={() => switchKeys(true)} onDone={stopWriting} />
           ) : writing && keyboard ? (
             <PhoneKeyboardBar onSolfaKeys={() => switchKeys(false)} onDone={stopWriting} />
-          ) : undefined
+          ) : writing ? undefined : (
+            preview
+          )
         ) : active && activePart ? (
           keyboard ? (
             <PhoneKeyboardBar onSolfaKeys={() => switchKeys(false)} onDone={closeLine} />
           ) : (
             <SolfaKeypad keyChange={keyChange} onKey={pressKey} onKeyboard={() => switchKeys(true)} onDone={closeLine} />
           )
-        ) : undefined
+        ) : (
+          preview
+        )
       }
     >
       <TopBar
@@ -486,25 +525,11 @@ function Editor({ song, draft, pasted, written, startBar }: { song?: Song; draft
         /> : null}
         {/* Play the song as it's written, and what's playing (a bar, a bar round and round, from a bar). */}
         {!empty ? (
-          <View style={styles.playRow}>
-            {canPlay ? (
-              <PlayButton
-                playing={player.playing}
-                onPress={() => {
-                  if (player.pausedAt === null) setFromBar(null);
-                  player.togglePlay();
-                }}
-                size={46}
-              />
-            ) : null}
-            <Text style={[styles.playNote, !!playing && styles.playNow]} numberOfLines={2}>
-              {playing ??
-                (parsed.errors.length
-                  ? 'Bars in red don’t add up yet: it plays them as best it can.'
-                  : 'Tap a bar to play from it, play it, loop it or change it.')}
-            </Text>
-            {playing ? <Button small kind="ghost" label="Stop" onPress={player.stop} /> : null}
-          </View>
+          <Text style={styles.playNote}>
+            {parsed.errors.length
+              ? 'Bars in red don’t add up yet: they play as best they can. Tap a bar to play from it, play it, loop it or change it.'
+              : 'Tap a bar to play from it, play it, loop it or change it. Play at the foot plays it all.'}
+          </Text>
         ) : null}
         {player.message ? <Body muted>{player.message}</Body> : null}
         {/* The song's score, edited in place: a bar's Edit opens its line of music where it is. */}
@@ -754,9 +779,14 @@ const useStyles = makeStyles((colors) => ({
     ...({ whiteSpace: 'pre', overflowX: 'auto' } as object),
   },
   help: { backgroundColor: colors.sand, borderRadius: 12, padding: 12, gap: 4 },
-  playRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  playNote: { flex: 1, minWidth: 0, fontFamily: fonts.body, fontSize: 13, lineHeight: 18, color: colors.muted },
-  playNow: { fontFamily: fonts.bold, color: colors.ink },
+  playNote: { fontFamily: fonts.body, fontSize: 13, lineHeight: 18, color: colors.muted },
+  // The preview's player at the foot, as on a song's page.
+  transport: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 8, paddingHorizontal: 16, backgroundColor: colors.card },
+  transportSide: { flex: 1, alignItems: 'center', gap: 4 },
+  transportNow: { fontFamily: fonts.bold, fontSize: 13, color: colors.ink, textAlign: 'center' },
+  transportHint: { fontFamily: fonts.body, fontSize: 12.5, color: colors.muted, textAlign: 'center' },
+  stopPill: { borderRadius: 999, borderWidth: 1.5, borderColor: colors.line, paddingHorizontal: 12, minHeight: 28, justifyContent: 'center' },
+  stopText: { fontFamily: fonts.bold, fontSize: 12.5, color: colors.ink },
   helpText: { fontFamily: fonts.body, fontSize: 13.5, lineHeight: 19, color: colors.ink },
   toggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   titleBox: { flex: 1, minWidth: 0 },
