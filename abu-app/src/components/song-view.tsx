@@ -1,15 +1,13 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { useCallback, useMemo, useRef, type ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View, type ScrollViewInstance } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { api, type Song } from '@/api/client';
 import { partLevel } from '@/audio/engine';
-import { useSongPlayer } from '@/audio/use-song-player';
+import { useSongPage } from '@/audio/now-playing';
 import { DEMO_SONGS, type DemoSong } from '@/data/demo-songs';
-import { dayKey } from '@/lib/dates';
-import { queuePlay } from '@/lib/outbox';
 import { KEY_NAMES, mod12, parseSolfa } from '@/solfa';
 import { useSession } from '@/state/session';
 import { makeStyles } from '@/theme/theme';
@@ -72,29 +70,14 @@ export function SongView({ id, banner }: { id: string; banner?: ReactNode }) {
 function Player({ song, apiSong, banner }: { song: DemoSong; apiSong?: Song; banner?: ReactNode }) {
   const styles = useStyles();
   const parsed = useMemo(() => parseSolfa(song.solfa, { time: song.time, key: song.key }), [song.solfa, song.time, song.key]);
-  const { status, group } = useSession();
-  const p = useSongPlayer(parsed, song.key, group?.part ?? null);
-  const queryClient = useQueryClient();
-
-  // Each time you play the song through, count it (privately) when signed in.
-  const counted = useRef(0);
-  useEffect(() => {
-    if (p.timesPlayed <= counted.current) return;
-    counted.current = p.timesPlayed;
-    if (status !== 'signedIn' || !apiSong) return;
-    const day = dayKey();
-    void api
-      .recordPlay(song.id, day)
-      .then(() =>
-        Promise.all([
-          queryClient.invalidateQueries({ queryKey: ['songForMe', song.id] }),
-          queryClient.invalidateQueries({ queryKey: ['myPractice'] }),
-          queryClient.invalidateQueries({ queryKey: ['readiness'] }),
-        ]),
-      )
-      // No connection: keep the play and send it when the phone is back online.
-      .catch((e: { status?: number }) => e.status === 0 && queuePlay({ songId: song.id, day }));
-  }, [p.timesPlayed, status, apiSong, song.id, queryClient]);
+  const { group } = useSession();
+  // The app's own player (src/audio/now-playing.tsx): the song keeps playing when you leave this page, and its
+  // plays are counted there.
+  const nowSong = useMemo(
+    () => ({ id: song.id, title: song.title, composer: song.composer, solfa: song.solfa, key: song.key, parsed, countable: !!apiSong }),
+    [song.id, song.title, song.composer, song.solfa, song.key, parsed, apiSong],
+  );
+  const p = useSongPage(nowSong);
   const insets = useSafeAreaInsets();
   const keyName = KEY_NAMES[mod12(song.key + p.transpose)];
   const silent = useMemo(() => Object.fromEntries(parsed.parts.map((part) => [part, partLevel(part, p.mix) === 0])), [parsed, p.mix]);

@@ -13,6 +13,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 
+import { NowPlayingProvider } from '@/audio/now-playing';
 import { BrandMark } from '@/components/brand';
 import { ConnectionBars } from '@/components/connection-bars';
 import { useKeepOffline } from '@/lib/keep-offline';
@@ -70,9 +71,12 @@ export default function RootLayout() {
     <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
       <ThemeProvider>
         <SessionProvider>
-          <KeepOffline />
-          <Screens opening={opening} />
-          {opening ? <AnimatedSplash onDone={opened} /> : null}
+          {/* The song playing, for the whole app: it keeps playing from screen to screen. */}
+          <NowPlayingProvider>
+            <KeepOffline />
+            <Screens opening={opening} />
+            {opening ? <AnimatedSplash onDone={opened} /> : null}
+          </NowPlayingProvider>
         </SessionProvider>
       </ThemeProvider>
     </PersistQueryClientProvider>

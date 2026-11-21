@@ -1,7 +1,8 @@
 /**
  * The tabs' bar, as on Suno (owner's request, 21 November 2026, from Suno's screens): the tab you're on has its
  * icon in a pill, and in the middle a round gradient "+" (Suno's Create button) opens Add a song. The names stay
- * small under the icons, for choir members finding their way on a cheap phone.
+ * small under the icons, for choir members finding their way on a cheap phone. The song playing sits over them
+ * (`MiniPlayer`).
  */
 import { router, type Tabs } from 'expo-router';
 import type { ComponentProps } from 'react';
@@ -13,6 +14,7 @@ import { fonts } from '@/theme/tokens';
 
 import { MainFill } from './brand';
 import { PlusIcon } from './icons';
+import { MiniPlayer } from './mini-player';
 
 type BarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['tabBar']>>[0];
 
@@ -60,16 +62,20 @@ export function TabBar({ state, descriptors, emitter, navigateToTab, insets }: B
     ) : null;
   // Home and Songs, the "+", then the rest.
   return (
-    <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 8) }]} accessibilityRole="tablist">
-      {tabs.slice(0, 2)}
-      {add}
-      {tabs.slice(2)}
+    <View style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+      <MiniPlayer />
+      <View style={styles.bar} accessibilityRole="tablist">
+        {tabs.slice(0, 2)}
+        {add}
+        {tabs.slice(2)}
+      </View>
     </View>
   );
 }
 
 const useStyles = makeStyles((colors) => ({
-  bar: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.sand, borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 8 },
+  wrap: { backgroundColor: colors.sand, borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 8 },
+  bar: { flexDirection: 'row', alignItems: 'center' },
   tab: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 3, minHeight: 52 },
   pill: { width: 52, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   pillOn: { backgroundColor: colors.ink },
