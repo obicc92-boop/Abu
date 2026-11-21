@@ -69,7 +69,7 @@ const useStyles = makeStyles((colors) => ({
   page: { flex: 1, backgroundColor: colors.hero, overflow: 'hidden' },
   head: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 16 },
   kicker: { flex: 1, fontFamily: fonts.heavy, fontSize: 12, letterSpacing: 0.8, textTransform: 'uppercase', color: colors.heroKicker },
-  done: { backgroundColor: 'rgba(255,255,255,0.16)', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 },
+  done: { backgroundColor: 'rgba(255,255,255,0.16)', borderRadius: 999, paddingHorizontal: 16, paddingVertical: 8 },
   doneText: { fontFamily: fonts.heavy, fontSize: 14, color: colors.onHero },
   middle: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, gap: 14 },
   label: { fontFamily: fonts.heavy, fontSize: 14, letterSpacing: 1.2, textTransform: 'uppercase', color: colors.heroKicker },

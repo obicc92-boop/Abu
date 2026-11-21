@@ -181,7 +181,7 @@ const useStyles = makeStyles((colors) => ({
     maxWidth: MAX_WIDTH,
     alignSelf: 'center',
   },
-  back: { width: 36, height: 36, borderRadius: 10, backgroundColor: colors.sand, alignItems: 'center', justifyContent: 'center' },
+  back: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.sand, alignItems: 'center', justifyContent: 'center' },
   chevron: {
     width: 10,
     height: 10,

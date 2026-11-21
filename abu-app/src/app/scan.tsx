@@ -36,6 +36,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { api, ApiError, type PickedFile, type ScanLineReading } from '@/api/client';
 import { useSongPlayer } from '@/audio/use-song-player';
+import { MainFill } from '@/components/brand';
 import { AgainIcon, CameraIcon, CheckIcon, CloseIcon, FileIcon, PlusIcon, ScanIcon, ZoomIcon } from '@/components/icons';
 import { LineRows } from '@/components/line-rows';
 import { PlayButton } from '@/components/player-controls';
@@ -781,7 +782,9 @@ function IconButton({ icon, label, onPress, kind = 'primary' }: { icon: ReactNod
   const colors = useColors();
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} style={({ pressed }) => [styles.iconButton, kind === 'ghost' && styles.iconButtonGhost, pressed && { opacity: 0.85 }]}>
-      {icon}
+      {kind === 'primary' ? <MainFill from={colors.primary} to={colors.primary2} /> : null}
+      {/* In a view of its own, so it sits over the gradient (on the web an svg alone is drawn under it). */}
+      <View>{icon}</View>
       <Text style={[styles.iconButtonText, kind === 'ghost' && { color: colors.ink }]}>{label}</Text>
     </Pressable>
   );
@@ -1260,7 +1263,8 @@ const useStyles = makeStyles((colors) => ({
   stepNo: { width: 26, height: 26, borderRadius: 13, backgroundColor: colors.accentTint, alignItems: 'center', justifyContent: 'center' },
   stepNoText: { fontFamily: fonts.heavy, fontSize: 13, color: colors.accent },
   stepText: { fontFamily: fonts.bold, fontSize: 15, color: colors.ink },
-  iconButton: { minHeight: 54, borderRadius: 12, backgroundColor: colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 18 },
+  // Pills, the main one with the gradient, as the app's other buttons.
+  iconButton: { minHeight: 56, borderRadius: 999, overflow: 'hidden', backgroundColor: colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 18 },
   iconButtonGhost: { backgroundColor: colors.card, borderWidth: 1.5, borderColor: colors.line },
   iconButtonText: { fontFamily: fonts.heavy, fontSize: 15.5, color: colors.onPrimary },
   tip: { fontFamily: fonts.body, fontSize: 13, lineHeight: 18, color: colors.muted },
@@ -1302,7 +1306,7 @@ const useStyles = makeStyles((colors) => ({
   dotText: { fontFamily: fonts.bold, fontSize: 12.5, color: colors.ink },
   flush: { padding: 0, gap: 0, overflow: 'hidden' },
   pad: { paddingHorizontal: 14, paddingVertical: 10 },
-  iconOnly: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.sand },
+  iconOnly: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.sand },
   rowsBox: { flexDirection: 'row', borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.line, backgroundColor: colors.sand },
   tags: { width: 18, borderRightWidth: 1, borderColor: colors.line, backgroundColor: colors.card },
   numbersTop: { height: NUMBERS_HEIGHT, borderBottomWidth: 1, borderColor: colors.line },
@@ -1346,7 +1350,7 @@ const useStyles = makeStyles((colors) => ({
   okRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   okText: { fontFamily: fonts.bold, fontSize: 13, color: colors.ok, flex: 1 },
   toolbar: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, borderTopWidth: 1, borderColor: colors.line },
-  tool: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 10, borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.card, paddingHorizontal: 12, paddingVertical: 8 },
+  tool: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 999, borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.card, paddingHorizontal: 12, paddingVertical: 8 },
   toolText: { fontFamily: fonts.bold, fontSize: 13, color: colors.ink },
   toolOn: { borderColor: colors.ink },
   toolGlyph: { fontFamily: fonts.mono, fontSize: 13, lineHeight: 16, color: colors.muted },

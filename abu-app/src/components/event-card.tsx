@@ -3,6 +3,7 @@ import { Link } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 
 import type { GroupEvent, GroupType } from '@/api/client';
+import { MainFill } from '@/components/brand';
 import { fmtTime, relDay } from '@/lib/dates';
 import { kindLabel } from '@/lib/group-types';
 import { makeStyles, useColors } from '@/theme/theme';
@@ -23,6 +24,8 @@ export function EventCard({ event, groupType, muted }: { event: GroupEvent; grou
       <Link href={{ pathname: '/event/[id]', params: { id: event.id } }} asChild>
         <Pressable style={styles.row} accessibilityRole="link" accessibilityLabel={`${event.title}, ${d.toDateString()}`}>
           <View style={[styles.date, rehearsal && styles.dateRehearsal]}>
+            {/* Services and concerts in the main colour's gradient, as the main buttons; rehearsals plain. */}
+            {rehearsal ? null : <MainFill from={colors.primary} to={colors.primary2} />}
             <Text style={[styles.day, rehearsal && { color: colors.ink }]}>{DAYS[d.getDay()]}</Text>
             <Text style={[styles.num, rehearsal && { color: colors.ink }]}>{d.getDate()}</Text>
             <Text style={[styles.day, rehearsal && { color: colors.muted }]}>{MONTHS[d.getMonth()]}</Text>
@@ -48,7 +51,7 @@ export function EventCard({ event, groupType, muted }: { event: GroupEvent; grou
 const useStyles = makeStyles((colors) => ({
   muted: { opacity: 0.6 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.card, borderRadius: 14, borderWidth: 1, borderColor: colors.line, padding: 12 },
-  date: { width: 52, borderRadius: 12, backgroundColor: colors.primary, paddingVertical: 6, alignItems: 'center' },
+  date: { width: 52, borderRadius: 14, overflow: 'hidden', backgroundColor: colors.primary, paddingVertical: 6, alignItems: 'center' },
   dateRehearsal: { backgroundColor: colors.board },
   day: { fontFamily: fonts.heavy, fontSize: 10, letterSpacing: 0.6, color: colors.onPrimarySoft },
   num: { fontFamily: fonts.heavy, fontSize: 20, lineHeight: 24, color: colors.onPrimary },

@@ -73,10 +73,10 @@ function StepButton({ label, onPress, disabled }: { label: string; onPress: () =
 
 const useStyles = makeStyles((colors) => ({
   outer: { width: '100%', maxWidth: MAX_WIDTH, alignSelf: 'center', paddingHorizontal: 16, marginBottom: 8 },
-  bar: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 6, borderRadius: 12, backgroundColor: colors.board },
+  bar: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 6, borderRadius: 999, backgroundColor: colors.board },
   middle: { flex: 1, alignItems: 'center', minWidth: 0 },
   kicker: { fontFamily: fonts.heavy, fontSize: 11, letterSpacing: 0.6, textTransform: 'uppercase', color: colors.muted },
   section: { fontFamily: fonts.bold, fontSize: 13, color: colors.accent },
-  step: { paddingHorizontal: 12, minHeight: 36, borderRadius: 9, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
+  step: { paddingHorizontal: 14, minHeight: 36, borderRadius: 999, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
   stepText: { fontFamily: fonts.heavy, fontSize: 13, color: colors.ink },
 }));

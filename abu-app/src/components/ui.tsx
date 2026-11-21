@@ -196,7 +196,8 @@ export function Avatar({ name, part, size = 38 }: { name: string; part?: string 
     .join('');
   return (
     <View style={[styles.avatar, { width: size, height: size, borderRadius: size / 2, backgroundColor: part ? partColor(part) : colors.ink }]}>
-      <Text style={[styles.avatarText, { fontSize: size * 0.36 }]}>{initials || '?'}</Text>
+      {/* With no part yet the circle is ink (white in dark), so the letters are the page's colour. */}
+      <Text style={[styles.avatarText, { fontSize: size * 0.36 }, !part && { color: colors.onInk }]}>{initials || '?'}</Text>
     </View>
   );
 }
@@ -274,7 +275,8 @@ const useStyles = makeStyles((colors) => ({
   body: { padding: 16, paddingBottom: 32, gap: 14, width: '100%', maxWidth: MAX_WIDTH, alignSelf: 'center' },
   bodyUnderFloating: { paddingBottom: 96 },
   topbar: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 2 },
-  back: { width: 38, height: 38, borderRadius: 10, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' },
+  // Round, as Suno's icon buttons are.
+  back: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' },
   title: { fontFamily: fonts.heavy, fontSize: 21, lineHeight: 26, color: colors.ink },
   subtitle: { fontFamily: fonts.body, fontSize: 13.5, color: colors.muted, marginTop: 1 },
   // Pills, as on Suno.

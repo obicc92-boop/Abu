@@ -3,7 +3,11 @@
   <head>
     <meta charset="utf-8" />
     <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <!-- Fixed at the phone's own size, like an app (owner's report, 21 November 2026: the screen "shaking", moving
+         left and right, up and down): a pinch or a quick double touch on the sol-fa keys zoomed the page a little,
+         and from then on it slid about under a finger. SolfaScores has its own bigger text where it matters
+         (Perform's A+). -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, shrink-to-fit=no" />
     <meta name="theme-color" content="#D14617" />
     <script>
       // SolfaScores lives at solfascores.com. A browser on the old address (abu.adalingo.workers.dev)
@@ -51,6 +55,13 @@
         body {
           height: 100dvh;
         }
+      }
+      /* The page itself never moves: no pinch-zoom (iPhones ignore user-scalable=no; touch-action covers them),
+         no pull-to-refresh dragging it down, no bounce. Each screen scrolls inside. */
+      html,
+      body {
+        touch-action: pan-x pan-y;
+        overscroll-behavior: none;
       }
       body {
         overflow: hidden;

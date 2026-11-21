@@ -175,7 +175,7 @@ const useStyles = makeStyles((colors) => ({
   stepButton: {
     width: 32,
     height: 32,
-    borderRadius: 9,
+    borderRadius: 16,
     borderWidth: 1.5,
     borderColor: colors.line,
     backgroundColor: colors.card,
