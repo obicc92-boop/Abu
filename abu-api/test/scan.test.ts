@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ensureUser } from '../src/domain/groups';
 import { scanAllowance, useScan } from '../src/domain/scan';
 import app from '../src/index';
-import { CHECK_SYSTEM, checkLine, cleanPage, fixLine, keyName, keyOf, LINE_SCHEMA, LINE_SYSTEM, lineText, MARK_RULES, MARKS_SYSTEM, readHeading, readLine, readLineWords, readMarks, readPage, readWords, rowsAnswer, tempoOf, tidyMarks, tidySlurs, timeOf, WORDS_MARKS_SYSTEM } from '../src/scan';
+import { CHECK_SYSTEM, checkLine, cleanPage, fixLine, keyName, keyOf, LINE_SCHEMA, LINE_SYSTEM, lineText, MARK_RULES, MARKS_SYSTEM, SIGN_FIX, readHeading, readLine, readLineWords, readMarks, readPage, readWords, rowsAnswer, tempoOf, tidyMarks, tidySlurs, timeOf, WORDS_MARKS_SYSTEM } from '../src/scan';
 import { call, ORIGIN, signUp } from './helpers';
 
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
@@ -430,5 +430,28 @@ describe('reading the marks of a line that reads right already', () => {
     expect((await send(`parts=S&by=claude&notes=${encodeURIComponent('S  d :r |')}`, withAi)).status).toBe(503);
     const left = await call('/scan/allowance', { cookie });
     expect(await left.json()).toMatchObject({ lines: 399 });
+  });
+});
+
+describe('repeats and jumps', () => {
+  it('every reader is told what they look like, and that a segno is never a note', () => {
+    expect(MARK_RULES).toContain('a segno `{segno}` (𝄋: an S with a slanting stroke through it and a dot each side; by hand it can look like $ or §)');
+    expect(MARK_RULES).toContain('a coda sign `{coda}` (𝄌: a circle or oval with a cross through it)');
+    expect(MARK_RULES).toContain('a start repeat `{|:}`');
+    expect(MARK_RULES).toContain('`{D.S.}` (Dal Segno), `{D.S. al Fine}`, `{D.S. al Coda}`, `{D.C.}` (Da Capo), `{D.C. al Fine}`, `{D.C. al Coda}`, `{Fine}`, `{to coda}`, and an end repeat `{:|}`');
+    expect(MARK_RULES).toContain('A segno or coda sign is never a note or a bridge note, and repeat dots are never beat marks.');
+    for (const system of [LINE_SYSTEM, CHECK_SYSTEM, MARKS_SYSTEM, WORDS_MARKS_SYSTEM]) expect(system).toContain(MARK_RULES);
+    // A reader given a reading may change a note for this one thing only.
+    expect(MARKS_SYSTEM).toContain(SIGN_FIX);
+    expect(WORDS_MARKS_SYSTEM).toContain(SIGN_FIX);
+    expect(SIGN_FIX).toContain("as a bridge note (`s=d'`), is written as the sign instead (`{segno}d'`)");
+    expect(CHECK_SYSTEM).toContain('It may have read a segno or coda sign as a note: write it as the sign.');
+  });
+
+  it('are spelt as SolfaScores spells them, the repeats keeping their bar line and dots', () => {
+    expect(tidyMarks('{|:}d :r | m :f {:|} |')).toBe('{|:}d :r | m :f {:|} |');
+    expect(tidyMarks('{:||}d :r | {Dal Segno al fine}m :f | {dc} |')).toBe('{:|}d :r | {D.S. al Fine}m :f | {D.C.} |');
+    expect(tidyMarks('{𝄋}d :r | {fine} {To Coda} {1st time}m |')).toBe('{segno}d :r | {Fine} {to coda} {1.}m |');
+    expect(lineText({ rows: [{ part: 'S', notes: "{segno}d' :-.d' /d' :d' {:|}" }] }, ['S'])).toBe("S  {segno}d' :-.d' /d' :d' {:|} |");
   });
 });

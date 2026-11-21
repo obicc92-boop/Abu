@@ -327,7 +327,8 @@ function Scanner() {
       const notes = joinLine(splitLine(text).filter((r) => r.part));
       // With the marks and slurs too, in the same call, when they're wanted: kept only if its notes are the line's.
       const r = await api.scanLineWords(line.blob, { parts: line.parts, notes, marks: marksAi });
-      return { text: withWordsAndMarks(text, r, passes), key: r.key };
+      // (A new key with the line, read now or before, means its bridge notes are real: never taken for a misread segno.)
+      return { text: withWordsAndMarks(text, r, passes, !!(line.key || r.key)), key: r.key };
     } catch {
       return { text };
     }
@@ -344,6 +345,7 @@ function Scanner() {
       readers: ai,
       ask: async (by, notes) => (await api.scanMarks(line.blob, { parts: line.parts, notes, by })).text,
       passes,
+      keyChange: !!line.key,
     });
     // Today's allowance is used up: no more marks readings for this sheet (the lines keep what they have).
     if (got.allowanceOut) marksStopped.current = true;

@@ -15,6 +15,7 @@
  */
 import Anthropic from '@anthropic-ai/sdk';
 
+import { repeatMark } from '../../abu-app/src/scan/repeats';
 import { readExpression, TEMPO_WORDS } from '../../abu-app/src/solfa';
 import { AppError, badRequest } from './errors';
 
@@ -94,8 +95,12 @@ export interface PageReading {
  * dynamics, hairpins, tempo changes and directions in braces before the note they start on, slurs in brackets.
  */
 export const MARK_RULES = `- Markings printed over or under a part's row go in that row, in braces, just before the note they're printed over: dynamics \`{pp}\` \`{p}\` \`{mp}\` \`{mf}\` \`{f}\` \`{ff}\` \`{sfz}\`, \`{cresc}\` \`{dim}\`, a hairpin \`{<}\` or \`{>}\` before the note where the wedge starts, \`{rit}\` \`{rall}\` \`{accel}\` \`{a tempo}\`, and a tempo or direction as printed (\`{Andante M. 70}\`, \`{Maestoso}\`, \`{dolce}\`, \`{With feeling}\`), as in \`S  {p}d :r /m :f |\`. A tempo printed above the line goes before the top part's first note. Braces are not beats: they change no beat marks or bar lines.
+- Repeats and jumps go in braces too. Before the first note they mark: a segno \`{segno}\` (𝄋: an S with a slanting stroke through it and a dot each side; by hand it can look like $ or §), a coda sign \`{coda}\` (𝄌: a circle or oval with a cross through it), a start repeat \`{|:}\` (a double bar with two dots after it), and endings \`{1.}\` \`{2.}\` (a bracket marked 1. or 2., "1st time"). Right after the last note of their bar, before its \`|\`: \`{D.S.}\` (Dal Segno), \`{D.S. al Fine}\`, \`{D.S. al Coda}\`, \`{D.C.}\` (Da Capo), \`{D.C. al Fine}\`, \`{D.C. al Coda}\`, \`{Fine}\`, \`{to coda}\`, and an end repeat \`{:|}\` (two dots before a double bar). A segno or coda sign is never a note or a bridge note, and repeat dots are never beat marks.
 - A slur (notes underlined, or joined by a curve: sung to one syllable) goes in round brackets from its first note to its last: \`(m'.d')\`, \`(s :f |m)\`. Brackets are not beats either.
 - Copy only the marks and slurs that are printed.`;
+
+/** Said to a reader given a reading to keep: a sign read as a note is the one note it may change. */
+export const SIGN_FIX = `The one exception: a segno or coda sign that was read as a note, or as a bridge note (\`s=d'\`), is written as the sign instead (\`{segno}d'\`).`;
 
 export const LINE_SYSTEM = `You read one line of music from a picture of a tonic sol-fa choir sheet (typed or handwritten) and write it in SolfaScores' sol-fa text format. Copy exactly what is printed or written; never correct or improve the music.
 
@@ -155,7 +160,7 @@ export const LINE_SCHEMA = {
 
 export const CHECK_SYSTEM = `${LINE_SYSTEM}
 
-A small model has already read this line; its reading comes with the picture. It is usually close, but check it bar by bar against the picture and correct every mistake: wrong or missing notes, octave marks, holds, rests, beat marks and bar lines. It usually leaves markings and slurs out: add the ones printed. Keep what it got right exactly as it is. List the bars you corrected or still can't read with confidence as doubts.`;
+A small model has already read this line; its reading comes with the picture. It is usually close, but check it bar by bar against the picture and correct every mistake: wrong or missing notes, octave marks, holds, rests, beat marks and bar lines. It usually leaves markings and slurs out: add the ones printed. It may have read a segno or coda sign as a note: write it as the sign. Keep what it got right exactly as it is. List the bars you corrected or still can't read with confidence as doubts.`;
 
 export const WORDS_LINE_SYSTEM = `You copy the words (lyrics) of one line of music from a picture of a tonic sol-fa choir sheet (typed or handwritten). The line's notes have been read already and come with the picture, one row per part, top to bottom; the words are printed under the parts' rows of notes.
 
@@ -189,7 +194,8 @@ export const WORDS_LINE_SCHEMA = {
 export const WORDS_MARKS_SYSTEM = `${WORDS_LINE_SYSTEM}
 
 Also give each part's row of notes back as it came, with the markings and slurs printed with it added, as follows. Change nothing else in the row: no note, octave mark, beat mark or bar line.
-${MARK_RULES}`;
+${MARK_RULES}
+${SIGN_FIX}`;
 
 export const WORDS_MARKS_SCHEMA = {
   type: 'object',
@@ -216,7 +222,7 @@ export const WORDS_MARKS_SCHEMA = {
  */
 export const MARKS_SYSTEM = `You add the markings printed on one line of a tonic sol-fa choir sheet to its rows of notes, which have been read already and come with the picture, one row per part, top to bottom. Give every row back exactly as it came, adding only:
 ${MARK_RULES}
-Never change, add or take out a note, octave mark, beat mark or bar line. If nothing is printed, give the rows back as they came.`;
+Never change, add or take out a note, octave mark, beat mark or bar line. ${SIGN_FIX} If nothing is printed, give the rows back as they came.`;
 
 export const MARKS_SCHEMA = {
   type: 'object',
@@ -281,11 +287,15 @@ export function cleanPage(raw: { title?: string; composer?: string; key?: string
 /**
  * A row's markings in braces (`{p}`, `{Andante M. 70}`) tidied, so nothing in one can pass for a beat mark, a bar
  * line, a bridge note or a slur (`{♩ = 70}` is `{♩ 70}`, which still says 70 a minute); an empty one goes, and so
- * does a brace left open or never opened.
+ * does a brace left open or never opened. Repeats and jumps are spelt as SolfaScores spells them
+ * (abu-app/src/scan/repeats.ts): `{Dal Segno}` is `{D.S.}`, and `{:|}` keeps its bar line and dots.
  */
 export function tidyMarks(notes: string): string {
   return notes
     .replace(/\{([^{}]*)\}/g, (_, inner: string) => {
+      // A repeat or jump, as SolfaScores spells it ("dal segno al fine" is "D.S. al Fine"; the repeats keep their "|:").
+      const repeat = repeatMark(inner);
+      if (repeat) return `\u0000${repeat}\u0001`;
       const mark = inner.replace(/[|:/=¦()]/g, ' ').replace(/\s+/g, ' ').trim();
       return mark ? `\u0000${mark}\u0001` : ' ';
     })

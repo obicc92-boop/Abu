@@ -19,11 +19,18 @@
  *   ("mf", "p", "cresc.") are kept in braces before the note after them.
  * - Notes underlined (a slur: sung to one syllable) are put in brackets,
  *   `(m'.d')`, from a short line drawn just under them (`withSlurs`).
+ * - Repeats and jumps (owner's request, 21 November 2026): "D.C. al Fine",
+ *   "Dal Segno", "Fine", "To Coda", a segno or coda sign, typed among the
+ *   notes or printed on a row of their own, become `{D.C. al Fine}`,
+ *   `{segno}` and so on (src/scan/repeats.ts) where they're printed
+ *   (`jumpsRow`, `withJumps`).
  *
  * `pageText` takes what it needs from a pdf.js page; the rest is plain logic.
  * Positions are in PDF points, from the page's top left.
  */
 import { readExpression, TEMPO_WORDS } from '@/solfa';
+
+import { isSign, repeatMark } from './repeats';
 
 
 /** A character on the page: its left and right edges, its baseline and type size, and any octave mark found for it. */
@@ -108,6 +115,8 @@ export interface PdfJsPage {
 /** The drawing operations used, by name (pdf.js's OPS). */
 export type PdfOps = Record<string, number>;
 
+/** A segno and a coda sign as a music font may give them (Unicode's, and SMuFL's in fonts such as Bravura): kept as text. */
+const MUSIC_SIGNS = ['𝄋', '𝄌', '\uE047', '\uE048'];
 // Fonts that draw staff notation (notes, clefs, rests); their characters aren't text.
 const MUSIC_FONT = /opus|maestro|bravura|petrucci|sonata|leland|emmentaler|engraver|jazz|november|helsinki|reprise|norfolk|inkpen|finale|sibelius|musescore|music/i;
 
@@ -230,7 +239,7 @@ export async function pageText(page: PdfJsPage, OPS: PdfOps): Promise<PageText> 
       x += advance + ((glyph.isSpace ? g.wordSpacing : 0) + g.charSpacing) * dir;
       const text = glyph.unicode ?? '';
       if (!text || g.invisible) continue;
-      if (g.font.music) {
+      if (g.font.music && !MUSIC_SIGNS.includes(text)) {
         music += Array.from(text).length;
         continue;
       }
@@ -348,7 +357,7 @@ async function textItems(page: PdfJsPage, at: (x: number, y: number) => [number,
     const len = Math.hypot(ax - x, ay - y);
     if (!len || Math.abs(ay - y) > 0.1 * len) continue; // sideways text (labels down the margin)
     const glyphs = Array.from(it.str);
-    if (MUSIC_FONT.test(fontOf(it.fontName).name)) {
+    if (MUSIC_FONT.test(fontOf(it.fontName).name) && !glyphs.every((g) => MUSIC_SIGNS.includes(g))) {
       music += glyphs.length;
       continue;
     }
@@ -684,6 +693,62 @@ export function dynamicsOnly(text: string): boolean {
   return tokens.length > 0 && tokens.every((t) => DYNAMIC_ONLY.test(t)) && tokens.some((t) => t !== 'f');
 }
 
+/**
+ * Repeats and jumps as sheets print them: "D.S.", "D.C. al Fine", "Dal Segno", "Da Capo al Coda", "To Coda",
+ * "Fine", "Coda", the segno and coda signs, and the stand-ins typists use for them ("§" or "$", "⊕"). "D.S." and
+ * "D.C." only in capitals, as printed: "d.s." is two notes.
+ */
+const JUMP_TEXT = new RegExp(
+  String.raw`(?:D\.\s?S\.?|D\.\s?C\.?|[Dd]al\s+[Ss]egno|[Dd]a\s+[Cc]apo)(?:\s+[Aa]l\s+(?:[Ff]ine|FINE|[Cc]oda|CODA))?|\b(?:[Tt]o|TO)\s+(?:[Cc]oda|CODA)(?:\s*[𝄌⊕\uE048])?|\b(?:Fine|FINE|Coda|CODA)\b|[𝄋𝄌§$⊕\uE047\uE048]`,
+  'gu',
+);
+
+/** A row with nothing but repeats and jumps on it ("D.C. al Fine", "𝄋", "Fine"), each with where it's printed; null if it has anything else. */
+function jumpsRow(row: PdfChar[], main: number): { mark: string; x0: number; x1: number }[] | null {
+  let text = '';
+  const at: (PdfChar | null)[] = [];
+  let prev: PdfChar | null = null;
+  for (const c of row) {
+    if (c.c === ' ' || (prev && c.x0 - prev.x1 > 0.28 * main)) {
+      if (text && !text.endsWith(' ')) {
+        text += ' ';
+        at.push(null);
+      }
+      if (c.c === ' ') continue;
+    }
+    for (let u = 0; u < c.c.length; u++) at.push(c);
+    text += c.c;
+    prev = c;
+  }
+  const found = [...text.matchAll(JUMP_TEXT)];
+  if (!found.length || /[A-Za-z0-9]/.test(text.replace(JUMP_TEXT, ' '))) return null;
+  return found.flatMap((m) => {
+    const mark = repeatMark(m[0]);
+    const first = at[m.index ?? 0];
+    const last = at[(m.index ?? 0) + m[0].length - 1];
+    return mark && first && last ? [{ mark, x0: first.x0, x1: last.x1 }] : [];
+  });
+}
+
+/**
+ * A line's top row of notes with the repeats and jumps printed on a row of their own over or under the line put in
+ * as stand-ins where they're printed: a sign (`segno`, `coda`) before the first note at or after it, a jump or an
+ * end (`D.C. al Fine`, `Fine`) before the first bar line at or after its middle (the end of its bar). `marks`
+ * says which stand-in is which (`\uE020` is the first).
+ */
+function withJumps(items: Item[], row: PdfChar[], main: number, jumps: { mark: string; x0: number; x1: number }[], isBar: (s: string) => boolean): { items: Item[]; marks: string[] } {
+  const notes = row.filter(noteStart);
+  const end = (items[items.length - 1]?.[1] ?? 0) + main;
+  const added: Item[] = jumps.map((j, k) => {
+    const code = String.fromCharCode(0xe020 + k);
+    const x = isSign(j.mark)
+      ? (notes.find((c) => (c.x0 + c.x1) / 2 >= j.x0 - 0.3 * main)?.x0 ?? end)
+      : (items.find((it) => isBar(it[2]) && it[0] >= (j.x0 + j.x1) / 2 - 0.5 * main)?.[0] ?? end);
+    return [x - 0.03, x - 0.025, code];
+  });
+  return { items: [...items, ...added].sort((a, b) => a[0] + a[1] - (b[0] + b[1])), marks: jumps.map((j) => j.mark) };
+}
+
 /** A marking in braces, with nothing in it that could pass for a beat mark, a bar line, a bridge note or a slur (`♩ = 70` is `♩ 70`). */
 const markOf = (text: string) => `{${text.replace(/[|:/=¦┆{}()]/g, ' ').replace(/\s+/g, ' ').trim()}}`;
 
@@ -701,6 +766,9 @@ export function toAbu(text: string, drawnBars: boolean): string {
   // A part's name printed before its row ("S", "S1", "Alto:", "Ten."), in capitals: a small "s" is a note.
   t = t.replace(/^\s*(?:¦\s*)?(?:Solo|Soprano|Sop|Alto|Tenor|Ten|Bass|[SATB][12]?)\b[.:]?\s*/, '');
   t = t.replace(/\|/g, drawnBars ? '/' : '|').replace(/¦/g, '|').replace(/┆/g, '/');
+  // Repeats and jumps typed among the notes ("D.C. al Fine", "Fine", a segno sign): in braces, as SolfaScores spells
+  // them, their spaces held by word joiners until the end so the words among the notes ("al") aren't taken out.
+  t = t.replace(JUMP_TEXT, (m) => ` {${(repeatMark(m) ?? m).replace(/ /g, '\u2060')}} `);
   t = t.replace(/\.{2,}/g, '.').replace(/,{2,}/g, ','); // a dot or comma printed several times over
   // A slur closes after its last note's octave mark ("d)'" is d', "t)1" is t1).
   t = t.replace(/\)(?:\s*(['’ʼ]+|,)|([12]))(?=[\s:./|)]|$)/g, (_, mark = '', low = '') => `${mark}${low})`);
@@ -716,10 +784,12 @@ export function toAbu(text: string, drawnBars: boolean): string {
   t = t.replace(/\b([dfrlstm])\s+([ae])\b/g, '$1$2'); // "t a" spaced out is ta
   t = t.replace(/\b([a-z]{1,2})11(?![\d'])/g, (_, n: string) => `${n}2`); // two low marks: two octaves down
   t = t.replace(/\s*\|\s*/g, ' | ').replace(/\s*\/\s*/g, ' / ').trim();
+  // A jump or an end typed just after a bar line goes with the bar it ends ("d :- | Fine |" is "d :- {Fine} |").
+  t = t.replace(/\|\s*(\{(?:D\.[SC]\.[^{}]*|Fine|to\u2060coda)\})\s*(?=\||$)/g, '$1 ');
   t = t.replace(/\}\s+(?=[a-z])/g, '}'); // a mark goes just before its note
   t = t.replace(/\(((?:\s|\{[^{}]*\})*)\)/g, '$1'); // a slur around no note (an underlined "mf") goes
   t = t.replace(/^(\|\s*)+/, ''); // double borders at the start
-  t = t.replace(/(\|\s*)+$/, '').trim();
+  t = t.replace(/(\|\s*)+$/, '').trim().replace(/\u2060/g, ' ').replace(/ {2,}/g, ' ');
   return t ? `${t} |` : t;
 }
 
@@ -1051,6 +1121,7 @@ export function readSystems(pages: PageText[]): { header: string[]; systems: Sys
     const pageSystems: System[] = [];
     // Each system's rows of notes, written out once all its rows are known (the drawn lines depend on them all).
     const noteRows = new Map<System, { at: number; row: PdfChar[]; y: number; main: number }[]>();
+    const pageJumps: { y: number; jumps: { mark: string; x0: number; x1: number }[] }[] = [];
     rows.forEach((whole, i) => {
       const y = base[i];
       const main = size[i];
@@ -1060,6 +1131,12 @@ export function readSystems(pages: PageText[]): { header: string[]; systems: Sys
       const plain = rowText(r, y, main, []);
       // Dynamics printed on a row of their own ("mf", "p"): neither notes ("mf" reads as two) nor words. Not placed yet.
       if (dynamicsOnly(plain)) return;
+      // Repeats and jumps on a row of their own ("D.C. al Fine", a segno over the notes): for the line nearest them.
+      const jumps = jumpsRow(r, main);
+      if (jumps?.length) {
+        pageJumps.push({ y, jumps });
+        return;
+      }
       const gap = lastY !== null ? y - lastY : 1e9;
       const ink = r.filter((c) => c.c !== ' ');
       const solfa = isSolfa(plain);
@@ -1092,15 +1169,30 @@ export function readSystems(pages: PageText[]): { header: string[]; systems: Sys
         if (gap > 2.6 * main) cur = null;
       }
     });
+    // Each row of repeats and jumps to the line of music nearest it, if it's close.
+    const jumpsFor = new Map<System, { mark: string; x0: number; x1: number }[]>();
+    for (const { y, jumps } of pageJumps) {
+      const near = pageSystems
+        .map((s) => ({ s, d: Math.min(...(noteRows.get(s) ?? []).map((n) => Math.abs(n.y - y))) }))
+        .filter(({ s, d }) => d < 3 * s.main)
+        .sort((a, b) => a.d - b.d)[0];
+      if (near) jumpsFor.set(near.s, [...(jumpsFor.get(near.s) ?? []), ...jumps]);
+    }
     for (const s of pageSystems) {
       const notes = noteRows.get(s) ?? [];
       const drawn = drawnLines(notes, segs, s.x0, s.x1, s.main);
       const ruled = notes.map((n) => drawn.some((d) => crosses([d[0], d[1], d[2]], n.y, n.main)));
-      const items = notes.map((n, k) => withSlurs(rowItems(n.row, n.y, n.main, ruled[k] ? drawn : []), n.row, n.y, n.main, lines));
-      const texts = notes.map((n, k) => toAbu(itemsText(items[k], n.main), ruled[k]));
       // In a ruled row a typed "|" is a half-bar line; in a plain one it's a bar line (as is a tall one, "¦").
-      const aligned = alignBars(items, ruled.map((r) => (r ? (x: string) => x === '¦' : (x: string) => x === '|' || x === '¦')), s.main);
-      const lined = aligned ? withRests(aligned.map((it, k) => toAbu(itemsText(it, notes[k].main), ruled[k]))) : null;
+      const isBar = ruled.map((r) => (r ? (x: string) => x === '¦' : (x: string) => x === '|' || x === '¦'));
+      const items = notes.map((n, k) => withSlurs(rowItems(n.row, n.y, n.main, ruled[k] ? drawn : []), n.row, n.y, n.main, lines));
+      // The repeats and jumps printed over or under it go in its top row, as stand-ins until it's written out.
+      let jumpMarks: string[] = [];
+      const jumps = jumpsFor.get(s);
+      if (jumps && notes.length) ({ items: items[0], marks: jumpMarks } = withJumps(items[0], notes[0].row, notes[0].main, jumps, isBar[0]));
+      const put = (t: string) => t.replace(/[\uE020-\uE03F]/g, (c) => `{${jumpMarks[c.charCodeAt(0) - 0xe020] ?? ''}}`);
+      const texts = notes.map((n, k) => put(toAbu(itemsText(items[k], n.main), ruled[k])));
+      const aligned = alignBars(items, isBar, s.main);
+      const lined = aligned ? withRests(aligned.map((it, k) => put(toAbu(itemsText(it, notes[k].main), ruled[k])))) : null;
       notes.forEach((n, k) => (s.rows[n.at] = lined && lined[k] !== texts[k] ? ['n', texts[k], lined[k]] : ['n', texts[k]]));
       systems.push(...splitTall(s, across));
     }

@@ -38,10 +38,29 @@ const beatsOf = (bar: string) => bar.split(/[:/]/);
  * A bar's notes that take a syllable, for moving the words sung on them: not the letters of a mark ({f},
  * {Andante}), nor a slur's notes after its first ("(s.l)" takes one), and a bridge note ("s=d") is one.
  */
-const notesIn = (bar: string) => noteColumns(bar).length;
+const notesIn = (bar: string) => noteColumns(bar.replace(HELD, ' ')).length;
 const row = (part: string, bars: string[]) => `${part.padEnd(2)} ${bars.join(' | ')} |`;
-/** Whether a bar has nothing in it but marks in braces, which the checker doesn't count as a bar. */
-const marksOnly = (bar: string) => !bar.replace(/\{[^{}]*\}/g, '').trim();
+/** Whether a bar has nothing in it but marks in braces (or their stand-ins), which the checker doesn't count as a bar. */
+const marksOnly = (bar: string) => !bar.replace(HELD, '').replace(/\{[^{}]*\}/g, '').trim();
+
+/** Marks in braces, and the stand-ins they're held as while lines are joined. */
+const MARKS = /\{[^{}]*\}/g;
+const HELD = /[\u{F0000}-\u{FFFFD}]/gu;
+
+/**
+ * The lines with each mark in braces held as a stand-in of its own, a character with no bar line or beat mark in
+ * it (a repeat's `{:|}` has both), and how to put them back.
+ */
+function holdMarks(lines: string[]): { lines: string[]; back: (text: string) => string } {
+  const marks: string[] = [];
+  const held = lines.map((l) =>
+    l.replace(MARKS, (m) => {
+      marks.push(m);
+      return String.fromCodePoint(0xf0000 + marks.length - 1);
+    }),
+  );
+  return { lines: held, back: (text) => text.replace(HELD, (c) => marks[(c.codePointAt(0) ?? 0) - 0xf0000] ?? '') };
+}
 
 /**
  * The usual number of beats in a bar, from the bars inside each line (a
@@ -56,7 +75,8 @@ const marksOnly = (bar: string) => !bar.replace(/\{[^{}]*\}/g, '').trim();
 export function guessBeats(lines: string[]): number | null {
   const score = new Map<number, number>();
   const add = (n: number, s: number) => score.set(n, (score.get(n) ?? 0) + s);
-  for (const text of lines)
+  // A mark's ":" or "|" ({:|}, a repeat) is no beat or bar line.
+  for (const text of lines.map((l) => l.replace(MARKS, ' ')))
     for (const r of rowsOf(text)) {
       if (!r.part) continue;
       for (const bar of barsOf(r.body).slice(1, -1)) {
@@ -168,7 +188,9 @@ export function linesKeys(lines: { text: string; key?: string; left?: boolean }[
  */
 export function joinLines(lines: string[], time: string, keys: (string | undefined)[] = []): string {
   const beats = parseTime(time)?.pulses ?? guessBeats(lines) ?? 4;
-  const rows = lines.map(rowsOf);
+  // Marks held as stand-ins while bars and beats are counted and moved, and put back after.
+  const held = holdMarks(lines);
+  const rows = held.lines.map(rowsOf);
   for (let i = 1; i < rows.length; i++) {
     const moved = moveUpbeat(rows[i - 1], rows[i], beats);
     if (moved) [rows[i - 1], rows[i]] = moved;
@@ -180,7 +202,7 @@ export function joinLines(lines: string[], time: string, keys: (string | undefin
         .filter((r) => !r.part || barsOf(r.body).length)
         .map((r) => (r.part ? row(r.part, barsOf(r.body)) : `W  ${r.body}`))
         .join('\n');
-      return text && keys[i] ? `Doh is ${keys[i]}\n${text}` : text;
+      return text && keys[i] ? `Doh is ${keys[i]}\n${held.back(text)}` : held.back(text);
     })
     .filter(Boolean)
     .join('\n\n');

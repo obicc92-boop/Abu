@@ -837,6 +837,40 @@ function skeleton(text: string): Skeleton {
 /** A mark as said, whatever its case, spaces or dots ("{Rit.}" is "{rit}"). */
 const markKey = (mark: string) => mark.toLowerCase().replace(/[\s.{}]/g, '');
 
+/** A note as written, with its octave marks, and the "=" after a bridge note's old name. */
+const SIGN_AS_NOTE = new RegExp(`^(?:${SYLLABLE_PATTERN})(?:'{1,2}|[12])?=?`);
+
+/**
+ * A row with what the AI says is a segno or coda sign read as a note taken out (owner's report, 21 November 2026:
+ * the segno before "d'" on their sheet was read as the bridge note "s=d'"): where the AI's row has `{segno}` or
+ * `{coda}` and the line's has a note more just there (or a bridge note's old name, `s=`), that goes, once for each
+ * sign. A bridge note only when `bridges` allows it: real ones come where the key changes, usually in several
+ * parts. The row's text, or null when the AI's row doesn't come to the line's that way.
+ */
+function withoutSignsAsNotes(text: string, a: Skeleton, b: Skeleton, bridges: boolean): string | null {
+  const signs = new Set(b.marks.filter((m) => /^\{(?:segno|coda)\}$/i.test(m.text)).map((m) => m.before));
+  if (!signs.size) return null;
+  /** The characters of the line's skeleton to take out, walking both rows, or null if they can't be made the same. */
+  const walk = (i: number, j: number, used: Set<number>, cuts: [number, number][]): [number, number][] | null => {
+    if (i === a.notes.length && j === b.notes.length) return cuts;
+    if (signs.has(j) && !used.has(j) && cuts.length < 2) {
+      const stray = a.notes.slice(i).match(SIGN_AS_NOTE)?.[0];
+      if (stray && (bridges || !stray.endsWith('='))) {
+        const done = walk(i + stray.length, j, new Set([...used, j]), [...cuts, [i, stray.length]]);
+        if (done) return done;
+      }
+    }
+    return i < a.notes.length && j < b.notes.length && a.notes[i] === b.notes[j] ? walk(i + 1, j + 1, used, cuts) : null;
+  };
+  const cuts = walk(0, 0, new Set(), []);
+  if (!cuts?.length) return null;
+  const out = new Set(cuts.flatMap(([from, n]) => a.at.slice(from, from + n)));
+  return text
+    .split('')
+    .map((c, k) => (out.has(k) ? '' : c))
+    .join('');
+}
+
 /**
  * The line with the marks and slurs an AI read for it added (owner's request, 21 November 2026: the AI reads the
  * marks and slurs of every line, not only of the lines it reads), or null when the AI's rows, with marks, slurs
@@ -844,17 +878,31 @@ const markKey = (mark: string) => mark.toLowerCase().replace(/[\s.{}]/g, '');
  * out): then the line keeps what it has. What the line has already (a typed PDF's own marks and underlines) is
  * never dropped: an AI mark goes in only where the line has none before that note (nor the same mark just by
  * it), and an AI slur only where it overlaps none of the line's. The line's spacing and rows of words stay.
+ *
+ * The one change to the notes it may make: a segno or coda sign the line has as a note, which the AI writes as
+ * the sign (`withoutSignsAsNotes`; "s=d'" becomes "{segno}d'"). A bridge note goes that way only when it's the
+ * line's only one and the line has no new key of its own (`keyChange`).
  */
-export function withMarksAdded(line: string, answer: string): string | null {
+export function withMarksAdded(line: string, answer: string, o: { keyChange?: boolean } = {}): string | null {
   const rows = splitLine(line);
   const mine = rows.filter((r) => r.part);
   const theirs = splitLine(answer).filter((r) => r.part);
   if (!mine.length || theirs.length !== mine.length) return null;
+  // A bridge note in one part alone, in a line with no new key: perhaps a sign misread.
+  const bridged = mine.map((r) => (skeleton(r.text).notes.match(/=/g) ?? []).length);
+  const lone = !o.keyChange && bridged.filter((n) => n > 0).length === 1 && bridged.reduce((x, y) => x + y, 0) === 1;
   const marked: string[] = [];
   for (let i = 0; i < mine.length; i++) {
-    const a = skeleton(mine[i].text);
+    let row = mine[i].text;
+    let a = skeleton(row);
     const b = skeleton(theirs[i].text);
-    if (a.notes !== b.notes) return null;
+    if (a.notes !== b.notes) {
+      const fixed = withoutSignsAsNotes(row, a, b, lone);
+      if (fixed === null) return null;
+      row = fixed;
+      a = skeleton(row);
+      if (a.notes !== b.notes) return null;
+    }
     // What goes in at each place in the row: slurs closing there, then marks, then slurs opening.
     const adds = new Map<number, { close: string; marks: string; open: string }>();
     const at = (n: number) => {
@@ -873,7 +921,7 @@ export function withMarksAdded(line: string, answer: string): string | null {
       at(a.at[from]).open += '(';
       at(a.at[to] + 1).close += ')';
     }
-    let text = mine[i].text;
+    let text = row;
     for (const [n, add] of [...adds.entries()].sort((x, y) => y[0] - x[0])) text = text.slice(0, n) + add.close + add.marks + add.open + text.slice(n);
     marked.push(text);
   }
