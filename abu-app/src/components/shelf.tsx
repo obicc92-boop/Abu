@@ -1,19 +1,25 @@
 /**
  * Shelves of song tiles, as on Suno's Discover (owner's request, 21 November 2026, from Suno's screens): a heading
- * with a "See all" pill, and big square tiles side by side that scroll across. Each tile's art is drawn from the
- * song's own parts (src/lib/song-art.ts) on a dark card, like an album cover in light and dark alike; its play
- * button starts the song at once (the app's player, src/audio/now-playing.tsx).
+ * with a "See all" pill, and big square tiles side by side that scroll across. Each tile shows a bar of the song
+ * itself, as on a sol-fa sheet (owner's request the same day): a row for each part in its colour, the words under
+ * them. Resting, it's the first whole bar; playing, the tile follows the music bar by bar, the beat being sung lit
+ * up and each new bar sliding in (src/lib/tile-bars.ts). A song with no sol-fa to hand gets a pattern drawn from
+ * its id (src/lib/song-art.ts). The tile's play button starts the song at once (the app's player,
+ * src/audio/now-playing.tsx).
  */
 import { Link } from 'expo-router';
-import { useMemo, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
+import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 import Svg, { Defs, Polyline, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { useNowPlaying } from '@/audio/now-playing';
 import { songArt } from '@/lib/song-art';
-import { parseSolfa } from '@/solfa';
+import { barAt, restingBar, tileBars, type TileBar } from '@/lib/tile-bars';
+import { displayBeat } from '@/score/layout';
+import { parseSolfa, type ParsedSong } from '@/solfa';
 import { makeStyles, useColors } from '@/theme/theme';
-import { fonts, partInk } from '@/theme/tokens';
+import { fonts, partColor, partInk } from '@/theme/tokens';
 
 export interface TileSong {
   id: string;
@@ -21,7 +27,7 @@ export interface TileSong {
   /** Under the title: the composer, or how far along you are. */
   sub?: string;
   composer?: string;
-  /** The sol-fa, when to hand: the art is drawn from it, and the tile can play. */
+  /** The sol-fa, when to hand: the tile shows its bars, and can play. */
   solfa?: string;
   doh: number;
   time: string;
@@ -53,36 +59,68 @@ export function Shelf({ title, note, onSeeAll, children }: { title: string; note
   );
 }
 
+/** The song read for its tile, or null (no sol-fa, or none that reads). */
+function readSong(solfa: string | undefined, time: string, doh: number): ParsedSong | null {
+  if (!solfa?.trim()) return null;
+  try {
+    const parsed = parseSolfa(solfa, { time, key: doh });
+    return parsed.total > 0 ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 export function SongTile({ song, badge }: { song: TileSong; badge?: 'known' }) {
   const styles = useStyles();
   const colors = useColors();
   const { play, song: playing, player } = useNowPlaying();
-  const art = useMemo(() => songArt(song.solfa, song.id), [song.solfa, song.id]);
-  const canPlay = !!song.solfa?.trim();
-  const isPlaying = playing?.id === song.id && player.playing;
+  const parsed = useMemo(() => readSong(song.solfa, song.time, song.doh), [song.solfa, song.time, song.doh]);
+  const bars = useMemo(() => (parsed ? tileBars(parsed) : []), [parsed]);
+  const pattern = useMemo(() => (bars.length ? [] : songArt(song.solfa, song.id)), [bars.length, song.solfa, song.id]);
+
+  const mine = playing?.id === song.id;
+  const isPlaying = mine && player.playing;
+  const paused = mine && !player.playing && player.pausedAt !== null;
+  // Playing or paused here: the bar the music is at; otherwise the song's first whole bar.
+  const following = (isPlaying || paused) && player.beat >= 0;
+  const bar = following ? barAt(bars, player.beat) : parsed ? restingBar(bars, parsed.beatsPerBar) : null;
+  const label = !parsed
+    ? 'Sheet only'
+    : following && bar
+      ? isPlaying
+        ? `Bar ${bar.number} of ${parsed.bars}`
+        : `Paused · bar ${bar.number}`
+      : `Doh is ${parsed.meta.key?.name ?? '?'} · ${parsed.meta.time}`;
+
   const start = () => {
-    if (!song.solfa) return;
+    if (!song.solfa || !parsed) return;
     if (isPlaying) return player.pause();
-    const parsed = parseSolfa(song.solfa, { time: song.time, key: song.doh });
     play({ id: song.id, title: song.title, composer: song.composer, solfa: song.solfa, key: song.doh, parsed, countable: !!song.countable });
   };
+  const glow = `g${song.id.replace(/[^a-zA-Z0-9]/g, '')}`;
   return (
     <View style={styles.tile}>
       <Link href={{ pathname: '/song/[id]', params: { id: song.id } }} asChild>
         <Pressable accessibilityRole="link" accessibilityLabel={song.sub ? `${song.title}, ${song.sub}` : song.title} style={styles.art}>
-          <Svg width="100%" height="100%" viewBox="0 0 100 100">
-            <Defs>
-              <RadialGradient id={`g${song.id.replace(/[^a-zA-Z0-9]/g, '')}`} cx="85" cy="5" r="90" gradientUnits="userSpaceOnUse">
-                <Stop offset="0" stopColor={colors.heroGlow} stopOpacity={0.35} />
-                <Stop offset="1" stopColor={colors.heroGlow} stopOpacity={0} />
-              </RadialGradient>
-            </Defs>
-            <Rect width="100" height="100" fill={colors.hero} />
-            <Rect width="100" height="100" fill={`url(#g${song.id.replace(/[^a-zA-Z0-9]/g, '')})`} />
-            {art.map((l) => (
-              <Polyline key={l.part} points={l.points} fill="none" stroke={partInk(l.part, true)} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
-            ))}
-          </Svg>
+          <View style={styles.fill}>
+            <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+              <Defs>
+                <RadialGradient id={glow} cx="85" cy="5" r="90" gradientUnits="userSpaceOnUse">
+                  <Stop offset="0" stopColor={colors.heroGlow} stopOpacity={0.35} />
+                  <Stop offset="1" stopColor={colors.heroGlow} stopOpacity={0} />
+                </RadialGradient>
+              </Defs>
+              <Rect width="100" height="100" fill={colors.hero} />
+              <Rect width="100" height="100" fill={`url(#${glow})`} />
+              {pattern.map((l) => (
+                <Polyline key={l.part} points={l.points} fill="none" stroke={partInk(l.part, true)} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
+              ))}
+            </Svg>
+          </View>
+          <Text style={styles.label} numberOfLines={1}>
+            {label}
+          </Text>
+          {bar ? <BarView bar={bar} active={isPlaying ? player.beat - bar.start : null} /> : null}
         </Pressable>
       </Link>
       {badge === 'known' ? (
@@ -90,8 +128,8 @@ export function SongTile({ song, badge }: { song: TileSong; badge?: 'known' }) {
           <Text style={styles.knownText}>✓</Text>
         </View>
       ) : null}
-      {canPlay ? (
-        <Pressable onPress={start} accessibilityRole="button" accessibilityLabel={isPlaying ? `Pause ${song.title}` : `Play ${song.title}`} style={styles.play} hitSlop={4}>
+      {parsed ? (
+        <Pressable onPress={start} accessibilityRole="button" accessibilityLabel={isPlaying ? `Pause ${song.title}` : `Play ${song.title}`} style={styles.play} hitSlop={6}>
           {isPlaying ? (
             <View style={styles.pause}>
               <View style={styles.pauseBar} />
@@ -114,7 +152,76 @@ export function SongTile({ song, badge }: { song: TileSong; badge?: 'known' }) {
   );
 }
 
+/** Mono characters across the art, for the beats and the colons between them. */
+const ROOM = 108;
+
+/**
+ * One bar as a sol-fa sheet prints it, small: a row for each part in its colour, beats lined up in columns, the
+ * words under them. `active`: the beat being sung (its column lit up).
+ */
+function BarView({ bar, active }: { bar: TileBar; active: number | null }) {
+  const styles = useStyles();
+  const colors = useColors();
+  const reduce = useReducedMotion();
+  const rows = bar.rows.map((r) => ({ part: r.part, beats: r.beats.map(displayBeat) }));
+  const n = Math.max(1, ...rows.map((r) => r.beats.length));
+  // Each column as wide as its widest beat; the whole bar fitted across the tile.
+  const widths = Array.from({ length: n }, (_, j) => Math.max(1, ...rows.map((r) => [...(r.beats[j] ?? '')].length)));
+  const chars = widths.reduce((a, b) => a + b, 0) + (n - 1) * 1.1;
+  const size = Math.max(9, Math.min(15, ROOM / (chars * 0.6)));
+  const ch = size * 0.6;
+
+  // A new bar slides in from the right as the music reaches it.
+  const a = useSharedValue(1);
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    if (reduce) return;
+    a.set(0);
+    a.set(withTiming(1, { duration: 240, easing: Easing.out(Easing.cubic) }));
+  }, [a, bar.number, reduce]);
+  const slide = useAnimatedStyle(() => ({ opacity: 0.25 + 0.75 * a.get(), transform: [{ translateX: 14 * (1 - a.get()) }] }));
+
+  return (
+    <Animated.View style={[styles.bar, slide]}>
+      {rows.map((r) => (
+        <View key={r.part} style={styles.barRow}>
+          <View style={[styles.tick, { backgroundColor: partColor(r.part) }]} />
+          {widths.map((w, j) => {
+            const text = r.beats[j] ?? '';
+            const faint = !text || text === '–';
+            return (
+              <Fragment key={j}>
+                {j ? <Text style={[styles.colon, { fontSize: size, lineHeight: size * 1.3, width: ch * 1.1 }]}>:</Text> : null}
+                <Text
+                  style={[
+                    styles.beat,
+                    { fontSize: size, lineHeight: size * 1.3, width: ch * w + 4, color: faint ? colors.onHeroSoft : partInk(r.part, true) },
+                    faint && styles.faint,
+                    active === j && { backgroundColor: `${colors.onHero}30` },
+                  ]}
+                >
+                  {text}
+                </Text>
+              </Fragment>
+            );
+          })}
+        </View>
+      ))}
+      {bar.words ? (
+        <Text style={styles.words} numberOfLines={1}>
+          {bar.words}
+        </Text>
+      ) : null}
+    </Animated.View>
+  );
+}
+
 const TILE = 156;
+const PLAY = 34;
 
 const useStyles = makeStyles((colors) => ({
   shelf: { gap: 12 },
@@ -127,23 +234,33 @@ const useStyles = makeStyles((colors) => ({
   scroller: { marginHorizontal: -16 },
   row: { gap: 14, paddingHorizontal: 16 },
   tile: { width: TILE, gap: 6 },
-  art: { width: TILE, height: TILE, borderRadius: 18, overflow: 'hidden', backgroundColor: colors.hero },
-  known: { position: 'absolute', top: 10, right: 10, width: 26, height: 26, borderRadius: 13, backgroundColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
-  knownText: { fontFamily: fonts.heavy, fontSize: 14, color: colors.hero },
-  play: { position: 'absolute', top: TILE - 52, right: 10, width: 42, height: 42, borderRadius: 21, backgroundColor: colors.onHero, opacity: 0.92, alignItems: 'center', justifyContent: 'center' },
+  art: { width: TILE, height: TILE, borderRadius: 18, overflow: 'hidden', backgroundColor: colors.hero, paddingTop: 12, paddingHorizontal: 11, paddingBottom: 10 },
+  fill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  // Clear of the play button in the corner.
+  label: { fontFamily: fonts.heavy, fontSize: 10.5, letterSpacing: 0.3, color: colors.heroKicker, paddingRight: PLAY + 4, minHeight: PLAY - 6 },
+  bar: { flex: 1, justifyContent: 'center', gap: 3 },
+  barRow: { flexDirection: 'row', alignItems: 'center' },
+  tick: { width: 3, alignSelf: 'stretch', borderRadius: 1.5, marginRight: 5 },
+  beat: { fontFamily: fonts.monoBold, textAlign: 'center', borderRadius: 4, overflow: 'hidden' },
+  faint: { opacity: 0.55 },
+  colon: { fontFamily: fonts.mono, textAlign: 'center', color: colors.onHeroSoft, opacity: 0.5 },
+  words: { fontFamily: fonts.bold, fontSize: 11, color: colors.onHeroSoft, marginTop: 3, paddingLeft: 8, paddingRight: 22 },
+  known: { position: 'absolute', top: TILE - 30, right: 9, width: 21, height: 21, borderRadius: 10.5, backgroundColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
+  knownText: { fontFamily: fonts.heavy, fontSize: 12, color: colors.hero },
+  play: { position: 'absolute', top: 8, right: 8, width: PLAY, height: PLAY, borderRadius: PLAY / 2, backgroundColor: colors.onHero, opacity: 0.94, alignItems: 'center', justifyContent: 'center' },
   triangle: {
     marginLeft: 3,
     width: 0,
     height: 0,
-    borderTopWidth: 8,
-    borderBottomWidth: 8,
-    borderLeftWidth: 13,
+    borderTopWidth: 7,
+    borderBottomWidth: 7,
+    borderLeftWidth: 11,
     borderTopColor: 'transparent',
     borderBottomColor: 'transparent',
     borderLeftColor: colors.hero,
   },
-  pause: { flexDirection: 'row', gap: 4 },
-  pauseBar: { width: 4, height: 15, borderRadius: 1.5, backgroundColor: colors.hero },
+  pause: { flexDirection: 'row', gap: 3.5 },
+  pauseBar: { width: 3.5, height: 13, borderRadius: 1.5, backgroundColor: colors.hero },
   name: { fontFamily: fonts.bold, fontSize: 14.5, lineHeight: 19, color: colors.ink, marginTop: 2 },
   sub: { fontFamily: fonts.body, fontSize: 12.5, color: colors.muted, marginTop: -3 },
 }));
