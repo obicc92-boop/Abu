@@ -69,8 +69,10 @@ import {
   prepareSheet,
   removeFromRepertoire,
   setSheet,
+  bringBackVersion,
   shareSong,
   songForMe,
+  songVersions,
   type Audience,
   type SongInput,
 } from './domain/songs';
@@ -195,6 +197,12 @@ app.delete('/songs/:id', signedIn, async (c) => {
   if (sheet) await c.env.SHEETS.delete(sheet);
   return c.json({ ok: true });
 });
+
+/** Earlier versions of a song, for whoever can edit it, and bringing one back (src/domain/songs.ts). */
+app.get('/songs/:id/versions', signedIn, async (c) => c.json(await songVersions(c.env.DB, c.get('userId'), c.req.param('id'))));
+app.post('/songs/:id/versions/:version/bring-back', signedIn, async (c) =>
+  c.json(await bringBackVersion(c.env.DB, c.get('userId'), c.req.param('id'), c.req.param('version'))),
+);
 
 /** What you can do with a song, and your own practice of it. */
 app.get('/songs/:id/me', signedIn, async (c) => c.json(await songForMe(c.env.DB, c.get('userId'), c.req.param('id'))));

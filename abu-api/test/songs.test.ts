@@ -225,3 +225,74 @@ describe('Who can see a song', () => {
     expect((await send(`/songs/${ours.id}`, 'GET', adaeze.cookie)).status).toBe(404);
   });
 });
+
+describe('Earlier versions', () => {
+  interface Version {
+    id: string;
+    title: string;
+    composer: string;
+    solfa: string;
+    saved_at: string;
+    saved_by_name: string | null;
+    replaced_at: string;
+    replaced_by_name: string | null;
+  }
+  const OTHER = 'S  m :r /d :- | d :- /- :- |\nW  A-men, a-men';
+
+  it('keeps the song as it was before each change, newest first, for whoever can edit it', async () => {
+    const { emeka, adaeze, tobi, group } = await choir();
+    const song = (await send<Song>('/songs', 'POST', emeka.cookie, { title: 'Gloria', composer: 'Handel l', solfa: GOOD, shared_from_group: group.id, audience: 'group' })).body;
+    expect((await send<Version[]>(`/songs/${song.id}/versions`, 'GET', emeka.cookie)).body).toEqual([]);
+    // The composer put right by its sharer, then the music changed by a member of the group.
+    await send(`/songs/${song.id}`, 'PATCH', emeka.cookie, { composer: 'Handel' });
+    await send(`/songs/${song.id}`, 'PATCH', adaeze.cookie, { solfa: OTHER });
+    const versions = (await send<Version[]>(`/songs/${song.id}/versions`, 'GET', adaeze.cookie)).body;
+    expect(versions.map((v) => [v.composer, v.solfa, v.saved_by_name, v.replaced_by_name])).toEqual([
+      ['Handel', GOOD, 'Emeka Nwosu', 'Adaeze Obi'],
+      ['Handel l', GOOD, 'Emeka Nwosu', 'Emeka Nwosu'],
+    ]);
+    // Not for those who can't edit it, nor signed out.
+    expect((await send(`/songs/${song.id}/versions`, 'GET', tobi.cookie)).status).toBe(404);
+    expect((await send(`/songs/${song.id}/versions`, 'GET', undefined)).status).toBe(401);
+    const everyone = (await send<Song>('/songs', 'POST', emeka.cookie, { title: 'Open hymn', solfa: GOOD })).body;
+    expect((await send(`/songs/${everyone.id}/versions`, 'GET', tobi.cookie)).status).toBe(403);
+  });
+
+  it('keeps nothing for a save that changes nothing, or only who can see it', async () => {
+    const { emeka } = await choir();
+    const song = (await send<Song>('/songs', 'POST', emeka.cookie, { title: 'Kyrie', solfa: GOOD, audience: 'me' })).body;
+    await send(`/songs/${song.id}`, 'PATCH', emeka.cookie, { title: 'Kyrie', solfa: GOOD });
+    await send(`/songs/${song.id}`, 'PATCH', emeka.cookie, { audience: 'everyone' });
+    expect((await send<Version[]>(`/songs/${song.id}/versions`, 'GET', emeka.cookie)).body).toEqual([]);
+  });
+
+  it('brings a version back, keeping the song as it was, so that can be undone too', async () => {
+    const { emeka } = await choir();
+    const song = (await send<Song>('/songs', 'POST', emeka.cookie, { title: 'Worthy is the Lamb', solfa: GOOD })).body;
+    await send(`/songs/${song.id}`, 'PATCH', emeka.cookie, { solfa: OTHER });
+    const [before] = (await send<Version[]>(`/songs/${song.id}/versions`, 'GET', emeka.cookie)).body;
+    const back = await send<Song>(`/songs/${song.id}/versions/${before.id}/bring-back`, 'POST', emeka.cookie);
+    expect(back.status).toBe(200);
+    expect(back.body.solfa).toBe(GOOD);
+    const versions = (await send<Version[]>(`/songs/${song.id}/versions`, 'GET', emeka.cookie)).body;
+    expect(versions.map((v) => v.solfa)).toEqual([OTHER, GOOD]);
+    // Even a version whose bars don't add up comes back as it was saved.
+    const rough = (await send<Song>('/songs', 'POST', emeka.cookie, { title: 'Draft', solfa: BAD, ignore_problems: true })).body;
+    await send(`/songs/${rough.id}`, 'PATCH', emeka.cookie, { solfa: GOOD });
+    const [draft] = (await send<Version[]>(`/songs/${rough.id}/versions`, 'GET', emeka.cookie)).body;
+    expect((await send<Song>(`/songs/${rough.id}/versions/${draft.id}/bring-back`, 'POST', emeka.cookie)).body.solfa).toBe(BAD);
+    expect((await send(`/songs/${song.id}/versions/nope/bring-back`, 'POST', emeka.cookie)).status).toBe(404);
+  });
+
+  it('keeps the last 20, and goes with the song when it is deleted', async () => {
+    const { emeka } = await choir();
+    const song = (await send<Song>('/songs', 'POST', emeka.cookie, { title: 'Many drafts', solfa: GOOD })).body;
+    for (let n = 1; n <= 22; n++) await send(`/songs/${song.id}`, 'PATCH', emeka.cookie, { composer: `Draft ${n}` });
+    const versions = (await send<Version[]>(`/songs/${song.id}/versions`, 'GET', emeka.cookie)).body;
+    expect(versions).toHaveLength(20);
+    expect(versions[0].composer).toBe('Draft 21');
+    expect(versions[19].composer).toBe('Draft 2');
+    expect((await send(`/songs/${song.id}`, 'DELETE', emeka.cookie)).status).toBe(200);
+    expect((await send(`/songs/${song.id}/versions`, 'GET', emeka.cookie)).status).toBe(404);
+  });
+});

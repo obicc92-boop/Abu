@@ -28,6 +28,8 @@ export interface Song {
   group_name: string | null;
   created_at: string;
   updated_at: string;
+  /** Who saved it last (null for saves before 21 November 2026). */
+  updated_by: string | null;
 }
 
 /**
@@ -159,10 +161,10 @@ export async function shareSong(db: D1Database, me: string, input: SongInput & {
   try {
     await db
       .prepare(
-        `insert into songs (id, title, composer, doh, time_signature, tags, solfa, shared_by, shared_from_group, audience)
-         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `insert into songs (id, title, composer, doh, time_signature, tags, solfa, shared_by, shared_from_group, audience, updated_by)
+         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .bind(id, song.title, song.composer, song.doh, song.time_signature, JSON.stringify(song.tags), song.solfa, me, input.shared_from_group ?? null, audience)
+      .bind(id, song.title, song.composer, song.doh, song.time_signature, JSON.stringify(song.tags), song.solfa, me, input.shared_from_group ?? null, audience, me)
       .run();
   } catch (e) {
     throw friendly(e);
@@ -195,15 +197,93 @@ export async function editSong(db: D1Database, me: string, songId: string, patch
     solfa: patch.solfa ?? current.solfa,
   };
   validate(next, patch.ignore_problems);
+  const changed =
+    next.title !== current.title ||
+    next.composer !== current.composer ||
+    next.doh !== current.doh ||
+    next.time_signature !== current.time_signature ||
+    JSON.stringify(next.tags) !== JSON.stringify(current.tags) ||
+    next.solfa !== current.solfa;
+  const now = nowIso();
+  const update = db
+    .prepare('update songs set title = ?, composer = ?, doh = ?, time_signature = ?, tags = ?, solfa = ?, audience = ?, updated_at = ?, updated_by = ? where id = ?')
+    .bind(next.title, next.composer, next.doh, next.time_signature, JSON.stringify(next.tags), next.solfa, audience, now, changed ? me : current.updated_by, songId);
   try {
-    await db
-      .prepare('update songs set title = ?, composer = ?, doh = ?, time_signature = ?, tags = ?, solfa = ?, audience = ?, updated_at = ? where id = ?')
-      .bind(next.title, next.composer, next.doh, next.time_signature, JSON.stringify(next.tags), next.solfa, audience, nowIso(), songId)
-      .run();
+    // A change keeps the song as it was, in the same transaction as the change (see `songVersions`).
+    await db.batch(changed ? [...keepVersion(db, songId, me, now), update] : [update]);
   } catch (e) {
     throw friendly(e);
   }
   return getSong(db, songId, me);
+}
+
+/* ---------- Earlier versions ---------- */
+
+/**
+ * Earlier versions of a song (owner's yes, 21 November 2026, after the song editor's "Fill in an example" was saved
+ * over Worthy is the Lamb and its music had to be got back by rewinding the whole database): every save that changes
+ * a song keeps it as it was, the last `VERSIONS_KEPT`. Whoever can edit the song sees them and can bring one back,
+ * which keeps the song as it was too, so bringing one back can be undone the same way.
+ */
+export const VERSIONS_KEPT = 20;
+
+export interface SongVersion {
+  id: string;
+  title: string;
+  composer: string;
+  doh: number;
+  time_signature: string;
+  tags: string[];
+  solfa: string;
+  /** When this version was saved, and by whom (null when not known: saves before versions were kept). */
+  saved_at: string;
+  saved_by_name: string | null;
+  /** When a newer save replaced it, and by whom. */
+  replaced_at: string;
+  replaced_by_name: string | null;
+}
+
+/** The statements that keep a song as it is now, before `me` changes it, and let go of versions past the last few. */
+function keepVersion(db: D1Database, songId: string, me: string, now: string): D1PreparedStatement[] {
+  return [
+    db
+      .prepare(
+        `insert into song_versions (id, song_id, title, composer, doh, time_signature, tags, solfa, saved_at, saved_by, replaced_at, replaced_by)
+         select ?, id, title, composer, doh, time_signature, tags, solfa, updated_at, updated_by, ?, ? from songs where id = ?`,
+      )
+      .bind(newId(), now, me, songId),
+    db
+      .prepare(
+        `delete from song_versions where song_id = ? and id not in
+           (select id from song_versions where song_id = ? order by replaced_at desc, rowid desc limit ${VERSIONS_KEPT})`,
+      )
+      .bind(songId, songId),
+  ];
+}
+
+/** A song's earlier versions, newest first: for whoever can edit it. */
+export async function songVersions(db: D1Database, me: string, songId: string): Promise<SongVersion[]> {
+  const song = await getSong(db, songId, me);
+  if (!(await canEditSong(db, me, song))) throw forbidden(CANT_EDIT);
+  const { results } = await db
+    .prepare(
+      `select v.id, v.title, v.composer, v.doh, v.time_signature, v.tags, v.solfa, v.saved_at, v.replaced_at,
+         sp.display_name as saved_by_name, rp.display_name as replaced_by_name
+       from song_versions v left join profiles sp on sp.id = v.saved_by left join profiles rp on rp.id = v.replaced_by
+       where v.song_id = ? order by v.replaced_at desc, v.rowid desc`,
+    )
+    .bind(songId)
+    .all<Omit<SongVersion, 'tags'> & { tags: string }>();
+  return results.map((r) => ({ ...r, tags: JSON.parse(r.tags) }));
+}
+
+/** Brings an earlier version back, keeping the song as it is now as a version too. */
+export async function bringBackVersion(db: D1Database, me: string, songId: string, versionId: string): Promise<Song> {
+  const version = (await songVersions(db, me, songId)).find((v) => v.id === versionId);
+  if (!version) throw notFound('That version isn’t kept any more.');
+  // It was saved once: bring it back as it was, even if its bars don't all add up.
+  const { title, composer, doh, time_signature, tags, solfa } = version;
+  return editSong(db, me, songId, { title, composer, doh, time_signature, tags, solfa, ignore_problems: true });
 }
 
 /**

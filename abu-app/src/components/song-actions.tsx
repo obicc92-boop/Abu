@@ -1,6 +1,6 @@
 /**
  * What you can do with a song: save it to My songs, add it to your group's
- * repertoire (leaders), edit it, open the original sheet, share it on WhatsApp,
+ * repertoire (leaders), edit it and see its earlier versions, open the original sheet, share it on WhatsApp,
  * and your own practice ("I know my part"). Practice is private to you.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -64,6 +64,10 @@ export function SongActions({ songId, song }: { songId: string; song?: Song }) {
         ) : null}
         {mine.data?.can_edit ? (
           <Button small kind="ghost" label={song?.solfa.trim() ? 'Edit' : 'Type the sol-fa'} onPress={() => router.push({ pathname: '/song-editor', params: { id: songId } })} />
+        ) : null}
+        {/* Every save keeps the version before, to look at and bring back (src/app/song-versions.tsx). */}
+        {mine.data?.can_edit ? (
+          <Button small kind="ghost" label="Earlier versions" onPress={() => router.push({ pathname: '/song-versions', params: { id: songId } })} />
         ) : null}
         {song?.sheet_key ? <Button small kind="ghost" label="Original sheet" onPress={() => Linking.openURL(sheetUrl(songId))} /> : null}
         {/* A song only its sharer can see has no one to send the link to. */}

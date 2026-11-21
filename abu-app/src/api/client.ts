@@ -90,6 +90,26 @@ export interface Song {
  */
 export type Audience = 'me' | 'group' | 'everyone';
 
+/**
+ * An earlier version of a song (owner's yes, 21 November 2026): every save that changes a song keeps it as it was, the
+ * last 20, for whoever can edit it to look at, play and bring back.
+ */
+export interface SongVersion {
+  id: string;
+  title: string;
+  composer: string;
+  doh: number;
+  time_signature: string;
+  tags: string[];
+  solfa: string;
+  /** When it was saved, and by whom (null when not known: saves before versions were kept). */
+  saved_at: string;
+  saved_by_name: string | null;
+  /** When a newer save replaced it, and by whom. */
+  replaced_at: string;
+  replaced_by_name: string | null;
+}
+
 export interface SongInput {
   title: string;
   composer: string;
@@ -349,6 +369,9 @@ export const api = {
   shareSong: (input: SongInput & { shared_from_group: string | null }) => request<Song>('/songs', json('POST', input)),
   editSong: (id: string, patch: Partial<SongInput>) => request<Song>(`/songs/${id}`, json('PATCH', patch)),
   deleteSong: (id: string) => request<{ ok: true }>(`/songs/${id}`, { method: 'DELETE' }),
+  songVersions: (id: string) => request<SongVersion[]>(`/songs/${encodeURIComponent(id)}/versions`),
+  bringBackVersion: (id: string, versionId: string) =>
+    request<Song>(`/songs/${encodeURIComponent(id)}/versions/${encodeURIComponent(versionId)}/bring-back`, { method: 'POST' }),
   attachSheet: async (id: string, picked: PickedFile) => {
     const body = picked.file ?? (await (await fetch(picked.uri)).blob());
     return request<Song>(`/songs/${id}/sheet`, { method: 'PUT', body, headers: { 'Content-Type': picked.type } });
