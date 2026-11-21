@@ -36,6 +36,9 @@ document.
 | Tempo and mood | `Joyfully`, `Adagio` | `tempo: 72` or a word, e.g. `tempo: Adagio` |
 | Dynamics | `p`, `pp`, `mf`, `f`, `ff`, `piano`, `fortissimo`, `sfz`, `cresc.`, `dim.`, hairpins | In braces before the note they start on, in that part's row: `{p}d :r`, `{ff}`, `{mezzo piano}`, `{sfz}`, `{cresc}`, `{dim}`. On a line of their own, for every part from the next bar |
 | Tempo changes | `Andante. M. 70`, `Larghetto`, `rit.`, `rall.`, `a tempo` | In braces, in a row or on a line of their own, always for every part: `{Andante M. 70}`, `{M. 70}`, `{Allegro}`, `{rit}`, `{a tempo}`. A number (M. 70, ♩ = 70) is its beats a minute; a word alone has its usual speed |
+| Hairpins | A wedge opening (getting louder) or closing (getting softer) under or over the notes | `{<}` and `{>}` where the wedge starts: a cresc. or dim. to the next dynamic |
+| Speeding up | `accel.`, `stringendo` | `{accel}`, for every part, until `{a tempo}` or a new tempo |
+| Directions | `Maestoso`, `dolce`, `legato`, `con moto`, `Joyfully`, `With feeling` | In braces, as printed: `{Maestoso}`, `{With feeling}`. Shown, with no set effect on the sound (with a metronome mark, `{Maestoso M. 80}` is a tempo) |
 | Extra verses | Printed as text at the bottom | `[Verses]` block, shown under the score |
 
 ## Example

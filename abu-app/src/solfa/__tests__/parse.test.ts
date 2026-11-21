@@ -669,3 +669,28 @@ describe('slurs', () => {
     ]);
   });
 });
+
+describe('hairpins, accel. and directions', () => {
+  it('reads them', () => {
+    expect(readExpression('<')).toMatchObject({ kind: 'cresc', text: '<' });
+    expect(readExpression('>')).toMatchObject({ kind: 'dim', text: '>' });
+    expect(readExpression('accel.')).toMatchObject({ kind: 'accel', text: 'accel.' });
+    expect(readExpression('Maestoso')).toMatchObject({ kind: 'direction', text: 'Maestoso' });
+    expect(readExpression('With feeling')).toMatchObject({ kind: 'direction', text: 'With feeling' });
+    expect(readExpression('molto legato')).toMatchObject({ kind: 'direction' });
+    // A direction with a metronome mark is a tempo.
+    expect(readExpression('Maestoso M. 80')).toMatchObject({ kind: 'tempo', bpm: 80 });
+    expect(readExpression('cresc.')?.text).toBe('cresc.');
+  });
+
+  it('places them, accel. for every part and a hairpin in its part', () => {
+    const song = parseSolfa('time: 2/4\nS  {Maestoso}d :{<}r |m :{>}f |{accel}s :- |\nA  d :d |d :d |d :- |');
+    expect(song.errors).toEqual([]);
+    expect(song.expressions.map((e) => [e.kind, e.text, e.part, e.beat])).toEqual([
+      ['direction', 'Maestoso', 'S', 0],
+      ['cresc', '<', 'S', 1],
+      ['dim', '>', 'S', 3],
+      ['accel', 'accel.', null, 4],
+    ]);
+  });
+});

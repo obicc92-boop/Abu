@@ -53,13 +53,14 @@ export interface Section {
 
 /**
  * A musical marking (src/solfa/expressions.ts): a dynamic (pp…ff), an accent (sfz), a gradual change (cresc.,
- * dim.), or tempo (Andante, M. 70, rit., a tempo).
+ * dim., or their hairpins < and >), tempo (Andante, M. 70, rit., accel., a tempo), or a direction with no set
+ * effect on the sound (Maestoso, dolce, legato, With feeling).
  */
-export type ExpressionKind = 'dynamic' | 'accent' | 'cresc' | 'dim' | 'tempo' | 'rit' | 'atempo';
+export type ExpressionKind = 'dynamic' | 'accent' | 'cresc' | 'dim' | 'tempo' | 'rit' | 'accel' | 'atempo' | 'direction';
 
 export interface Expression {
   kind: ExpressionKind;
-  /** As SolfaScores shows it: "pp", "sfz", "cresc.", "dim.", "Andante", "M. 70", "rit.", "a tempo". */
+  /** As SolfaScores shows it: "pp", "sfz", "cresc.", "dim.", "<" and ">" (hairpins), "Andante M. 70", "rit.", "accel.", "a tempo", "Maestoso". */
   text: string;
   /** The part it's written in, or null for every part (a mark on a line of its own; tempo is always for every part). */
   part: string | null;
