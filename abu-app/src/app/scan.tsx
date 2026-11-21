@@ -29,8 +29,8 @@
  */
 import { useQuery } from '@tanstack/react-query';
 import * as DocumentPicker from 'expo-document-picker';
-import { Redirect, router } from 'expo-router';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, Text, View, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollViewInstance, type TextInputInstance } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -45,6 +45,7 @@ import { PhoneKeyboardBar, SolfaKeypad } from '@/components/solfa-keypad';
 import { Body, Button, Card, Chip, ErrorText, Kicker, MAX_WIDTH, Page, TopBar } from '@/components/ui';
 import { setScanDraft } from '@/scan/draft';
 import { forgetScan, listScans, openScan, saveScan, type SavedScan } from '@/scan/saved';
+import { ago, titleFromFile } from '@/scan/unfinished';
 import { joinLines, linesKeys, timeFor } from '@/scan/join';
 import { bestFree, changedShare, joinLine, keepsParts, namesNotWords, problemsByPart, splitLine, tidyNotes, tidyTitle, withBarsInStep, withWords, wordsOf, wordsPreferring, type LineRow, type LineWords } from '@/scan/line-text';
 import { placeCursor } from '@/lib/field-cursor';
@@ -225,8 +226,8 @@ function Scanner() {
       flush();
     };
   }, []);
-  /** Carries on with an unfinished scan where it was left. */
-  const carryOn = async (id: string) => {
+  /** Carries on with an unfinished scan where it was left. (Only setters inside: the same function every time.) */
+  const carryOn = useCallback(async (id: string) => {
     const got = await openScan<SavedLine>(id);
     if (!got) {
       setUnfinished(await listScans<SavedLine>());
@@ -246,11 +247,19 @@ function Scanner() {
     setCurrent(Math.max(0, Math.min(got.scan.current, restored.length - 1)));
     setScanId(id);
     setPhase(got.scan.phase);
-  };
+  }, []);
   const forget = async (id: string) => {
     await forgetScan(id);
     setUnfinished(await listScans<SavedLine>());
   };
+  // Opened from the Songs tab's "Carry on where you left off" (?resume=<scan>): straight back into that scan.
+  const { resume } = useLocalSearchParams<{ resume?: string }>();
+  const resumed = useRef<string | null>(null);
+  useEffect(() => {
+    if (!resume || resumed.current === resume) return;
+    resumed.current = resume;
+    void carryOn(resume);
+  }, [resume, carryOn]);
   const allowance = useQuery({ queryKey: ['scanAllowance'], queryFn: api.scanAllowance, enabled: phase === 'choose' });
 
   const update = (id: string, patch: Partial<Line>) => setLines((all) => all.map((l) => (l.id === id ? { ...l, ...patch } : l)));
@@ -607,27 +616,6 @@ function Scanner() {
 }
 
 /* ---------- 1. Choose the pages ---------- */
-
-/** A title from a file's name, for a sheet whose heading wasn't read: "Ekeresimesi_Erutego_By_Jude_Nnam-1.pdf" → "Ekeresimesi Erutego By Jude Nnam". */
-function titleFromFile(name?: string): string {
-  return (name ?? '')
-    .replace(/\.[a-z0-9]{2,4}$/i, '')
-    .replace(/[-_ ]\d{1,2}$/, '')
-    .replace(/_+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-/** "2 hours ago", "yesterday": when an unfinished scan was last saved. */
-function ago(ms: number): string {
-  const minutes = Math.round((Date.now() - ms) / 60000);
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
-  const days = Math.round(hours / 24);
-  return days === 1 ? 'yesterday' : `${days} days ago`;
-}
 
 /** Scans left before the song was saved, to carry on with; each can be deleted (after a second tap). */
 function Unfinished({ scans, onCarryOn, onForget }: { scans: SavedScan<SavedLine>[]; onCarryOn(id: string): void; onForget(id: string): void }) {

@@ -10,6 +10,7 @@ import { ScrollView, Text, TextInput, View, type TextInputInstance } from 'react
 
 import { api, type Song } from '@/api/client';
 import { AddSongSheet, CLOSE_MS, FloatingAdd } from '@/components/add-song-sheet';
+import { CarryOn } from '@/components/carry-on';
 import { SearchIcon } from '@/components/icons';
 import { Shelf, SongTile, type TileSong } from '@/components/shelf';
 import { SongRow } from '@/components/song-row';
@@ -79,6 +80,8 @@ export default function Songs() {
       }
     >
       <TopBar title="Songs" subtitle="Every song shared on SolfaScores is open to you." />
+      {/* Scans and songs left unfinished, in front where they're seen (owner's request, 21 November 2026). */}
+      {signedIn ? <CarryOn /> : null}
       <View style={styles.search}>
         <SearchIcon color={colors.muted} />
         <TextInput
