@@ -7,7 +7,7 @@
  * jumps, key changes ("Doh is F") and sections ("[Chorus]"), as sheets print
  * them (22 November 2026, for staff notation read into sol-fa).
  */
-import { dohMidi, isLowPart, mod12 } from '../solfa';
+import { dohForPitch, dohMidi, isLowPart, mod12, tunePart } from '../solfa';
 
 import type { XScore } from './read';
 import type { VoiceLine } from './satb';
@@ -106,7 +106,22 @@ export interface SolfaOptions {
   systems?: number[][];
 }
 
+/**
+ * The score's voice lines as sol-fa. Doh starts where SolfaScores puts it for the key: in A♭ to B, the doh above
+ * middle C unless the tune sits too high to be played back from there (dohForPitch, on the notes the text plays).
+ */
 export function toSolfa(score: XScore, lines: VoiceLine[], opts: SolfaOptions = {}): SolfaText {
+  const { out, start } = write(score, lines, opts);
+  const tune = tunePart(out.parts);
+  const notes = tune ? (out.planned[tune] ?? []).filter((n) => n.start < start.until - EPS) : [];
+  if (!notes.length) return out;
+  const doh = dohForPitch(start.semitone, notes.reduce((sum, n) => sum + n.midi, 0) / notes.length);
+  if (doh === start.doh) return out;
+  return write(score, lines, opts, doh).out;
+}
+
+/** The sol-fa, with doh starting at `firstDoh` (else where SolfaScores puts it for the key), and where it started. */
+function write(score: XScore, lines: VoiceLine[], opts: SolfaOptions, firstDoh?: number): { out: SolfaText; start: { doh: number; semitone: number; until: number } } {
   const problems: string[] = [];
   const time = score.times[0] ?? { at: 0, beats: 4, beatType: 4 };
   if (score.times.some((t) => t.beats !== time.beats || t.beatType !== time.beatType)) problems.push('The time signature changes; SolfaScores keeps one time per song.');
@@ -154,7 +169,7 @@ export function toSolfa(score: XScore, lines: VoiceLine[], opts: SolfaOptions = 
     const prev = keyBars[keyBars.length - 1];
     if (prev && prev.semitone === semitone) continue;
     if (prev && Math.abs(measures[bar].start - k.at) > EPS) problems.push(`The key changes inside bar ${measures[bar].number}; SolfaScores changes key at the barline.`);
-    const doh = prev ? prev.doh + (mod12(semitone - prev.semitone) <= 5 ? mod12(semitone - prev.semitone) : mod12(semitone - prev.semitone) - 12) : dohMidi(semitone);
+    const doh = prev ? prev.doh + (mod12(semitone - prev.semitone) <= 5 ? mod12(semitone - prev.semitone) : mod12(semitone - prev.semitone) - 12) : (firstDoh ?? dohMidi(semitone));
     if (prev && prev.bar === bar) keyBars.pop();
     keyBars.push({ bar: keyBars.length ? bar : 0, name, semitone, doh });
   }
@@ -335,17 +350,20 @@ export function toSolfa(score: XScore, lines: VoiceLine[], opts: SolfaOptions = 
   const blocks = solfaLines.map((l) => [l.section ? `[${l.section}]` : '', l.key ? `Doh is ${l.key}` : '', l.rows].filter(Boolean).join('\n'));
 
   return {
-    text: `${head.join('\n')}\n\n${blocks.join('\n\n')}\n`,
-    title: score.title,
-    composer: score.composer,
-    key: keyBars[0].name,
-    time: `${time.beats}/${time.beatType}`,
-    tempo,
-    parts: lines.map((l) => l.part),
-    bars: barBeats.length,
-    lines: solfaLines,
-    problems: [...new Set(problems)],
-    planned,
+    out: {
+      text: `${head.join('\n')}\n\n${blocks.join('\n\n')}\n`,
+      title: score.title,
+      composer: score.composer,
+      key: keyBars[0].name,
+      time: `${time.beats}/${time.beatType}`,
+      tempo,
+      parts: lines.map((l) => l.part),
+      bars: barBeats.length,
+      lines: solfaLines,
+      problems: [...new Set(problems)],
+      planned,
+    },
+    start: { doh: keyBars[0].doh, semitone: keyBars[0].semitone, until: keyBars[1] ? barStart[keyBars[1].bar] : Infinity },
   };
 }
 

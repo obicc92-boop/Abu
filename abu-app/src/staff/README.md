@@ -46,14 +46,14 @@ On the owner's sheets, 22 November 2026, with no AI (`abu-reader/scripts/staff/`
 
 | Part | Bars printed | Same notes, any octave | Same, octaves too |
 |---|---|---|---|
-| Soprano | 1,917 | 74.0% | 45.9% |
-| Alto | 1,680 | 72.8% | 46.9% |
-| Tenor | 1,349 | 68.1% | 44.8% |
-| Bass | 1,376 | 65.5% | 40.3% |
+| Soprano | 1,917 | 74.0% | 69.0% |
+| Alto | 1,680 | 72.8% | 68.3% |
+| Tenor | 1,349 | 68.1% | 63.6% |
+| Bass | 1,376 | 65.5% | 61.0% |
 
 These are with the converter's half-beat fix (below, now in the app); before it, 68.4%, 66.4%, 60.1% and 59.0%. Bars where every voice's staff adds up: 1,965 of 2,300 (85.4%).
 
-- **Octaves:** in the keys of C to G the two columns agree for the women (soprano 73.9%, alto 73.9% either way); in A flat to B they part (soprano 74.0% any octave, 11.0% with octaves), because `dohMidi` (`src/solfa/pitch.ts`) puts doh below middle C in those keys while the sheets print the soprano's doh above it. Tenors part a little in every key (72.3% and 68.3% in C to G): sheets differ over which octave they write the tenor in.
+- **Octaves:** the last column is with doh where the owner's sheets put it (22 November 2026, `dohMidi` in `src/solfa/pitch.ts`): above middle C in every key, the doh below only for a tune in A♭ to B too high to be sung from the one above. Before, A♭ to B had doh below middle C, and in those keys only 11.0% of soprano bars had the printed octave (45.9%, 46.9%, 44.8% and 40.3% in the table). Now, of the bars with the right notes, in C to G 100% of soprano and alto bars have the printed octave too (tenor 94.4%, bass 92.9%), in A♭ to B 85.0% and 85.3% (tenor 91.5%, bass 93.6%): two of the 16 sheets in those keys (both in B♭) write their tune from the doh below, where the converter writes it from the one above, as the other 14 do (it sounds the same). Tenors part a little in every key (72.3% and 68.3% in C to G): sheets differ over which octave they write the tenor in.
 - **The converter** wrote a note that starts half a beat before a beat and runs on through it as struck again on the beat (`snap` in `toSolfa`: `Math.round(-0.5)` is -0): two dotted quarters in 3/4 came out `s :-.m :m`, and its own check passed it. Fixed the same day (`snap` now leaves a note from before the beat alone), which gave 5.6 to 8 points a part, and on PDMX made 41 more hymns and 139 more choral pieces convert exactly (350 of 495, 528 of 725).
 - **What still differs** (1,858 bars): 313 in their lengths only (a dot or a flag misread, a tie not seen: the reader misses ties drawn up among the printed sol-fa), 231 in their notes only (an accidental, a head a step off), 149 where the sheet prints again at a bar's start a note the staff ties over (the sheet's own way; the reading holds it), 141 with nothing read for that part (its staff not found, or its part named wrong), and the rest in both, mostly where one misread length moves the notes after it, and on the few sheets whose metre changes partway (12/8, 6/8), which the reader often misses.
 - **Printed text** near the staves: read as it is, the sol-fa and words make the reader see endings, repeats and 8va lines that aren't there (218 such tokens on the 1,416 voices' staves; 34 first endings, 16 second endings and 23 start repeats came out as marks). Whitened, 42 such tokens, no false first endings. The notes come out about the same either way (whitened 74.0/72.8/68.1/65.5%, as read 74.9/74.1/69.6/65.7%: 10 sheets better whitened, 11 worse, two of those by a metre misread), so whitening stays on, for the marks.

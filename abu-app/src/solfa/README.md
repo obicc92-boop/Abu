@@ -29,6 +29,7 @@ The prototype is the reference for behaviour and wording; where it disagreed wit
 - **Errors are objects** with line, part and bar, so the editor can point at the problem. The messages keep the prototype's wording.
 - **Extra hints** for common paste mistakes: `|` used as the half-bar accent, the paper `s,` low mark, a bare `CHORUS` line, and an empty `[Section]` (which gave NaN beats in the prototype).
 - **Full part names** (`Soprano`, `alto`, `Tenor:`) fold to `S A T B`.
+- **Where doh sounds**: from middle C up to B4 in every key, where the owner's sheets print the soprano's doh (owner's decision, 22 November 2026). The prototype had A♭ to B an octave lower. In A♭ to B a tune can be written from either doh, so the song's tune decides (`tuneHeight`, `dohMidi`): one that would average above E♭5 from the upper doh is played from the lower. On 40 staff scores that print their sol-fa too, this puts doh where the sheet does on all 40 (the old rule on 26: it was wrong on all 9 in A♭ and A, and on 5 of the 7 in B♭). The converters (staff sheets, MusicXML) write a tune from the doh above middle C in those keys too, as 14 of the 16 sheets in them do, unless it sits too high to be played back from there (`dohForPitch`).
 
 ## Assumptions to confirm with the owner
 

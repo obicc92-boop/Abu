@@ -2,7 +2,7 @@ export * from './types';
 export { KEY_NAMES, mod12, keyFromSemitone, parseKey, parseKeyLine, keyAfterPivot, type KeyInfo, type Pivot } from './keys';
 export { SYLLABLE_SEMITONES, SYLLABLE_PATTERN, parseNote, octaveOf, normalizePart, partName, partPlural, isLowPart } from './syllables';
 export { parseSolfa, splitWords, parseTime, parseTempo } from './parse';
-export { dohMidi, partDohMidi, noteMidi, midiToHz, dohTimeline, dohAt, type DohPoint } from './pitch';
+export { dohMidi, dohForPitch, tunePart, tuneHeight, partDohMidi, noteMidi, midiToHz, dohTimeline, dohAt, type DohPoint } from './pitch';
 export { DEFAULT_LEVEL, DYNAMICS, isTempo, readExpression, TEMPO_WORDS } from './expressions';
 export { SECTION_CHOICES, sectionLine, sectionName, takeSection } from './sections';
 export { isSign, orderLength, playOrder, readRepeat, repeatPlan, REPEAT_SPELLING, type Ending, type RepeatPlan, type RepeatProblem, type Segment } from './repeats';

@@ -138,11 +138,12 @@ describe('a hymn on two staves', () => {
         'key: Bb',
         'time: 3/4',
         '',
-        "S  s | d' :t.l :s | l :s :- | - : : |",
+        // From the B♭ above middle C, where the owner's sheets put it; the bass's low G and F two octaves below.
+        'S  s1 | d :t1.l1 :s1 | l1 :s1 :- | - : : |',
         'W  All peo-ple _ that on earth',
-        'A  m | m :f :r | f :m :- | - : : |',
-        "T  d' | s :- :- | d' :- :- | d' : : |",
-        'B  d | d :l1 :s1 | f :s1 :- | d : : |',
+        'A  m1 | m1 :f1 :r1 | f1 :m1 :- | - : : |',
+        'T  d | s1 :- :- | d :- :- | d : : |',
+        'B  d1 | d1 :l2 :s2 | f1 :s2 :- | d1 : : |',
         '',
       ].join('\n'),
     );
@@ -208,6 +209,32 @@ describe('key changes', () => {
       [[0], undefined],
       [[1], 'G'],
     ]);
+    expect(out.verified).toBe(true);
+  });
+});
+
+describe('doh in A♭ to B', () => {
+  const melody = (notes: string[]) =>
+    musicXmlToSolfa(
+      scoreXml([
+        {
+          name: 'Melody',
+          attributes: '<divisions>1</divisions><key><fifths>-2</fifths></key><time><beats>2</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef>',
+          bars: notes.map((n) => ({ length: 2, voices: [{ voice: '1', notes: n }] })),
+        },
+      ]),
+    );
+  const row = (out: { text: string }) => out.text.split('\n').find((l) => l.startsWith('S '));
+
+  it('writes a tune from the doh above middle C, as most of the sheets do', () => {
+    const out = melody(['F4/1 F4/1', 'Bb4/1 Bb4/1', 'A4/1 G4/1', 'F4/2']);
+    expect(row(out)).toBe('S  s1 :s1 | d :d | t1 :l1 | s1 :- |');
+    expect(out.verified).toBe(true);
+  });
+
+  it('writes one too high to be played from there from the doh below, as the player reads it', () => {
+    const out = melody(['F5/1 F5/1', 'Bb5/1 Bb5/1', 'A5/1 G5/1', 'F5/2']);
+    expect(row(out)).toBe("S  s' :s' | d'' :d'' | t' :l' | s' :- |");
     expect(out.verified).toBe(true);
   });
 });

@@ -1,13 +1,46 @@
 import { describe, expect, it } from '@jest/globals';
 import { OLD100 } from '../../data/demo-songs';
-import { dohAt, dohMidi, dohTimeline, isLowPart, midiToHz, normalizePart, noteMidi, parseSolfa, partName } from '..';
+import { dohAt, dohForPitch, dohMidi, dohTimeline, isLowPart, midiToHz, normalizePart, noteMidi, parseSolfa, partName, tuneHeight } from '..';
 
 describe('doh', () => {
-  it('sits between A♭3 and G4, as in the prototype', () => {
+  it('sits from middle C up to B4, where the sheets print the soprano’s doh', () => {
     expect(dohMidi(0)).toBe(60); // C4
     expect(dohMidi(7)).toBe(67); // G4
-    expect(dohMidi(8)).toBe(56); // A♭3
-    expect(dohMidi(11)).toBe(59); // B3
+    expect(dohMidi(8)).toBe(68); // A♭4
+    expect(dohMidi(11)).toBe(71); // B4
+  });
+
+  it('in A♭ to B, is the doh below for a tune that would sit higher than a soprano sings from the one above', () => {
+    expect(dohMidi(10, 9.1)).toBe(58); // B♭3: "I will sing to the Lord" climbs to the upper doh (s :s | d' :d')
+    expect(dohMidi(10, 0.8)).toBe(70); // B♭4: the highest-sitting tune of the B♭ sheets written from it
+    expect(dohMidi(10, 4.9)).toBe(70); // up to a tune averaging E♭5 from it
+    expect(dohMidi(10, 5.1)).toBe(58);
+    expect(dohMidi(7, 12)).toBe(67); // C to G: always where the sheets print it
+  });
+});
+
+describe('where a tune sits', () => {
+  const song = (...rows: string[]) => parseSolfa(['key: Bb', ...rows].join('\n'), { time: '2/4' });
+
+  it('decides doh in A♭ to B, from the soprano', () => {
+    const high = song("S  s :s | d' :d' | t :l | s :- |", 'T  m :m | m :m | r :d | t1 :- |');
+    expect(tuneHeight(high)).toBeCloseTo(65 / 7);
+    expect(dohTimeline(high)[0].doh).toBe(58);
+    expect(noteMidi('S', high.events.S[0], 58)).toBe(65); // F4
+    expect(dohTimeline(song('S  d :t1 | l1 :s1 | l1 :t1 | d :- |'))[0].doh).toBe(70);
+  });
+
+  it('leaves doh above middle C with no tune to go by', () => {
+    const men = song("T  s :s | d' :d' |", 'B  d :d | d :d |');
+    expect(tuneHeight(men)).toBeUndefined();
+    expect(dohTimeline(men)[0].doh).toBe(70);
+  });
+
+  it('writes a tune from the doh above middle C, unless it sits too high to be played from there', () => {
+    expect(dohForPitch(10, 67.3)).toBe(70); // F4 to B♭4: s1 to d
+    expect(dohForPitch(10, 79.3)).toBe(58); // F5 to B♭5: s' to d'' from B♭3, as the player reads it
+    expect(dohMidi(10, 79.3 - 58)).toBe(58);
+    expect(dohForPitch(7, 60)).toBe(67); // C to G: where the player puts it
   });
 });
 
