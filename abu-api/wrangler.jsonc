@@ -33,6 +33,9 @@
   ],
   // Cloudflare's own AI (Workers AI), for scanning: corrects lines SolfaScores' own reader got wrong, and reads words in pictures.
   "ai": { "binding": "AI" },
+  // Email (src/email.ts), through Cloudflare's Email Service: the link to choose a new password, from no-reply@ only.
+  // Sending to any address needs the Workers Paid plan, and solfascores.com set up for sending in the dashboard.
+  "send_email": [{ "name": "EMAIL", "allowed_sender_addresses": ["no-reply@solfascores.com"] }],
   // The app's own address, and www, which the page sends on to it. The old address,
   // abu.adalingo.workers.dev, stays on: its pages send people to solfascores.com, and links
   // shared before the move keep working.
