@@ -5,6 +5,10 @@
  */
 import { XMLParser } from 'fast-xml-parser';
 
+import { readExpression } from '../solfa/expressions';
+import { isSign, REPEAT_SPELLING, readRepeat } from '../solfa/repeats';
+import { sectionName } from '../solfa/sections';
+
 /** A preserve-order node from fast-xml-parser: `{ tag: children, ':@': attributes }`. */
 type XNode = Record<string, unknown>;
 
@@ -25,8 +29,31 @@ export interface XNote {
   chord: boolean;
   tieStart: boolean;
   tieStop: boolean;
+  /** A slur (a curve over notes sung to one syllable) starts or ends on this note. */
+  slurStart?: boolean;
+  slurStop?: boolean;
   /** Verse 1's syllable on this note. */
   lyric?: { text: string; syllabic: string };
+}
+
+/**
+ * What a score marks besides its notes, as SolfaScores writes it in braces (docs/solfa-format.md): a part's
+ * dynamics, the tempo, repeats and jumps, and where sections start.
+ */
+export interface XDirection {
+  /** Quarter notes from the start of the piece. */
+  at: number;
+  /** The bar it's written in (an index into `measures`): a jump or an end goes at that bar's end. */
+  bar: number;
+  /** The part and staff a dynamic is for; null for every part (tempo, repeats, jumps, sections). */
+  part: number | null;
+  staff?: number;
+  /**
+   * dynamic: `p`, `cresc.`, `<`; tempo: `Andante`, `M. 80`, `rit.`, `a tempo`; sign: `segno`, `coda`, `|:`, `1.`,
+   * `2.` (before the note it marks); end: `:|`, `D.S. al Coda`, `Fine`, `to coda` (at its bar's end); section: its name.
+   */
+  kind: 'dynamic' | 'tempo' | 'sign' | 'end' | 'section';
+  text: string;
 }
 
 export interface XMeasure {
@@ -76,6 +103,8 @@ export interface XScore {
   measures: XMeasure[];
   keys: XKey[];
   times: XTime[];
+  /** Dynamics, tempo, repeats, jumps and sections, in order (scores read from a picture may have none). */
+  directions?: XDirection[];
 }
 
 const STEP_SEMITONES: Readonly<Record<string, number>> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
@@ -130,10 +159,18 @@ export function readMusicXml(xml: string): XScore {
     measures: [],
     keys: [],
     times: [],
+    directions: [],
+  };
+  const directions = score.directions!;
+  const direct = (d: XDirection) => {
+    // Every part's copy of a repeat or a tempo is one mark.
+    if (d.part === null && directions.some((o) => o.part === null && o.kind === d.kind && o.text === d.text && o.bar === d.bar)) return;
+    directions.push(d);
   };
 
   childrenOf(root, 'part').forEach((partNode, pi) => {
     const part: XPart = { id: attrs(partNode).id, name: names[attrs(partNode).id] ?? '', staves: 1, clefs: {}, notes: [] };
+    const verse = firstVerse(partNode);
     let divisions = 1;
     let transpose = 0;
     let at = 0;
@@ -149,6 +186,26 @@ export function readMusicXml(xml: string): XScore {
 
       for (const el of kids(m)) {
         switch (tagOf(el)) {
+          case 'direction': {
+            const offset = num(child(el, 'offset')) / divisions;
+            const at = start + cursor + offset;
+            const staff = num(child(el, 'staff'), 1) || 1;
+            for (const d of directionsOf(el)) direct({ ...d, at, bar: mi, part: d.kind === 'dynamic' ? pi : null, ...(d.kind === 'dynamic' ? { staff } : {}) });
+            break;
+          }
+          case 'barline': {
+            const repeat = attrs(child(el, 'repeat')).direction;
+            if (repeat === 'forward') direct({ at: start, bar: mi, part: null, kind: 'sign', text: '|:' });
+            if (repeat === 'backward') direct({ at: start, bar: mi, part: null, kind: 'end', text: ':|' });
+            const ending = child(el, 'ending');
+            const number = (attrs(ending).number ?? '').split(/[,\s]+/)[0];
+            if (ending && attrs(ending).type === 'start' && (number === '1' || number === '2')) {
+              direct({ at: start, bar: mi, part: null, kind: 'sign', text: `${number}.` });
+            }
+            if (child(el, 'segno')) direct({ at: start, bar: mi, part: null, kind: 'sign', text: 'segno' });
+            if (child(el, 'coda')) direct({ at: start, bar: mi, part: null, kind: 'sign', text: 'coda' });
+            break;
+          }
           case 'attributes': {
             const div = child(el, 'divisions');
             if (div) divisions = num(div, 1) || 1;
@@ -190,8 +247,16 @@ export function readMusicXml(xml: string): XScore {
             const alter = num(child(pitch, 'alter'), 0);
             const midi = pitch && !cue ? 12 * (num(child(pitch, 'octave')) + 1) + (STEP_SEMITONES[step] ?? 0) + alter + transpose : null;
             const ties = childrenOf(el, 'tie').map((t) => attrs(t).type);
+            const notations = childrenOf(el, 'notations');
+            const slurs = notations.flatMap((n) => childrenOf(n, 'slur')).map((t) => attrs(t).type);
+            // A dynamic written on the note itself.
+            for (const dyn of notations.flatMap((n) => childrenOf(n, 'dynamics'))) {
+              const text = dynamicOf(dyn);
+              if (text && !chord) direct({ at: start + cursor, bar: mi, part: pi, staff: num(child(el, 'staff'), 1) || 1, kind: 'dynamic', text });
+            }
             const lyrics = childrenOf(el, 'lyric');
-            const verse1 = lyrics.find((l) => (attrs(l).number ?? '1') === '1') ?? lyrics[0];
+            // The part's first verse only: a note it has no syllable for takes none from another verse.
+            const verse1 = lyrics.find((l) => (attrs(l).number ?? '1') === verse);
             const lyricText = verse1
               ? childrenOf(verse1, 'text')
                   .map((t) => text(t))
@@ -210,6 +275,8 @@ export function readMusicXml(xml: string): XScore {
               chord,
               tieStart: ties.includes('start'),
               tieStop: ties.includes('stop'),
+              ...(slurs.includes('start') ? { slurStart: true } : {}),
+              ...(slurs.includes('stop') ? { slurStop: true } : {}),
               lyric: lyricText ? { text: lyricText, syllabic: text(child(verse1, 'syllabic')) || 'single' } : undefined,
             });
             if (!chord) {
@@ -236,7 +303,107 @@ export function readMusicXml(xml: string): XScore {
     score.parts.push(part);
   });
 
+  directions.sort((a, b) => a.at - b.at);
   return score;
+}
+
+/** A dynamic's text as SolfaScores writes it (`p`, `mf`, `sfz`), from MusicXML's `<dynamics><mf/></dynamics>`. */
+function dynamicOf(dyn: XNode): string | null {
+  for (const c of kids(dyn)) {
+    const tag = tagOf(c);
+    const written = tag === 'other-dynamics' ? text(c) : tag;
+    const read = written && tag !== '#text' ? readExpression(written) : null;
+    if (read && (read.kind === 'dynamic' || read.kind === 'accent')) return read.text;
+  }
+  return null;
+}
+
+/** Jumps a score gives only to its player, in `<sound>`. */
+const SOUND_JUMPS: [string, string][] = [
+  ['dalsegno', 'D.S.'],
+  ['dacapo', 'D.C.'],
+  ['fine', 'Fine'],
+  ['tocoda', 'to coda'],
+];
+
+/** What a `<direction>` says: dynamics, hairpins, tempo, signs, jumps, and a section's name. */
+function directionsOf(el: XNode): Omit<XDirection, 'at' | 'bar' | 'part'>[] {
+  const out: Omit<XDirection, 'at' | 'bar' | 'part'>[] = [];
+  let jumped = false;
+  for (const dt of childrenOf(el, 'direction-type')) {
+    for (const c of kids(dt)) {
+      switch (tagOf(c)) {
+        case 'dynamics': {
+          const t = dynamicOf(c);
+          if (t) out.push({ kind: 'dynamic', text: t });
+          break;
+        }
+        case 'wedge': {
+          const type = attrs(c).type;
+          if (type === 'crescendo') out.push({ kind: 'dynamic', text: '<' });
+          if (type === 'diminuendo') out.push({ kind: 'dynamic', text: '>' });
+          break;
+        }
+        case 'segno':
+          out.push({ kind: 'sign', text: 'segno' });
+          break;
+        case 'coda':
+          out.push({ kind: 'sign', text: 'coda' });
+          break;
+        case 'metronome': {
+          const bpm = num(child(c, 'per-minute'));
+          const unit = text(child(c, 'beat-unit'));
+          const dotted = !!child(c, 'beat-unit-dot');
+          const quarters = ({ whole: 4, half: 2, quarter: 1, eighth: 0.5, '16th': 0.25 }[unit] ?? 1) * (dotted ? 1.5 : 1);
+          // As quarter notes a minute: the song's own beat is worked out where it's written (to-solfa.ts).
+          if (bpm > 0) out.push({ kind: 'tempo', text: `M. ${Math.round(bpm * quarters)}` });
+          break;
+        }
+        case 'rehearsal':
+        case 'words': {
+          const words = text(c).replace(/\s+/g, ' ').trim();
+          if (!words) break;
+          const repeat = readRepeat(words);
+          if (repeat) {
+            out.push({ kind: isSign(repeat) ? 'sign' : 'end', text: REPEAT_SPELLING[repeat] });
+            jumped = !isSign(repeat);
+            break;
+          }
+          const section = sectionName(words);
+          if (section) {
+            out.push({ kind: 'section', text: section });
+            break;
+          }
+          const mark = readExpression(words);
+          if (mark?.kind === 'dynamic' || mark?.kind === 'accent' || mark?.kind === 'cresc' || mark?.kind === 'dim') out.push({ kind: 'dynamic', text: mark.text });
+          else if (mark && mark.kind !== 'direction') out.push({ kind: 'tempo', text: mark.text });
+          break;
+        }
+      }
+    }
+  }
+  // A tempo's words and its metronome mark printed together are one mark: "Andante M. 72".
+  const tempos = out.filter((d) => d.kind === 'tempo' && !/^(?:rit|rall|accel|a tempo)/.test(d.text));
+  if (tempos.length > 1) {
+    tempos[0].text = tempos.map((d) => d.text).join(' ');
+    for (const d of tempos.slice(1)) out.splice(out.indexOf(d), 1);
+  }
+  // A jump given only to the player (MuseScore writes the words too, but not every program does).
+  const sound = attrs(child(el, 'sound'));
+  if (!jumped) for (const [attr, jump] of SOUND_JUMPS) if (sound[attr]) out.push({ kind: 'end', text: jump });
+  // A tempo given only to the player, as quarter notes a minute.
+  if (sound.tempo && !out.some((d) => d.kind === 'tempo' && d.text.startsWith('M.'))) {
+    const bpm = Math.round(Number(sound.tempo));
+    if (bpm > 0) out.push({ kind: 'tempo', text: `M. ${bpm}` });
+  }
+  return out;
+}
+
+/** The first verse a part has words for: "1", or the lowest number its lyrics use (some files start at 2). */
+function firstVerse(part: XNode): string {
+  const numbers = new Set<string>();
+  for (const m of childrenOf(part, 'measure')) for (const n of childrenOf(m, 'note')) for (const l of childrenOf(n, 'lyric')) numbers.add(attrs(l).number ?? '1');
+  return numbers.has('1') || !numbers.size ? '1' : [...numbers].sort((a, b) => (Number(a) || 99) - (Number(b) || 99) || a.localeCompare(b))[0];
 }
 
 /** Joins tied notes into one long note, per staff and voice. */

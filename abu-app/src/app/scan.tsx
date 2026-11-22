@@ -45,7 +45,11 @@ import { BarToolbar, type BarActions } from '@/components/score';
 import { SectionPicker, sectionLabel } from '@/components/section-picker';
 import { PhoneKeyboardBar, SolfaKeypad } from '@/components/solfa-keypad';
 import { Body, Button, Card, Chip, ErrorText, Kicker, MAX_WIDTH, Page, TopBar } from '@/components/ui';
+import { setPastedSolfa } from '@/lib/paste-draft';
+import { musicXmlToSolfa } from '@/musicxml';
 import { setScanDraft, takeCheckAgain } from '@/scan/draft';
+import { isMusicXml, staffSong } from '@/scan/staff-song';
+import { readStaffPages } from '@/staff';
 import { forgetScan, listScans, openScan, saveScan, type SavedScan } from '@/scan/saved';
 import { ago, titleFromFile } from '@/scan/unfinished';
 import { joinLines, linesKeys, timeFor, withTempo } from '@/scan/join';
@@ -67,6 +71,8 @@ import { fonts, partColor } from '@/theme/tokens';
 
 const TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic'];
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
+/** MusicXML files, by type and by name (a browser often gives .mxl no type). */
+const MUSICXML_TYPES = ['application/vnd.recordare.musicxml+xml', 'application/vnd.recordare.musicxml', '.musicxml', '.mxl', '.xml'];
 const TIMES = ['2/4', '3/4', '4/4', '6/8'];
 /** Doh names the server accepts, by semitone. */
 const KEY_PARAM = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
@@ -79,13 +85,14 @@ const PART_CHOICES: { n: number; label: string }[] = [
   { n: 1, label: '1' },
   { n: 0, label: 'Not sure' },
 ];
-/** How a sheet is written, as the person says. */
-type Written = 'hand' | 'typed';
+/** How a sheet is written, as the person says: sol-fa by hand or typed, or staff notation (notes on five lines). */
+type Written = 'hand' | 'typed' | 'staff';
 /** On this phone: "off" when the person doesn't want an AI to read every line's marks and slurs. */
 const MARKS_KEY = 'abu.scanMarks';
 const WRITTEN_CHOICES: { w: Written; label: string }[] = [
   { w: 'hand', label: 'Handwritten' },
   { w: 'typed', label: 'Typed' },
+  { w: 'staff', label: 'Staff notation' },
 ];
 const BLANK_PAGE: PageText = { width: 1, height: 1, chars: [], segs: [], across: [], music: 0, pictured: 1 };
 
@@ -125,8 +132,8 @@ interface Line {
   draft: string;
   /** From a PDF's text: the same with the parts' bar lines lined up by where they're printed, tried if `draft` fails. */
   lined?: string;
-  /** Who read it: the PDF's text, SolfaScores' own reader, or an AI that corrected it. */
-  via?: 'text' | 'own' | 'cloudflare' | 'haiku' | 'strong';
+  /** Who read it: the PDF's text, SolfaScores' own reader, its staff reader, or an AI that corrected it. */
+  via?: 'text' | 'own' | 'staff' | 'cloudflare' | 'haiku' | 'strong';
   /** On a sheet the person said is handwritten. */
   handwritten: boolean;
   status: 'waiting' | 'reading' | 'read' | 'failed';
@@ -318,7 +325,12 @@ function Scanner() {
 
   const add = (files: Chosen[]) => {
     setError(null);
-    if (files.some((f) => !TYPES.includes(f.type))) return setError('Choose a PDF, or photos (JPEG, PNG or WebP).');
+    // A MusicXML file (from MuseScore, Sibelius or Finale) holds every note already: straight into the song editor.
+    if (files.some(isMusicXml)) {
+      if (files.length > 1 || chosen.length) return setError('Choose one MusicXML file on its own.');
+      return void openMusicXml(files[0]);
+    }
+    if (files.some((f) => !TYPES.includes(f.type))) return setError('Choose a PDF, photos (JPEG, PNG or WebP) or a MusicXML file.');
     if (files.some((f) => (f.size ?? 0) > MAX_FILE_BYTES)) return setError('A file is over 20 MB. Try a smaller photo or PDF.');
     const all = [...chosen, ...files];
     if (all.length > 1 && all.some((f) => f.type === 'application/pdf')) return setError('Choose one PDF, or photos of the pages (not both).');
@@ -326,8 +338,20 @@ function Scanner() {
     setChosen(all.map((f) => ({ ...f, preview: f.preview ?? (f.type.startsWith('image/') && f.file ? URL.createObjectURL(f.file) : undefined) })));
   };
 
+  /** A MusicXML file in sol-fa (src/musicxml), handed to the song editor as pasted sol-fa is. */
+  const openMusicXml = async (f: Chosen) => {
+    try {
+      const file = f.file ?? (await (await fetch(f.uri)).blob());
+      const song = musicXmlToSolfa(new Uint8Array(await file.arrayBuffer()));
+      setPastedSolfa(song.text);
+      router.push({ pathname: '/song-editor', params: { from: 'musicxml' } });
+    } catch (e) {
+      setError((e as Error).message || 'That MusicXML file couldn’t be read.');
+    }
+  };
+
   const choose = async () => {
-    const result = await DocumentPicker.getDocumentAsync({ type: TYPES, multiple: true, copyToCacheDirectory: true });
+    const result = await DocumentPicker.getDocumentAsync({ type: [...TYPES, ...MUSICXML_TYPES], multiple: true, copyToCacheDirectory: true });
     if (result.canceled) return;
     add(result.assets.map((a) => ({ name: a.name, type: a.mimeType ?? '', size: a.size, uri: a.uri, file: a.file })));
   };
@@ -487,7 +511,11 @@ function Scanner() {
       if (more) setNote(`Only the first ${MAX_PAGES} pages are read at a time.`);
       const found: Line[] = [];
       let head: Heading = { title: '', composer: '', key: '', time: '', tempo: '' };
-      const add = async (p: number, box: Box, l: { parts: string[]; words: number; wordRows?: FoundLine['wordRows']; text?: string; lined?: string; draft?: string; key?: string; section?: string }) => {
+      const add = async (
+        p: number,
+        box: Box,
+        l: { parts: string[]; words: number; wordRows?: FoundLine['wordRows']; text?: string; lined?: string; draft?: string; key?: string; section?: string; via?: Line['via'] },
+      ) => {
         const cut = await cutLine(pages[p], box);
         const text = l.text ?? '';
         const wordRows = l.wordRows ?? [];
@@ -503,7 +531,7 @@ function Scanner() {
           // A boxed sheet's lines come read already (boxes.ts); they still go through the checker and the AIs.
           draft: text || l.draft || '',
           ...(l.lined ? { lined: l.lined } : {}),
-          via: text ? 'text' : 'own',
+          via: l.via ?? (text ? 'text' : 'own'),
           handwritten: written === 'hand',
           status: text ? 'read' : 'waiting',
           text,
@@ -514,6 +542,32 @@ function Scanner() {
           ...(l.section ? { section: l.section } : {}),
         });
       };
+
+      // Staff notation (owner's request, 22 November 2026): read on the phone by SolfaScores' staff reader (src/staff),
+      // then written in sol-fa as a MusicXML file is (src/musicxml), a line of music for each system on the sheet.
+      if (written === 'staff') {
+        const reading = await readStaffPages(pages, { progress: (n: number, of: number) => setDone({ n, of }) });
+        const song = staffSong(reading);
+        // The title printed above the music, from a PDF's own text.
+        const texts = pages.map((p) => (p.text && p.text.pictured <= 0.5 ? p.text : null));
+        const printed = texts.some(Boolean) ? readTypedSheet(texts.map((t) => t ?? BLANK_PAGE)) : null;
+        head = { title: song.title || printed?.title || '', composer: song.composer, key: song.key, time: song.time, tempo: song.tempo || printed?.tempo || '' };
+        for (const [i, l] of song.lines.entries()) {
+          const system = reading.systems[song.systemOf[i]];
+          if (system) await add(system.page, system.box, { parts: song.parts, words: 0, text: l.rows, key: l.key, section: l.section, via: 'staff' });
+        }
+        if (!found.length) {
+          setPhase('choose');
+          return setError('No staff notation was found on this sheet. Try a clearer, straighter photo of the whole page.');
+        }
+        if (song.problems.some((p) => p.startsWith('The time signature changes'))) setNote('The time signature changes in this piece. SolfaScores keeps one time for a song, so check the bars after the change.');
+        setLines([...found]);
+        setHeading(head);
+        setTime(song.time);
+        setCurrent(0);
+        setPhase('check');
+        return;
+      }
 
       // 1. A typed PDF: read from its own text. A page that's one big picture (a scan) is read as a picture.
       // A handwritten PDF is read from its pictures: any text in it is a scanner's guess at the writing.
@@ -808,7 +862,8 @@ function ChooseStep(props: {
           {props.unfinished.length ? <Unfinished scans={props.unfinished} onCarryOn={props.onCarryOn} onForget={props.onForget} /> : null}
           <Card style={styles.hero}>
             <ScanIcon color={colors.link} />
-            <Text style={styles.heroTitle}>Turn a sol-fa sheet into a song</Text>
+            <Text style={styles.heroTitle}>Turn a sheet into a song</Text>
+            <Text style={styles.small}>Sol-fa, typed or handwritten, or staff notation.</Text>
             <View style={styles.steps}>
               {['Photograph or choose the sheet', 'SolfaScores reads every line', 'You check it, then save'].map((s, i) => (
                 <View key={s} style={styles.step}>
@@ -822,6 +877,7 @@ function ChooseStep(props: {
           </Card>
           <IconButton icon={<CameraIcon color={colors.onPrimary} />} label="Take a photo" onPress={props.onPhoto} />
           <IconButton icon={<FileIcon color={colors.ink} />} label="Choose a PDF or photos" kind="ghost" onPress={props.onChoose} />
+          <Text style={[styles.tip, { textAlign: 'center' }]}>A MusicXML file from MuseScore, Sibelius or Finale opens straight into sol-fa.</Text>
           {error ? <ErrorText message={error} /> : null}
           <Text style={styles.tip}>Best results: the whole page, flat and straight, in good light. Typed sheets read best; handwritten ones need more checking.</Text>
         </>
@@ -871,9 +927,12 @@ function ChooseStep(props: {
                 ? 'Read from the picture. Handwritten sheets need more checking.'
                 : props.written === 'typed'
                   ? 'A typed PDF is read from its own text, a photo from the picture.'
-                  : 'Choose one, so SolfaScores reads it the right way.'}
+                  : props.written === 'staff'
+                    ? 'Notes on five lines, read by SolfaScores and written in sol-fa. Printed scores read best.'
+                    : 'Choose one, so SolfaScores reads it the right way.'}
             </Text>
-            <View style={styles.toggle}>
+            {props.written === 'staff' ? null : (
+              <View style={styles.toggle}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.toggleLabel}>Read marks and slurs with AI</Text>
                 <Text style={styles.small}>Dynamics, slurs, hairpins and tempo words on every line. Uses some of today’s AI allowance.</Text>
@@ -887,21 +946,26 @@ function ChooseStep(props: {
                 // On the web, react-native-web colours the "on" knob separately.
                 {...({ activeThumbColor: colors.onPrimary } as object)}
               />
-            </View>
+              </View>
+            )}
           </Card>
-          <Card>
-            <Kicker>Voice parts in each line</Kicker>
-            <View style={styles.wrap}>
-              {PART_CHOICES.map((c) => (
-                <Chip key={c.n} label={c.label} on={props.partsWanted === c.n} onPress={() => props.setPartsWanted(c.n)} />
-              ))}
-            </View>
-            <Text style={styles.small}>For photos and scans. A typed PDF is read from its own text.</Text>
-          </Card>
+          {props.written === 'staff' ? null : (
+            <Card>
+              <Kicker>Voice parts in each line</Kicker>
+              <View style={styles.wrap}>
+                {PART_CHOICES.map((c) => (
+                  <Chip key={c.n} label={c.label} on={props.partsWanted === c.n} onPress={() => props.setPartsWanted(c.n)} />
+                ))}
+              </View>
+              <Text style={styles.small}>For photos and scans. A typed PDF is read from its own text.</Text>
+            </Card>
+          )}
           {error ? <ErrorText message={error} /> : null}
           <Button label="Read the sheet" onPress={props.onRead} disabled={!props.written} />
           <Text style={styles.tip}>
-            {props.marksAi
+            {props.written === 'staff'
+              ? 'SolfaScores reads the staff notation itself, on this phone, and writes it in sol-fa. Then you check each line before anything is saved.'
+              : props.marksAi
               ? 'SolfaScores reads the sheet itself, and asks an AI about lines it can’t get right and for each line’s marks and slurs. Then you check each line before anything is saved.'
               : 'SolfaScores reads the sheet itself, and asks an AI only about lines it can’t get right. Then you check each line before anything is saved.'}
           </Text>
@@ -1003,6 +1067,7 @@ interface CheckProps {
 const READ_BY: Record<NonNullable<Line['via']>, string> = {
   text: 'Read from the PDF’s own text.',
   own: 'Read by SolfaScores itself.',
+  staff: 'Read from the staff notation by SolfaScores.',
   cloudflare: 'Read by SolfaScores, corrected by AI.',
   haiku: 'Read by SolfaScores, corrected by AI.',
   strong: 'Read by AI.',
@@ -1117,7 +1182,8 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
   const checked = lines.filter((l) => l.checked || l.skipped).length;
 
   // The picture: tall enough to read (scroll sideways), or the whole line at once.
-  const imgHeight = zoom ? 170 : Math.max(48, ((width || 1) * line.height) / line.width);
+  // A system of staves is taller than a line of sol-fa: zoomed, it needs more room to read its notes.
+  const imgHeight = zoom ? (line.via === 'staff' ? 340 : 170) : Math.max(48, ((width || 1) * line.height) / line.width);
   const imgWidth = zoom ? (imgHeight * line.width) / line.height : width;
 
   // The picture and the rows scroll sideways together, so bars stay roughly lined up.
@@ -1358,7 +1424,7 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
             {player.message ? <Text style={styles.small}>{player.message}</Text> : null}
           </View>
           <View style={[styles.toolbar, styles.pad]}>
-            {canReadAgain ? (
+            {canReadAgain && line.via !== 'staff' ? (
               <Pressable onPress={() => readAgain(line)} disabled={line.status === 'reading'} accessibilityRole="button" accessibilityLabel="Ask the AI to read it again" style={styles.tool}>
                 {line.status === 'reading' ? <ActivityIndicator size="small" color={colors.muted} /> : <AgainIcon color={colors.muted} />}
                 <Text style={styles.toolText}>{line.status === 'reading' ? 'Reading…' : 'Ask the AI'}</Text>

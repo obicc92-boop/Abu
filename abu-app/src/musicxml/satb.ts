@@ -13,12 +13,16 @@ export interface LineNote {
   step: string;
   alter: number;
   lyric?: { text: string; syllabic: string };
+  slurStart?: boolean;
+  slurStop?: boolean;
 }
 
 export interface VoiceLine {
   /** S, A, T or B (or "S" alone for a tune). */
   part: string;
   notes: LineNote[];
+  /** The score's part (index) and staff it was taken from, for the dynamics written there. */
+  from?: { part: number; staff: number };
 }
 
 const EPS = 1e-6;
@@ -32,12 +36,22 @@ const NAMED: [RegExp, string][] = [
 
 interface Lane {
   low: boolean;
+  from: { part: number; staff: number };
   /** Set when the part's name says which voice it is. */
   named?: string;
   notes: LineNote[];
 }
 
-const toLine = (n: XNote): LineNote => ({ start: n.start, dur: n.dur, midi: n.midi!, step: n.step, alter: n.alter, lyric: n.lyric });
+const toLine = (n: XNote): LineNote => ({
+  start: n.start,
+  dur: n.dur,
+  midi: n.midi!,
+  step: n.step,
+  alter: n.alter,
+  lyric: n.lyric,
+  ...(n.slurStart ? { slurStart: true } : {}),
+  ...(n.slurStop ? { slurStop: true } : {}),
+});
 
 /** The notes sounding one at a time, choosing the top (or bottom) note of each chord. */
 function single(notes: XNote[], pick: 'top' | 'bottom'): LineNote[] {
@@ -55,7 +69,9 @@ function single(notes: XNote[], pick: 'top' | 'bottom'): LineNote[] {
     const lyric = chosen.lyric ?? group.find((g) => g.lyric)?.lyric;
     const prev = out[out.length - 1];
     if (prev && prev.start + prev.dur > chosen.start + EPS) prev.dur = chosen.start - prev.start; // never overlap
-    out.push({ ...toLine(chosen), lyric });
+    // So is a slur, which a program may hang on any note of the chord.
+    const slurs = { ...(group.some((g) => g.slurStart) ? { slurStart: true } : {}), ...(group.some((g) => g.slurStop) ? { slurStop: true } : {}) };
+    out.push({ ...toLine(chosen), lyric, ...slurs });
   }
   return out;
 }
@@ -77,10 +93,11 @@ const mean = (notes: XNote[]) => {
 };
 
 /** One or two lanes per staff: two voices, or a voice in chords, give an upper and a lower line. */
-function lanesOf(part: XPart): Lane[] {
+function lanesOf(part: XPart, index: number): Lane[] {
   const named = NAMED.find(([re]) => re.test(part.name))?.[1];
   const lanes: Lane[] = [];
   for (let staff = 1; staff <= part.staves; staff++) {
+    const from = { part: index, staff };
     const notes = part.notes.filter((n) => n.staff === staff);
     if (!notes.some((n) => n.midi !== null)) continue;
     const clef = part.clefs[staff];
@@ -89,11 +106,11 @@ function lanesOf(part: XPart): Lane[] {
       .map((v) => notes.filter((n) => n.voice === v))
       .sort((a, b) => mean(b) - mean(a));
     if (voices.length >= 2) {
-      lanes.push({ low, notes: single(voices[0], 'top') }, { low, notes: single(voices[1], 'bottom') });
+      lanes.push({ low, from, notes: single(voices[0], 'top') }, { low, from, notes: single(voices[1], 'bottom') });
     } else if (hasChords(voices[0])) {
-      lanes.push({ low, notes: single(voices[0], 'top') }, { low, notes: single(voices[0], 'bottom') });
+      lanes.push({ low, from, notes: single(voices[0], 'top') }, { low, from, notes: single(voices[0], 'bottom') });
     } else {
-      lanes.push({ low, named, notes: single(voices[0], 'top') });
+      lanes.push({ low, from, named, notes: single(voices[0], 'top') });
     }
   }
   return lanes;
@@ -109,21 +126,22 @@ export function findVoices(score: XScore): Voices {
   const sung = score.parts.filter((p) => !INSTRUMENT.test(p.name));
   // A hymn written for piano (one part named "Piano") is still the choir's four parts.
   const parts = sung.length ? sung : score.parts;
-  const lanes = parts.flatMap(lanesOf);
+  const lanes = parts.flatMap((p) => lanesOf(p, score.parts.indexOf(p)));
 
   // Four parts named for their voices: trust the names.
   const byName = new Map(lanes.filter((l) => l.named).map((l) => [l.named!, l]));
   if (byName.size >= 2 && lanes.every((l) => l.named)) {
-    return { lines: ['S', 'A', 'T', 'B'].filter((p) => byName.has(p)).map((p) => ({ part: p, notes: byName.get(p)!.notes })), layout: 'named parts' };
+    return { lines: ['S', 'A', 'T', 'B'].filter((p) => byName.has(p)).map((p) => ({ part: p, notes: byName.get(p)!.notes, from: byName.get(p)!.from })), layout: 'named parts' };
   }
 
   const high = lanes.filter((l) => !l.low).slice(0, 2);
   const low = lanes.filter((l) => l.low).slice(0, 2);
   const lines: VoiceLine[] = [];
-  if (high[0]) lines.push({ part: 'S', notes: high[0].notes });
-  if (high[1]) lines.push({ part: 'A', notes: high[1].notes });
-  if (low.length === 2) lines.push({ part: 'T', notes: low[0].notes }, { part: 'B', notes: low[1].notes });
-  else if (low[0]) lines.push({ part: 'B', notes: low[0].notes });
+  const line = (part: string, l: Lane): VoiceLine => ({ part, notes: l.notes, from: l.from });
+  if (high[0]) lines.push(line('S', high[0]));
+  if (high[1]) lines.push(line('A', high[1]));
+  if (low.length === 2) lines.push(line('T', low[0]), line('B', low[1]));
+  else if (low[0]) lines.push(line('B', low[0]));
   // A tune for men alone (e.g. TTBB with no treble staff): its top line leads.
   if (!high.length && lines.length) lines.sort((a, b) => 'TB'.indexOf(a.part) - 'TB'.indexOf(b.part));
   return { lines, layout: `${parts.length} part${parts.length === 1 ? '' : 's'}, ${lanes.length} line${lanes.length === 1 ? '' : 's'}` };

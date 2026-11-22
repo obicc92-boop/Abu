@@ -9,11 +9,11 @@ import { dohAt, dohTimeline, noteMidi, parseSolfa } from '../solfa';
 
 import { readMusicXml, type XScore } from './read';
 import { findVoices } from './satb';
-import { toSolfa, type SolfaText } from './to-solfa';
+import { toSolfa, type SolfaOptions, type SolfaText } from './to-solfa';
 
-export { readMusicXml, type XScore } from './read';
+export { readMusicXml, type XClef, type XDirection, type XKey, type XMeasure, type XNote, type XPart, type XScore, type XTime } from './read';
 export { findVoices, type VoiceLine } from './satb';
-export { syllable, toSolfa, type SolfaText } from './to-solfa';
+export { syllable, toSolfa, type SolfaLine, type SolfaOptions, type SolfaText } from './to-solfa';
 
 /** The MusicXML inside a compressed .mxl file (a zip with META-INF/container.xml). */
 export function unzipMxl(bytes: Uint8Array): string {
@@ -33,9 +33,13 @@ export interface Conversion extends SolfaText {
   layout: string;
 }
 
-export function musicXmlToSolfa(input: string | Uint8Array, opts: { barsPerLine?: number } = {}): Conversion {
+export function musicXmlToSolfa(input: string | Uint8Array, opts: SolfaOptions = {}): Conversion {
   const xml = typeof input === 'string' ? input : isZip(input) ? unzipMxl(input) : strFromU8(input);
-  const score: XScore = readMusicXml(xml);
+  return scoreToSolfa(readMusicXml(xml), opts);
+}
+
+/** A score (read from MusicXML, or from a staff sheet's picture: src/staff) as sol-fa, checked. */
+export function scoreToSolfa(score: XScore, opts: SolfaOptions = {}): Conversion {
   const voices = findVoices(score);
   if (!voices.lines.length) throw new Error('No sung or played notes were found in this score.');
   const out = toSolfa(score, voices.lines, opts);

@@ -2,7 +2,10 @@
  * Writes soprano, alto, tenor and bass lines as SolfaScores sol-fa text (see
  * docs/solfa-format.md): each beat in the simplest form that fits (whole,
  * halves, thirds, quarters or sixths), holds, rests, octave marks, raised and
- * lowered notes named from how they're spelt, and verse 1 under the soprano.
+ * lowered notes named from how they're spelt, verse 1's words under each part
+ * that has them, slurs in brackets, and the score's dynamics, tempo, repeats,
+ * jumps, key changes ("Doh is F") and sections ("[Chorus]"), as sheets print
+ * them (22 November 2026, for staff notation read into sol-fa).
  */
 import { dohMidi, isLowPart, mod12 } from '../solfa';
 
@@ -23,8 +26,12 @@ export interface SolfaText {
   /** Starting doh, e.g. "Bb". */
   key: string;
   time: string;
+  /** The tempo printed at the start ("Andante", "M. 80"), or "". */
+  tempo: string;
   parts: string[];
   bars: number;
+  /** The lines of music, as written in `text`. */
+  lines: SolfaLine[];
   /** Where the text can't say exactly what the score says (rhythms rounded, time changes...). */
   problems: string[];
   /** The notes the text should play, per part: the check compares SolfaScores' reading of the text with these. */
@@ -76,9 +83,30 @@ interface BeatNote {
   midi: number;
   token: string;
   lyric?: { text: string; syllabic: string };
+  /** A slur's first note, and its last (the brackets round them: `(s :f |m)`). */
+  opens?: boolean;
+  closes?: boolean;
+  /** After a slur's first note: it takes no syllable of its own. */
+  slurred?: boolean;
 }
 
-export function toSolfa(score: XScore, lines: VoiceLine[], opts: { barsPerLine?: number } = {}): SolfaText {
+/** A line of music as written: the bars it holds (indexes into the score's measures) and its rows. */
+export interface SolfaLine {
+  bars: number[];
+  /** Its part rows, each with its words under it if it has any. */
+  rows: string;
+  /** A new key from its start ("F"), or a section starting there ("Chorus"). */
+  key?: string;
+  section?: string;
+}
+
+export interface SolfaOptions {
+  barsPerLine?: number;
+  /** The lines of music as the sheet set them: each a list of bar indexes, in order (a staff score's systems). */
+  systems?: number[][];
+}
+
+export function toSolfa(score: XScore, lines: VoiceLine[], opts: SolfaOptions = {}): SolfaText {
   const problems: string[] = [];
   const time = score.times[0] ?? { at: 0, beats: 4, beatType: 4 };
   if (score.times.some((t) => t.beats !== time.beats || t.beatType !== time.beatType)) problems.push('The time signature changes; SolfaScores keeps one time per song.');
@@ -101,10 +129,18 @@ export function toSolfa(score: XScore, lines: VoiceLine[], opts: { barsPerLine?:
     shift.push(i === 0 ? whole - len : 0);
     beatAt += Math.max(1, whole);
   });
+  const barOf = (q: number) => {
+    const i = measures.findIndex((m) => q < m.start + m.length - EPS);
+    return i < 0 ? measures.length - 1 : i;
+  };
   const toBeat = (q: number): number => {
-    let i = measures.findIndex((m) => q < m.start + m.length - EPS);
-    if (i < 0) i = measures.length - 1;
+    const i = barOf(q);
     return barStart[i] + shift[i] + (q - measures[i].start) / beatQ;
+  };
+  /** The bar and the beat in it where a time falls. */
+  const beatIn = (q: number): [bar: number, beat: number] => {
+    const bar = barOf(q);
+    return [bar, Math.max(0, Math.min(barBeats[bar] - 1, Math.floor(toBeat(q) - barStart[bar] + EPS)))];
   };
 
   // Keys: doh moves to the nearest place at each change, as SolfaScores' player does.
@@ -124,9 +160,43 @@ export function toSolfa(score: XScore, lines: VoiceLine[], opts: { barsPerLine?:
   }
   const keyAt = (bar: number) => [...keyBars].reverse().find((k) => k.bar <= bar) ?? keyBars[0];
 
+  // What the score marks besides notes, in braces before the beat they start on (docs/solfa-format.md): a part's
+  // dynamics in its own row, the tempo and repeats in the first part's row (each mark is read once), jumps and ends
+  // after their bar's last note, and sections above the line they start.
+  const before: Record<string, string[][][]> = {}; // part -> bars -> beats -> marks
+  const after: string[][] = barBeats.map(() => []); // bar -> jumps and ends, in the first part's row
+  const sectionAt = new Map<number, string>();
+  let tempo = '';
+  const first = lines[0]?.part;
+  for (const l of lines) before[l.part] = barBeats.map((n) => Array.from({ length: n }, () => []));
+  const firstNote = Math.min(...lines.flatMap((l) => l.notes.map((n) => n.start)), Infinity);
+  for (const d of score.directions ?? []) {
+    const bar = Math.max(0, Math.min(d.bar, barBeats.length - 1));
+    if (d.kind === 'section') {
+      if (!sectionAt.has(bar)) sectionAt.set(bar, d.text);
+      continue;
+    }
+    if (d.kind === 'end') {
+      if (!after[bar].includes(d.text)) after[bar].push(d.text);
+      continue;
+    }
+    // A metronome mark is in quarter notes a minute; the song counts its own beats.
+    const text = d.kind === 'tempo' ? d.text.replace(/\bM\. (\d+)/, (_, q) => `M. ${Math.round(Number(q) / beatQ)}`) : d.text;
+    if (d.kind === 'tempo' && !tempo && d.at <= Math.max(0, firstNote) + EPS) {
+      tempo = text;
+      continue;
+    }
+    const [b, beat] = beatIn(d.at);
+    const rows = d.part === null ? (first ? [first] : []) : lines.filter((l) => l.from && l.from.part === d.part && (d.staff === undefined || l.from.staff === d.staff)).map((l) => l.part);
+    for (const part of rows) {
+      const here = before[part][b][beat];
+      if (!here.includes(text)) here.push(text);
+    }
+  }
+
   const planned: Record<string, PlannedNote[]> = {};
   const written: Record<string, string[][]> = {}; // part -> bars -> beats
-  const lyricsByBar: string[][] = barBeats.map(() => []); // soprano syllable tokens per bar, in note order
+  const lyricsByBar: Record<string, string[][]> = {}; // part -> bars -> syllable tokens, in note order
 
   for (const line of lines) {
     const low = isLowPart(line.part);
@@ -137,12 +207,31 @@ export function toSolfa(score: XScore, lines: VoiceLine[], opts: { barsPerLine?:
         const k = keyAt(bar);
         const s = syllable(n.midi, k.doh - (low ? 12 : 0), k.name[0], n.step, n.alter);
         if (Math.abs(s.octave) > 2) problems.push(`${line.part}: a note is more than two octaves from doh.`);
-        return { start, end: start + n.dur / beatQ, midi: n.midi, token: s.name + octaveMark(s.octave), lyric: n.lyric };
+        return { start, end: start + n.dur / beatQ, midi: n.midi, token: s.name + octaveMark(s.octave), lyric: n.lyric, slurStart: n.slurStart, slurStop: n.slurStop };
       })
-      .sort((a, b) => a.start - b.start);
+      .sort((a, b) => a.start - b.start)
+      .map(({ slurStart, slurStop, ...n }) => ({ ...n, ...(slurStart ? { opens: true } : {}), ...(slurStop ? { closes: true } : {}) }) as BeatNote & { opens?: boolean; closes?: boolean });
+    // Slurs paired from first note to last (one at a time: a slur inside another is the same syllable anyway). In
+    // sol-fa a slur's notes after the first take no syllable, so a slur over notes that each have their own (a
+    // phrase mark, not one syllable sung over several notes) is left out, keeping the words with their notes.
+    let open = -1;
+    notes.forEach((n, i) => {
+      const opens = n.opens;
+      const closes = n.closes;
+      n.opens = n.closes = false;
+      if (open >= 0 && closes && i > open && notes.slice(open + 1, i + 1).some((m) => m.lyric?.text.trim())) open = -1;
+      else if (open >= 0 && closes && i > open) {
+        notes[open].opens = true;
+        n.closes = true;
+        for (let k = open + 1; k <= i; k++) notes[k].slurred = true;
+        open = -1;
+      }
+      if (open < 0 && opens && !closes) open = i;
+    });
 
     const out: PlannedNote[] = (planned[line.part] = []);
     const bars: string[][] = (written[line.part] = barBeats.map(() => []));
+    const words: string[][] = (lyricsByBar[line.part] = barBeats.map(() => []));
     let ni = 0;
     let rounded = false;
     let last: PlannedNote | null = null;
@@ -160,17 +249,18 @@ export function toSolfa(score: XScore, lines: VoiceLine[], opts: { barsPerLine?:
           d = err(6) < err(4) ? 6 : 4;
         }
         const step = 1 / d;
-        const snap = (x: number) => B + Math.round((x - B) * d!) / d!;
+        // Only edges inside this beat are snapped: a note from before it isn't struck again on it (Math.round(-0.5) is 0).
+        const snap = (x: number) => (x < B - EPS ? x : B + Math.round((x - B) * d!) / d!);
         const slots: Slot[] = [];
         for (let k = 0; k < d; k++) {
           const t = B + k * step;
           const starting = here.find((n) => Math.abs(snap(n.start) - t) < EPS);
           if (starting) {
-            slots.push({ kind: 'start', token: starting.token });
+            slots.push({ kind: 'start', token: `${starting.opens ? '(' : ''}${starting.token}${starting.closes ? ')' : ''}` });
             // As SolfaScores will play it: a note runs on through holds, and stops at a rest or the next note.
             last = { start: t, dur: step, midi: starting.midi };
             out.push(last);
-            if (line.part === lines[0].part) lyricsByBar[bar].push(lyricToken(starting.lyric));
+            if (!starting.slurred) words[bar].push(lyricToken(starting.lyric));
             continue;
           }
           const covering = here.find((n) => snap(n.start) < t - EPS && snap(n.end) > t + EPS);
@@ -185,24 +275,31 @@ export function toSolfa(score: XScore, lines: VoiceLine[], opts: { barsPerLine?:
         bars[bar].push(writeBeat(slots));
       }
     }
+    // A slur whose last note couldn't be written leaves a bracket open: the part's slurs are left out instead.
+    const all = bars.flat().join('');
+    if ((all.match(/\(/g) ?? []).length !== (all.match(/\)/g) ?? []).length) for (const bar of bars) bar.forEach((beat, i) => (bar[i] = beat.replace(/[()]/g, '')));
     if (rounded) problems.push(`${line.part}: some rhythms were rounded to the nearest quarter or sixth of a beat.`);
     const off = notes.filter((n) => !out.some((p) => p.midi === n.midi && Math.abs(p.start - n.start) < 1e-4 && Math.abs(p.start + p.dur - n.end) < 1e-4)).length;
     if (off) problems.push(`${line.part}: ${off} note${off === 1 ? '' : 's'} can’t be written exactly.`);
   }
 
-  // Lines of music: about 16 beats each, starting a new line at a key change.
-  const per = opts.barsPerLine ?? Math.max(2, Math.round(16 / bpb));
-  const systems: number[][] = [];
-  let current: number[] = [];
-  for (let bar = 0; bar < barBeats.length; bar++) {
-    const keyChange = keyBars.some((k) => k.bar === bar && bar > 0);
-    if (current.length && (current.length >= per || keyChange)) {
-      systems.push(current);
-      current = [];
+  // Lines of music: as the sheet set them, or about 16 beats each, starting a new line at a key change or a section.
+  let systems: number[][];
+  if (opts.systems?.length) systems = opts.systems.map((s) => s.filter((b) => b >= 0 && b < barBeats.length)).filter((s) => s.length);
+  else {
+    const per = opts.barsPerLine ?? Math.max(2, Math.round(16 / bpb));
+    systems = [];
+    let current: number[] = [];
+    for (let bar = 0; bar < barBeats.length; bar++) {
+      const keyChange = keyBars.some((k) => k.bar === bar && bar > 0);
+      if (current.length && (current.length >= per || keyChange || sectionAt.has(bar))) {
+        systems.push(current);
+        current = [];
+      }
+      current.push(bar);
     }
-    current.push(bar);
+    if (current.length) systems.push(current);
   }
-  if (current.length) systems.push(current);
 
   const head = [
     score.title ? `title: ${oneLine(score.title)}` : '',
@@ -210,26 +307,32 @@ export function toSolfa(score: XScore, lines: VoiceLine[], opts: { barsPerLine?:
     score.lyricist ? `lyricist: ${oneLine(score.lyricist)}` : '',
     `key: ${keyBars[0].name}`,
     `time: ${time.beats}/${time.beatType}`,
+    tempo ? `tempo: ${tempo}` : '',
   ].filter(Boolean);
-  const blocks: string[] = [];
-  for (const sys of systems) {
-    const lines2: string[] = [];
-    const change = keyBars.find((k) => k.bar === sys[0] && sys[0] > 0);
-    if (change) lines2.push(`key: ${change.name}`);
+  const solfaLines: SolfaLine[] = systems.map((sys) => {
+    const rows: string[] = [];
     for (const line of lines) {
       const barsText = sys.map((bar) => {
-        const beats = written[line.part][bar];
-        // A bar of rests still needs a mark, or the bar would vanish.
-        return (beats.every((x) => x === '') ? ['x', ...beats.slice(1)] : beats).join(' :');
+        const raw = written[line.part][bar];
+        // A bar of rests still needs a rest written, or the bar would vanish (marks in braces don't count).
+        const beats = (raw.every((x) => x === '') ? ['x', ...raw.slice(1)] : raw).map((beat, i) => {
+          const marks = before[line.part][bar][i];
+          return marks.length ? `${marks.map((m) => `{${m}}`).join('')}${beat}` : beat;
+        });
+        const text = beats.join(' :');
+        const ends = line.part === first ? after[bar] : [];
+        return ends.length ? `${text} ${ends.map((m) => `{${m}}`).join(' ')}` : text;
       });
-      lines2.push(`${line.part.padEnd(2)} ${barsText.join(' | ')} |`);
-      if (line.part === lines[0].part) {
-        const words = joinWords(sys.flatMap((bar) => lyricsByBar[bar]));
-        if (words) lines2.push(`W  ${words}`);
-      }
+      rows.push(`${line.part.padEnd(2)} ${barsText.join(' | ')} |`);
+      const words = joinWords(sys.flatMap((bar) => lyricsByBar[line.part][bar]));
+      if (words) rows.push(`W  ${words}`);
     }
-    blocks.push(lines2.join('\n'));
-  }
+    const change = keyBars.find((k) => k.bar === sys[0] && sys[0] > 0);
+    const section = sys.map((bar) => sectionAt.get(bar)).find(Boolean);
+    return { bars: sys, rows: rows.join('\n'), ...(change ? { key: change.name } : {}), ...(section ? { section } : {}) };
+  });
+  // A section or key starting inside a line of music the sheet set: written above that line.
+  const blocks = solfaLines.map((l) => [l.section ? `[${l.section}]` : '', l.key ? `Doh is ${l.key}` : '', l.rows].filter(Boolean).join('\n'));
 
   return {
     text: `${head.join('\n')}\n\n${blocks.join('\n\n')}\n`,
@@ -237,8 +340,10 @@ export function toSolfa(score: XScore, lines: VoiceLine[], opts: { barsPerLine?:
     composer: score.composer,
     key: keyBars[0].name,
     time: `${time.beats}/${time.beatType}`,
+    tempo,
     parts: lines.map((l) => l.part),
     bars: barBeats.length,
+    lines: solfaLines,
     problems: [...new Set(problems)],
     planned,
   };

@@ -40,7 +40,7 @@ export function AddSongSheet({ open, onClose, onLibrary }: { open: boolean; onCl
   const ways: Way[] = [
     { title: 'Write it', sub: 'Part by part, with the sol-fa keys', icon: <PencilIcon color={ink('A')} />, wash: wash(colors.gold), go: () => router.push('/write') },
     ...(Platform.OS === 'web'
-      ? [{ title: 'Scan a sheet', sub: 'A PDF or photos, typed or handwritten', icon: <ScanLineIcon color={ink('T')} />, wash: wash(ink('T')), go: () => router.push('/scan') }]
+      ? [{ title: 'Scan a sheet', sub: 'Sol-fa or staff notation: a PDF, photos or MusicXML', icon: <ScanLineIcon color={ink('T')} />, wash: wash(ink('T')), go: () => router.push('/scan') }]
       : []),
     { title: 'Paste sol-fa', sub: 'Text you already have, from a chat or a document', icon: <ClipboardIcon color={ink('B')} />, wash: wash(ink('B')), go: () => router.push('/paste') },
     {

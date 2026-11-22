@@ -223,7 +223,7 @@ Details and numbers are in `abu-reader/README.md` ("Handwritten sheets, measured
 
 ## What the owner needs to provide or decide
 
-0. **SonkoMusic's reader and PDMX:** whether Abụ may reuse SonkoMusic's reader code and its copy of PDMX (both the owner's, and PDMX is public domain or CC0). Also whether PDMX hymns may become songs in Abụ's library once converted and checked.
+0. **SonkoMusic's reader and PDMX:** whether Abụ may reuse SonkoMusic's reader code and its copy of PDMX (both the owner's, and PDMX is public domain or CC0). Also whether PDMX hymns may become songs in Abụ's library once converted and checked. *(22 November 2026: SonkoMusic's piano-score reader is now SolfaScores' staff reader, for the owner's request to read staff notation into sol-fa; see `abu-app/src/staff/README.md`. The owner can say otherwise. PDMX's use in the library is still open.)*
 
 1. **Sample sheets:** 10 to 20 typical sheets, typed and handwritten, from the pilot choir and others. For each, the correct sol-fa typed out once; choir members can help. They stay private, out of the repository, as now.
 2. **An outside AI:** whether Abụ may use Anthropic's Claude (through Cloudflare AI Gateway) when Cloudflare's own models aren't accurate enough. That needs an Anthropic account and API key.

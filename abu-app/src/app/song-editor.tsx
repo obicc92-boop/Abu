@@ -58,8 +58,9 @@ B  d1:- /f1:s1 | l1:m1 /d1:s1 | d1:- /- :-  |`;
 
 export default function SongEditorScreen() {
   const { id, from, bar } = useLocalSearchParams<{ id?: string; from?: string; bar?: string }>();
-  // A song from a scan, or pasted on the Paste sol-fa screen (src/app/paste.tsx).
-  const [draft] = useState(() => (id ? null : from === 'scan' ? scanDraft() : from === 'paste' ? takePastedDraft() : null));
+  // A song from a scan, or pasted on the Paste sol-fa screen (src/app/paste.tsx), or a MusicXML file chosen on Scan a
+  // sheet (written in sol-fa by src/musicxml and handed over as pasted sol-fa is).
+  const [draft] = useState(() => (id ? null : from === 'scan' ? scanDraft() : from === 'paste' || from === 'musicxml' ? takePastedDraft() : null));
   // A song being written from Write it: its details from step 1, and what's written so far.
   const [written] = useState(() => (!id && from === 'write' ? newSong() : null));
   const { status } = useSession();
@@ -73,10 +74,24 @@ export default function SongEditorScreen() {
       </Page>
     );
   }
-  return <Editor song={existing.data} draft={draft} pasted={from === 'paste'} written={written} startBar={Number(bar) || null} />;
+  return <Editor song={existing.data} draft={draft} pasted={from === 'paste' || from === 'musicxml'} musicXml={from === 'musicxml'} written={written} startBar={Number(bar) || null} />;
 }
 
-function Editor({ song, draft, pasted, written, startBar }: { song?: Song; draft: ScanDraft | null; pasted: boolean; written: NewSong | null; startBar: number | null }) {
+function Editor({
+  song,
+  draft,
+  pasted,
+  musicXml,
+  written,
+  startBar,
+}: {
+  song?: Song;
+  draft: ScanDraft | null;
+  pasted: boolean;
+  musicXml: boolean;
+  written: NewSong | null;
+  startBar: number | null;
+}) {
   const styles = useStyles();
   const colors = useColors();
   const s = useSession();
@@ -473,9 +488,11 @@ function Editor({ song, draft, pasted, written, startBar }: { song?: Song; draft
               ? 'Each part in its own row, with the sol-fa keys. Every bar is checked as you go.'
               : draft && !pasted
                 ? 'Check the title, key and time, then save.'
-                : pasted
-                  ? 'Check what you pasted, then save.'
-                  : 'Type or paste the sol-fa; it’s checked as you type.'
+                : musicXml
+                  ? 'Written in sol-fa from the MusicXML file. Check it, then save.'
+                  : pasted
+                    ? 'Check what you pasted, then save.'
+                    : 'Type or paste the sol-fa; it’s checked as you type.'
         }
       />
       {written ? <Steps at={2} names={WRITE_STEPS} /> : null}

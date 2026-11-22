@@ -203,7 +203,103 @@ describe('key changes', () => {
 
   it('starts a new line with the new key, moving doh to the nearest G (below), as the player does', () => {
     const out = musicXmlToSolfa(xml);
-    expect(out.text).toBe(['key: C', 'time: 4/4', '', 'S  d :r :m :f |', '', 'key: G', "S  d' :- :- :- |", ''].join('\n'));
+    expect(out.text).toBe(['key: C', 'time: 4/4', '', 'S  d :r :m :f |', '', 'Doh is G', "S  d' :- :- :- |", ''].join('\n'));
+    expect(out.lines.map((l) => [l.bars, l.key])).toEqual([
+      [[0], undefined],
+      [[1], 'G'],
+    ]);
+    expect(out.verified).toBe(true);
+  });
+});
+
+describe('a note running over a beat', () => {
+  it('is held on the beat, not struck again (two dotted crotchets in 3/4)', () => {
+    const out = musicXmlToSolfa(
+      scoreXml([
+        {
+          name: 'Melody',
+          attributes: '<divisions>2</divisions><key><fifths>0</fifths></key><time><beats>3</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef>',
+          bars: [{ length: 6, voices: [{ voice: '1', notes: 'G4/3 E4/3' }] }],
+        },
+      ]),
+    );
+    expect(out.text.split('\n').filter((l) => l.startsWith('S '))).toEqual(['S  s :-.m :- |']);
+    expect(out.problems).toEqual([]);
+    expect(out.verified).toBe(true);
+  });
+});
+
+describe('what a score marks besides its notes', () => {
+  const C = '<divisions>2</divisions><key><fifths>0</fifths></key><time><beats>4</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef>';
+  const words = (w: string) => `<direction><direction-type><words>${w}</words></direction-type></direction>`;
+  const slurred = (xml: string) =>
+    xml
+      .replace('<pitch><step>E</step><octave>4</octave></pitch><duration>2</duration>', '$&<notations><slur type="start" number="1"/></notations>')
+      .replace('<pitch><step>F</step><octave>4</octave></pitch><duration>2</duration>', '$&<notations><slur type="stop" number="1"/></notations>');
+  const xml = slurred(
+    scoreXml([
+      {
+        name: 'Soprano',
+        attributes: C,
+        bars: [
+          {
+            length: 8,
+            extra:
+              '<direction><direction-type><words>Andante</words></direction-type><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>72</per-minute></metronome></direction-type></direction>' +
+              '<direction><direction-type><dynamics><p/></dynamics></direction-type></direction>' +
+              '<barline location="left"><repeat direction="forward"/></barline>',
+            voices: [{ voice: '1', notes: 'C4/2 D4/2 E4/2 F4/2', words: ['Glo-', '-ry', 'to', null] }],
+          },
+          {
+            length: 8,
+            extra: '<direction><direction-type><rehearsal>Chorus</rehearsal></direction-type></direction><direction><direction-type><wedge type="crescendo"/></direction-type><offset>4</offset></direction>',
+            voices: [{ voice: '1', notes: 'G4/8', words: ['God'] }],
+          },
+          {
+            length: 8,
+            extra: '<barline location="left"><ending number="1" type="start"/></barline>' + words('D.S. al Coda') + '<barline location="right"><repeat direction="backward"/></barline>',
+            voices: [{ voice: '1', notes: 'G4/8' }],
+          },
+        ],
+      },
+      {
+        name: 'Alto',
+        attributes: C,
+        bars: [
+          { length: 8, extra: '<direction><direction-type><dynamics><mf/></dynamics></direction-type></direction>', voices: [{ voice: '1', notes: 'C4/8', words: ['Glo-'] }] },
+          { length: 8, voices: [{ voice: '1', notes: 'C4/8', words: ['-ry'] }] },
+          { length: 8, voices: [{ voice: '1', notes: 'C4/8' }] },
+        ],
+      },
+    ]),
+  );
+
+  it('writes dynamics in their own part, the tempo at the top, repeats, jumps, slurs and a section', () => {
+    const out = musicXmlToSolfa(xml);
+    expect(out.tempo).toBe('Andante M. 72');
+    expect(out.text).toContain('tempo: Andante M. 72');
+    expect(out.text.split('\n').filter((l) => /^(S|A|W)\s|^\[/.test(l))).toEqual([
+      'S  {p}{|:}d :r :(m :f) |',
+      'W  Glo-ry to',
+      'A  {mf}d :- :- :- |',
+      'W  Glo-',
+      '[Chorus]',
+      'S  s :- :{<}- :- | {1.}s :- :- :- {D.S. al Coda} {:|} |',
+      'W  God',
+      'A  d :- :- :- | d :- :- :- |',
+      'W  ry',
+    ]);
+    expect(out.lines.map((l) => [l.bars, l.section])).toEqual([
+      [[0], undefined],
+      [[1, 2], 'Chorus'],
+    ]);
+    expect(out.mismatches).toEqual([]);
+  });
+
+  it('keeps the lines of music the sheet set, when told them', () => {
+    const out = musicXmlToSolfa(xml, { systems: [[0, 1], [2]] });
+    expect(out.lines.map((l) => l.bars)).toEqual([[0, 1], [2]]);
+    expect(out.lines[0].section).toBe('Chorus');
     expect(out.verified).toBe(true);
   });
 });

@@ -4,7 +4,7 @@
  * and the songs you're learning; then lists of rows, each with an icon, what it's set to and a chevron, that open
  * in place: your groups (tap to show one, the part pill to change your part there, join or start one), settings
  * (appearance, the player's sound, Perform's background, saved for offline, installing the app) and your account
- * (email, password, signing out). The version, the privacy note and the sounds' credits close it.
+ * (email, password, signing out). The version, the privacy note and the credits (sounds, the staff reader) close it.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Constants from 'expo-constants';
@@ -752,6 +752,11 @@ function About() {
         (https://creativecommons.org/licenses/by/4.0/), https://doi.org/10.5281/zenodo.1442513. Trimmed, looped, converted
         to mono and re-encoded. Choir 2: Fluid (R3) SoundFont, Copyright (c) 2000-2002, 2008 Frank Wen, MIT licence.
         Strings: public domain recordings. The licences in full: solfascores.com/sounds/LICENSES.txt
+      </Text>
+      {/* The staff reader learned in part from PDMX, whose licence asks for this credit (src/staff/README.md). */}
+      <Text style={styles.aboutText}>
+        Staff reader: learned in part from PDMX: A Large-Scale Public Domain MusicXML Dataset, by Phillip Long, Zachary
+        Novack, Taylor Berg-Kirkpatrick and Julian McAuley, CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/).
       </Text>
     </View>
   );
