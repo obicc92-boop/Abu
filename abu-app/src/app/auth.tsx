@@ -1,7 +1,7 @@
 /**
  * Sign up or sign in with email and password. Afterwards, carries on to what
  * the person chose on the welcome screen (join, start a group, just me).
- * Email codes and Google sign-in come later.
+ * Forgot your password? opens /forgot-password. Email codes and Google sign-in come later.
  */
 import { useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -15,6 +15,13 @@ import { makeStyles } from '@/theme/theme';
 import { fonts } from '@/theme/tokens';
 
 type Next = 'join' | 'create-group' | 'just-me';
+
+/**
+ * "Forgot your password?" shows once SolfaScores can send email: the account on Workers Paid and solfascores.com
+ * set up for sending (the owner's steps, "Finishing the MVP" in docs/app-plan.md). Until then /forgot-password
+ * works only for whoever opens it, to try a real email first.
+ */
+const FORGOT_PASSWORD = false;
 
 export default function Auth() {
   const styles = useStyles();
@@ -84,6 +91,16 @@ export default function Auth() {
           hint={signingUp ? 'At least 8 characters.' : undefined}
           onSubmitEditing={submit}
         />
+        {signingUp || !FORGOT_PASSWORD ? null : (
+          <Pressable
+            onPress={() => router.push({ pathname: '/forgot-password', params: email.trim() ? { email: email.trim() } : {} })}
+            accessibilityRole="link"
+            hitSlop={8}
+            style={styles.forgot}
+          >
+            <Text style={styles.forgotText}>Forgot your password?</Text>
+          </Pressable>
+        )}
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <Button label={signingUp ? 'Create account' : 'Sign in'} onPress={submit} busy={busy} />
       </Card>
@@ -114,6 +131,8 @@ function friendlyAuthError(message: string | undefined, status: number, signingU
 
 const useStyles = makeStyles((colors) => ({
   error: { fontFamily: fonts.bold, fontSize: 14, color: colors.danger },
+  forgot: { alignSelf: 'flex-end', marginTop: -4 },
+  forgotText: { fontFamily: fonts.bold, fontSize: 14, color: colors.link },
   switch: { padding: 8 },
   switchStrong: { fontFamily: fonts.heavy, color: colors.link },
 }));

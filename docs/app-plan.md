@@ -204,6 +204,33 @@ Each milestone ends merged, pushed and deployed. Home grows with them: each mile
    - The Android build tested on Tecno, Infinix and itel phones. *Ready to build (owner).*
    - The pilot choir onboarded. *Owner.*
 
+### Finishing the MVP: to do
+
+Made 22 November 2026, at the owner's request, from what milestones 1 to 8 left. Tick each one off here as it's done.
+
+**To build:**
+
+- [ ] **Forgot password.** *Built and tested, 22 November 2026; waiting for the owner's Cloudflare steps below.* "Forgot your password?" on Sign in asks for your email and sends a link (from no-reply@solfascores.com, through Cloudflare's Email Service) that opens a page to choose a new password. The link works for one hour and once; saving the new password signs the account out on every phone. It says the same whether or not there's an account, and sends at most 3 links an hour to an account and 60 for everyone. Code: `sendResetPassword` in `abu-api/src/auth.ts`, the email in `abu-api/src/email.ts`, the pages `abu-app/src/app/forgot-password.tsx` and `reset-password.tsx`. The link on Sign in stays hidden (`FORGOT_PASSWORD` in `abu-app/src/app/auth.tsx`) until a real email has got through; solfascores.com/forgot-password works already, to try it.
+- [ ] **The Schedule's month view**, beside the list (This week, Next week, Later).
+- [ ] **Rehearsals on two days a week in one go**, for example Tuesday and Saturday for the next 12 weeks. Today each day is planned as its own series.
+- [ ] **Phone app: sheets kept offline**, as the web app keeps them (on Wi-Fi only with the data saver).
+- [ ] **Phone app: knowing when it's offline**, so the "Offline" bar shows and changes say "No connection".
+- [ ] **Phone app: Download the register while signed in.** Today it opens the browser, which isn't signed in.
+
+**To check on a phone,** once the Android build is made:
+
+- [ ] The player and the sounds (Synth, Piano, Strings, Choir, Choir 2) on Tecno, Infinix and itel phones. Nobody has heard them on a phone yet.
+- [ ] The owner's checklist under "The Android test build", below.
+
+**The owner:**
+
+- [ ] **Switch to Cloudflare's Workers Paid plan** (owner's decision, 22 November 2026: US$5 a month, with 3,000 emails a month included, then US$0.35 per 1,000). Forgot password needs it to send email to any address. It also lifts the free plan's daily limit on Cloudflare's AI for scanning (about 165 corrections a day). In the Cloudflare dashboard, open **Workers & Pages** and choose to upgrade to Workers Paid (the dashboard's menus move; Cloudflare's billing help has the current steps).
+- [ ] **Set up solfascores.com for sending.** In the dashboard: **Compute** → **Email Service** → **Email Sending** → **Onboard Domain**, choose solfascores.com, and **Done**. Cloudflare adds the records itself (MX, SPF and DKIM on `cf-bounce.solfascores.com`, and DMARC), usually ready in 5 to 15 minutes. Then open solfascores.com/forgot-password, enter your own email, and tell the builder whether the email came (and whether it landed in Spam). Once it does, the link goes on Sign in.
+- [ ] **Make the Android test build**, and check it on the phones (steps below).
+- [ ] **Bring in the pilot choir** (steps below). This can start on the web app before the Android build.
+
+Not part of the MVP, and left for later as the plan says: notifications, the admin page for seeing every song, the group photo, birthdays, text size, language, other ways to sign in (email codes, Google, phone number), and scanning in the phone app (scanning, staff sheets included, is in the web app).
+
 ### Pilot ready: the owner's steps
 
 **1. The Android test build (about 30 minutes, mostly waiting).**
