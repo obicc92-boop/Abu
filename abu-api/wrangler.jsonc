@@ -50,6 +50,8 @@
   ],
   "workers_dev": true,
   // Where sign-in lives.
-  "vars": { "BETTER_AUTH_URL": "https://solfascores.com" },
+  // AUTO_COVERS: every song and collection without a cover gets one made by AI (src/auto-covers.ts; owner's request,
+  // 25 November 2026). "off" stops it; the tests run with it off.
+  "vars": { "BETTER_AUTH_URL": "https://solfascores.com", "AUTO_COVERS": "on" },
   "observability": { "enabled": true },
 }

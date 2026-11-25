@@ -3,8 +3,7 @@
  * with a "See all" pill, and big square tiles side by side that scroll across. Each tile shows a bar of the song
  * itself, as on a sol-fa sheet (owner's request the same day): a row for each part in its colour, the words under
  * them. Resting, it's the first whole bar; playing, the tile follows the music bar by bar, the beat being sung lit
- * up and each new bar sliding in (src/lib/tile-bars.ts). A song with no sol-fa to hand gets a pattern drawn from
- * its id (src/lib/song-art.ts). The tile's play button starts the song at once (the app's player,
+ * up and each new bar sliding in (src/lib/tile-bars.ts). A song with no sol-fa to hand shows its cover. The tile's play button starts the song at once (the app's player,
  * src/audio/now-playing.tsx).
  *
  * A song with a cover picture (colleagues' request, 25 November 2026: a Home like Audiomack's) shows its picture
@@ -14,12 +13,11 @@ import { Link } from 'expo-router';
 import { Fragment, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
-import Svg, { Defs, Polyline, RadialGradient, Rect, Stop } from 'react-native-svg';
+import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { useNowPlaying } from '@/audio/now-playing';
 import { CoverArt } from '@/components/cover-art';
 import { PressScale } from '@/components/motion';
-import { songArt } from '@/lib/song-art';
 import { barAt, restingBar, tileBars, type TileBar } from '@/lib/tile-bars';
 import { displayBeat } from '@/score/layout';
 import { KEY_NAMES, parseSolfa, type ParsedSong } from '@/solfa';
@@ -85,7 +83,6 @@ export function SongTile({ song, badge }: { song: TileSong; badge?: 'known' }) {
   const { play, song: playing, player } = useNowPlaying();
   const parsed = useMemo(() => readSong(song.solfa, song.time, song.doh), [song.solfa, song.time, song.doh]);
   const bars = useMemo(() => (parsed ? tileBars(parsed) : []), [parsed]);
-  const pattern = useMemo(() => (bars.length ? [] : songArt(song.solfa, song.id)), [bars.length, song.solfa, song.id]);
 
   const mine = playing?.id === song.id;
   const isPlaying = mine && player.playing;
@@ -109,7 +106,8 @@ export function SongTile({ song, badge }: { song: TileSong; badge?: 'known' }) {
     play({ id: song.id, title: song.title, composer: song.composer, solfa: song.solfa, key: song.doh, parsed, countable: !!song.countable, cover: song.cover ?? null });
   };
   // With a cover, the picture shows while the song rests; the bars show over it while it plays or is paused.
-  const pictured = !!song.cover;
+  // With no sol-fa to hand there's no bar to show: its cover (a plain one until it has a picture) instead.
+  const pictured = !!song.cover || !parsed;
   const showBar = !pictured || following;
   const glow = `g${song.id.replace(/[^a-zA-Z0-9]/g, '')}`;
   return (
@@ -132,9 +130,6 @@ export function SongTile({ song, badge }: { song: TileSong; badge?: 'known' }) {
               </Defs>
               <Rect width="100" height="100" fill={colors.hero} />
               <Rect width="100" height="100" fill={`url(#${glow})`} />
-              {pattern.map((l) => (
-                <Polyline key={l.part} points={l.points} fill="none" stroke={partInk(l.part, true)} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
-              ))}
             </Svg>
           </View>
           )}

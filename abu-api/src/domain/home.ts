@@ -32,8 +32,11 @@ export interface HomeFeed {
   recent: HomeSong[];
   /** Up to 8 playable songs you haven't played (signed out: any), in trending order — "Find something new". */
   discover: HomeSong[];
-  /** Tags with at least 2 songs, up to 8, most songs first; each with up to 4 songs, those with covers first, for a collage. Empty when ?tag is given. */
-  collections: { tag: string; songs: number; covers: { id: string; title: string; cover_key: string | null }[] }[];
+  /**
+   * Tags with at least 2 songs, up to 8, most songs first; each with its own cover made by AI once there is one
+   * (src/auto-covers.ts), and up to 4 songs, those with covers first, for a collage until then. Empty when ?tag is given.
+   */
+  collections: { tag: string; songs: number; cover_key: string | null; covers: { id: string; title: string; cover_key: string | null }[] }[];
   /** Composers (trimmed composer, compared case-insensitively; skip empty, "anon", "anonymous", "unknown"), most songs first, up to 10, each with one song for its picture (one with a cover first). */
   composers: { name: string; songs: number; cover: { id: string; title: string; cover_key: string | null } }[];
 }
@@ -122,12 +125,12 @@ export async function homeFeed(db: D1Database, viewer: string | null, options: {
              picked as (
                select key, id, title, cover_key, row_number() over (partition by key order by cover_key is null, created_at desc, n desc) as r
                from (select distinct key, id, title, cover_key, created_at, n from tagged where key in (select key from top)))
-             select top.tag, top.songs, picked.id, picked.title, picked.cover_key
+             select top.tag, top.songs, (select tc.cover_key from tag_covers tc where tc.key = top.key) as tag_cover, picked.id, picked.title, picked.cover_key
              from top join picked on picked.key = top.key and picked.r <= ?
              order by top.songs desc, top.key, picked.r`,
           )
           .bind(...seen.values, LIMITS.collections, LIMITS.collage)
-          .all<{ tag: string; songs: number } & SongPicture>(),
+          .all<{ tag: string; songs: number; tag_cover: string | null } & SongPicture>(),
     db
       .prepare(
         `with c as (
@@ -147,7 +150,7 @@ export async function homeFeed(db: D1Database, viewer: string | null, options: {
 
   const byTag = new Map<string, HomeFeed['collections'][number]>();
   for (const r of collections?.results ?? []) {
-    const c = byTag.get(r.tag) ?? byTag.set(r.tag, { tag: r.tag, songs: r.songs, covers: [] }).get(r.tag)!;
+    const c = byTag.get(r.tag) ?? byTag.set(r.tag, { tag: r.tag, songs: r.songs, cover_key: r.tag_cover, covers: [] }).get(r.tag)!;
     c.covers.push({ id: r.id, title: r.title, cover_key: r.cover_key });
   }
   return {
