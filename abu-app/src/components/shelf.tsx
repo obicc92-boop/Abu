@@ -87,16 +87,21 @@ export function SongTile({ song, badge }: { song: TileSong; badge?: 'known' }) {
   const mine = playing?.id === song.id;
   const isPlaying = mine && player.playing;
   const paused = mine && !player.playing && player.pausedAt !== null;
-  // Playing or paused here: the bar the music is at; otherwise the song's first whole bar.
-  const following = (isPlaying || paused) && player.beat >= 0;
-  const bar = following ? barAt(bars, player.beat) : parsed ? restingBar(bars, parsed.beatsPerBar) : null;
+  // Playing or paused here: the bar the music is at (from the tap on, before its first beat sounds, the first
+  // bar), shown over the cover; otherwise the song's first whole bar.
+  const following = isPlaying || paused;
+  const started = following && player.beat >= 0;
+  const resting = parsed ? restingBar(bars, parsed.beatsPerBar) : null;
+  const bar = started ? barAt(bars, player.beat) : resting;
   const label = !parsed
     ? song.playable
       ? `Doh is ${KEY_NAMES[song.doh] ?? '?'} · ${song.time}`
       : 'Sheet only'
     : following && bar
       ? isPlaying
-        ? `Bar ${bar.number} of ${parsed.bars}`
+        ? started
+          ? `Bar ${bar.number} of ${parsed.bars}`
+          : 'Starting…'
         : `Paused · bar ${bar.number}`
       : `Doh is ${parsed.meta.key?.name ?? '?'} · ${parsed.meta.time}`;
 

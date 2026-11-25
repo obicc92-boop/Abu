@@ -30,7 +30,9 @@ export function MiniPlayer() {
   const parts = parsed.parts.slice(0, 4);
   // Playing a stretch of the song (a bar, or a loop, chosen on its score): says so, briefly.
   const line = player.playing
-    ? player.range
+    ? !started
+      ? 'Starting…'
+      : player.range
       ? `Bar ${bar}${player.range.loop ? ', looping' : ''}`
       : `Bar ${bar} of ${parsed.bars}`
     : player.pausedAt !== null
