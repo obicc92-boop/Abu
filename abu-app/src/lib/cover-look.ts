@@ -1,8 +1,8 @@
 /**
- * Covers the app draws itself, for songs whose creator hasn't chosen or made one (colleagues' request, 25 November
- * 2026: a Home that looks like a music app's, every song with a picture): a deep two-colour gradient picked from the
- * song's id, so each song keeps its own look, with its parts' opening melodies drawn over it (src/lib/song-art.ts).
- * And the glow Home's top takes from the song in front: the drawn cover's colour, or a picture's own.
+ * Covers the app draws itself, for a song until it has a picture (colleagues' request, 25 November 2026: a Home that
+ * looks like a music app's, every song with a picture; the AI makes one for each, abu-api/src/auto-covers.ts): a deep
+ * two-colour gradient picked from the song's id, so each song keeps its own look, with its title. And the glow
+ * Home's top takes from the song in front: the drawn cover's colour, or a picture's own.
  *
  * Pure module: no React.
  */

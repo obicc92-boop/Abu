@@ -334,14 +334,23 @@ export async function prepareCover(db: D1Database, me: string, songId: string): 
 }
 
 /**
+ * `songs.cover_tried_at` for a song whose cover someone took away: the AI doesn't make it another without being
+ * asked (src/auto-covers.ts only claims songs never tried, or tried before a date, and this sorts after every date).
+ */
+export const NO_AUTO_COVER = 'never';
+
+/**
  * Records a song's new cover and where it came from, or takes it away (both null). A cover isn't an edit of the
  * song: no version is kept, and updated_at and updated_by stay as they were. Returns the old cover's key, for the
  * caller to delete; read in the same transaction as the change, so two new covers at once can't both miss it.
  */
 export async function setCover(db: D1Database, songId: string, key: string | null, source: CoverSource | null): Promise<string | null> {
+  // A cover taken away stays away: no cover is made for the song without anyone asking (src/auto-covers.ts).
   const [old, update] = await db.batch<{ cover_key: string | null }>([
     db.prepare('select cover_key from songs where id = ?').bind(songId),
-    db.prepare('update songs set cover_key = ?, cover_source = ? where id = ?').bind(key, source, songId),
+    key
+      ? db.prepare('update songs set cover_key = ?, cover_source = ? where id = ?').bind(key, source, songId)
+      : db.prepare('update songs set cover_key = null, cover_source = null, cover_tried_at = ? where id = ?').bind(NO_AUTO_COVER, songId),
   ]);
   // Deleted meanwhile: the caller takes back the picture it just put in the bucket.
   if (!update.meta.changes) throw notFound('That song doesn’t exist, or it isn’t shared with you.');

@@ -355,7 +355,12 @@ export function CollectionGrid({ items, onOpen }: { items: HomeFeed['collections
         ? items.map((c) => (
             <PressScale key={c.tag} onPress={() => onOpen(c.tag)} accessibilityRole="link" accessibilityLabel={`${c.tag}, ${c.songs} songs`} style={{ width: size }}>
               <Stacked size={size}>
-                <Collage covers={c.covers} size={size} />
+                {/* Its own cover once the AI has made it (abu-api/src/auto-covers.ts); its songs' until then. */}
+                {c.cover_key ? (
+                  <CoverArt song={{ id: `tag-${c.tag}`, title: c.tag, cover: c.cover_key }} size={size} radius={0} title={false} />
+                ) : (
+                  <Collage covers={c.covers} size={size} />
+                )}
                 <Banner text={c.tag} size={size} />
               </Stacked>
               <Text style={styles.gridTitle} numberOfLines={1}>

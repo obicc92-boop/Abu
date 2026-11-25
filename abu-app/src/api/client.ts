@@ -121,8 +121,8 @@ export interface HomeFeed {
   recent: HomeSong[];
   /** Songs you haven't played yet. */
   discover: HomeSong[];
-  /** Tags with a few songs each, as collections, with songs for their pictures. */
-  collections: { tag: string; songs: number; covers: CoverPick[] }[];
+  /** Tags with a few songs each, as collections: their own cover made by AI once there is one, and songs for a collage until then. */
+  collections: { tag: string; songs: number; cover_key: string | null; covers: CoverPick[] }[];
   composers: { name: string; songs: number; cover: CoverPick }[];
 }
 

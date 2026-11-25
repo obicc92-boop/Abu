@@ -18,6 +18,8 @@ export default defineConfig(async () => {
             BETTER_AUTH_SECRET: 'test-only-secret-that-is-long-enough-for-better-auth',
             // Never the real key (wrangler dev's .dev.vars may hold one): tests must not reach Claude.
             ANTHROPIC_API_KEY: '',
+            // Covers made without anyone asking (src/auto-covers.ts) stay off: its tests call it themselves.
+            AUTO_COVERS: 'off',
           },
         },
       }),

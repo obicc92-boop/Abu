@@ -1,18 +1,17 @@
 /**
  * A song's cover (colleagues' request, 25 November 2026: songs with pictures, as on Audiomack, Spotify and Apple
- * Music): the picture its creator chose or had made by AI, fading in as it loads; without one (or offline, before it
- * has loaded), a cover the app draws: a deep gradient of the song's own (src/lib/cover-look.ts) with its parts'
- * opening melodies over it (src/lib/song-art.ts), and, big enough, its title. A cover that's playing has bars
- * dancing in its corner.
+ * Music): the picture its creator chose or the AI made (every song gets one: abu-api/src/auto-covers.ts), fading in
+ * as it loads. Until it has one (or offline, before it has loaded), a plain cover: a deep gradient of the song's own
+ * (src/lib/cover-look.ts) with its title, or its first letter when small. No lines of melody: the owner didn't like
+ * that "wave cover" (25 November 2026). A cover that's playing has bars dancing in its corner.
  */
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Image, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
-import Svg, { Defs, LinearGradient, Polyline, RadialGradient, Rect, Stop } from 'react-native-svg';
+import Svg, { Defs, LinearGradient, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { coverUrl } from '@/api/client';
 import { coverLook } from '@/lib/cover-look';
-import { songArt } from '@/lib/song-art';
 import { makeStyles, useColors } from '@/theme/theme';
 import { fonts } from '@/theme/tokens';
 
@@ -86,14 +85,18 @@ function Picture({ uri, onError }: { uri: string; onError: () => void }) {
   );
 }
 
+/** The letter a small cover shows: the title's first, past "The", "A" and the like. */
+function initialOf(title: string): string {
+  const words = title.trim().split(/\s+/);
+  const word = words.length > 1 && /^(the|a|an|o)$/i.test(words[0]) ? words[1] : (words[0] ?? '');
+  return [...word.replace(/^[^\p{L}\p{N}]+/u, '')][0]?.toUpperCase() ?? '♪';
+}
+
 function DrawnCover({ song, size, title }: { song: CoverSong; size: number; title: boolean }) {
   const styles = useStyles();
   const colors = useColors();
   const look = coverLook(song.id);
-  const lines = useMemo(() => songArt(song.solfa, song.id), [song.solfa, song.id]);
   const id = song.id.replace(/[^a-zA-Z0-9]/g, '');
-  // Thinner lines on small covers, so a thumbnail stays tidy.
-  const stroke = size < 80 ? 3.2 : 2.4;
   return (
     <>
       <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position: 'absolute' }}>
@@ -102,40 +105,31 @@ function DrawnCover({ song, size, title }: { song: CoverSong; size: number; titl
             <Stop offset="0" stopColor={look.to} />
             <Stop offset="1" stopColor={look.from} />
           </LinearGradient>
-          <RadialGradient id={`cg${id}`} cx="88" cy="8" r="70" gradientUnits="userSpaceOnUse">
-            <Stop offset="0" stopColor={colors.onHero} stopOpacity={0.28} />
+          <RadialGradient id={`cg${id}`} cx="85" cy="10" r="75" gradientUnits="userSpaceOnUse">
+            <Stop offset="0" stopColor={colors.onHero} stopOpacity={0.3} />
             <Stop offset="1" stopColor={colors.onHero} stopOpacity={0} />
           </RadialGradient>
         </Defs>
         <Rect width="100" height="100" fill={`url(#cf${id})`} />
         <Rect width="100" height="100" fill={`url(#cg${id})`} />
-        {lines.map((l, i) => (
-          <Polyline
-            key={l.part}
-            points={l.points}
-            fill="none"
-            stroke={colors.onHero}
-            strokeOpacity={0.62 - i * 0.1}
-            strokeWidth={stroke}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            // Lifted to the top half when the title takes the bottom.
-            transform={title ? 'translate(0,-14)' : undefined}
-          />
-        ))}
       </Svg>
       {title ? (
-        <Text style={[styles.title, { fontSize: Math.max(13, size * 0.105), lineHeight: Math.max(16, size * 0.125), left: size * 0.08, right: size * 0.08, bottom: size * 0.07 }]} numberOfLines={2}>
+        <Text style={[styles.title, { fontSize: Math.max(13, size * 0.11), lineHeight: Math.max(16, size * 0.13), left: size * 0.08, right: size * 0.08, bottom: size * 0.07 }]} numberOfLines={3}>
           {song.title}
         </Text>
-      ) : null}
+      ) : (
+        <Text style={[styles.initial, { fontSize: size * 0.46, lineHeight: size * 0.6 }]} accessibilityElementsHidden importantForAccessibility="no">
+          {initialOf(song.title)}
+        </Text>
+      )}
     </>
   );
 }
 
 // Covers are dark in light and dark alike, as the feature cards are: their text is the feature cards' light text.
 const useStyles = makeStyles((colors) => ({
-  box: { overflow: 'hidden', backgroundColor: colors.hero },
+  box: { overflow: 'hidden', backgroundColor: colors.hero, alignItems: 'center', justifyContent: 'center' },
   title: { position: 'absolute', fontFamily: fonts.display, color: colors.onHero, textShadowColor: `${colors.hero}80`, textShadowRadius: 6 },
+  initial: { fontFamily: fonts.display, color: colors.onHero, opacity: 0.92, textAlign: 'center' },
   playing: { position: 'absolute', backgroundColor: `${colors.hero}B3` },
 }));

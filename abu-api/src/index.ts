@@ -83,6 +83,7 @@ import { homeFeed } from './domain/home';
 import { newId } from './domain/access';
 import { countCover, mayMakeCover } from './domain/covers';
 import { coverMaker, coverPrompt, MAX_IDEA, oneLine, pictureType } from './covers';
+import { autoCoverSong, coverWhatHomeShowed } from './auto-covers';
 import { scanAllowance, useScan } from './domain/scan';
 import { checkImage, checkLine, cloudflareReady, fixLine, partOf, readHeading, readLine, readLineWords, readMarks, readPage, readWords, scanningReady, scanReaders } from './scan';
 import { AppError, badRequest, notFound } from './errors';
@@ -169,7 +170,12 @@ app.get('/covers/:song/:file', async (c) => {
 });
 
 /** Home's feed (src/domain/home.ts), for whoever is looking (signed out: only everyone's songs); ?tag= for one tag. */
-app.get('/home', async (c) => c.json(await homeFeed(c.env.DB, await viewer(c), { tag: c.req.query('tag') })));
+app.get('/home', async (c) => {
+  const feed = await homeFeed(c.env.DB, await viewer(c), { tag: c.req.query('tag') });
+  // Covers for songs and collections it shows without one, made after the answer has gone (src/auto-covers.ts).
+  c.executionCtx.waitUntil(coverWhatHomeShowed(c.env, feed));
+  return c.json(feed);
+});
 
 /* ---------- Signed in ---------- */
 
@@ -212,6 +218,9 @@ app.post('/songs', signedIn, async (c) => {
     title: text(b, 'title') ?? '',
     shared_from_group: text(b, 'shared_from_group') ?? null,
   });
+  // A new song gets a cover made by AI, after the answer has gone (src/auto-covers.ts): it's there by the time the
+  // song shows on Home, unless its sharer chooses a picture first.
+  if (c.env.AUTO_COVERS === 'on') c.executionCtx.waitUntil(autoCoverSong(c.env, song.id).catch((e) => console.error('auto covers:', e)));
   return c.json(song, 201);
 });
 

@@ -67,7 +67,7 @@ export function CoverSheet({ open, onClose, song }: { open: boolean; onClose: ()
         ) : null}
       </View>
       <Text style={styles.note}>
-        {song.cover_key ? (song.cover_source === 'ai' ? 'Made by AI.' : 'A picture you chose.') : 'No cover yet: SolfaScores draws one from the song.'}
+        {song.cover_key ? (song.cover_source === 'ai' ? 'Made by AI.' : 'A picture you chose.') : 'No picture yet: the AI makes one soon, or choose your own.'}
       </Text>
       {error ? <ErrorText message={error} /> : null}
 
@@ -105,7 +105,7 @@ export function CoverSheet({ open, onClose, song }: { open: boolean; onClose: ()
             }}
           />
           {song.cover_key ? (
-            <SheetRow index={2} icon={<PictureIcon color={colors.danger} />} wash={colors.dangerTint} title="Remove the cover" sub="Go back to the cover SolfaScores draws." danger chevron={false} onPress={() => !busy && remove.mutate()} />
+            <SheetRow index={2} icon={<PictureIcon color={colors.danger} />} wash={colors.dangerTint} title="Remove the cover" sub="The song shows its title on its colour instead." danger chevron={false} onPress={() => !busy && remove.mutate()} />
           ) : null}
         </>
       )}
