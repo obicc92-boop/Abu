@@ -5,7 +5,7 @@
 import { env } from 'cloudflare:test';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 
-import { COVER_MODEL, coverMaker, coverPrompt } from '../src/covers';
+import { COVER_MODEL, coverMaker, coverPrompt, smaller } from '../src/covers';
 import { call, send, signUp } from './helpers';
 
 interface Song {
@@ -22,7 +22,7 @@ const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 9, 9]);
 /** What the replaced AI gives back: a JPEG's first bytes. */
 const MADE = new Uint8Array([0xff, 0xd8, 0xff, 0xdb, 7, 7, 7]);
-const NO_TEXT = 'no text, no letters, no words, no watermark';
+const NO_TEXT = 'no text, no letters, no words, no signature, no watermark';
 /** Nothing a person sees may name a company or the model. */
 const NAMES = /cloudflare|workers ai|flux|black forest|schnell|anthropic|claude/i;
 
@@ -229,6 +229,43 @@ describe('A cover made by AI', () => {
     expect(COVER_MODEL).toBe('@cf/black-forest-labs/flux-1-schnell');
     run.mockResolvedValueOnce({} as { image: string });
     await expect(coverMaker.make(withAi, 'A prompt')).rejects.toThrow();
+  });
+
+  it('makes the picture 800 pixels across, keeping it as made when that fails or doesn’t make it smaller', async () => {
+    const big = new Uint8Array(4000).fill(7);
+    const asked: unknown[] = [];
+    const images = (gives: () => Promise<Uint8Array>) =>
+      ({
+        ...env,
+        IMAGES: {
+          input: () => ({
+            transform: (t: unknown) => {
+              asked.push(t);
+              return {
+                output: async (o: unknown) => {
+                  asked.push(o);
+                  const bytes = await gives();
+                  return { response: () => new Response(bytes) };
+                },
+              };
+            },
+          }),
+        } as unknown as ImagesBinding,
+      }) as Env;
+    const small = new Uint8Array(900).fill(3);
+    expect(await smaller(images(async () => small), big)).toEqual(small);
+    expect(asked).toEqual([{ width: 800 }, { format: 'image/jpeg', quality: 82 }]);
+    // Bigger than before: kept as made.
+    expect(await smaller(images(async () => new Uint8Array(5000)), big)).toBe(big);
+    // Failing (past the free transformations on the Free plan, say): kept as made.
+    expect(
+      await smaller(
+        images(async () => {
+          throw new Error('9422');
+        }),
+        big,
+      ),
+    ).toBe(big);
   });
 });
 

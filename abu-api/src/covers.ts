@@ -12,13 +12,35 @@ const STEPS = 4;
 
 /** How the picture is made. The tests replace `make`, so they never reach the AI. */
 export const coverMaker = {
-  /** The picture for `prompt`, as the model gives it back (a JPEG). Throws if there's no picture. */
+  /** The picture for `prompt`: the model's JPEG, made 800 pixels across. Throws if there's no picture. */
   async make(env: Env, prompt: string): Promise<Uint8Array> {
     const out = await env.AI.run(COVER_MODEL, { prompt, steps: STEPS });
     if (!out?.image) throw new Error('The image model answered without a picture.');
-    return Uint8Array.from(atob(out.image), (c) => c.charCodeAt(0));
+    return smaller(env, Uint8Array.from(atob(out.image), (c) => c.charCodeAt(0)));
   },
 };
+
+/** As wide as a cover the app sends from the phone (COVER_SIZE in abu-app/src/lib/avatar-photo.ts). */
+export const COVER_WIDTH = 800;
+
+/**
+ * The model's picture is 1024 pixels across and about 650 KB, ten times a chosen picture: too much for a Home full
+ * of covers on a phone's data. Cloudflare's Images binding makes it 800 across at JPEG quality 82 (about 100 KB);
+ * each cover is one transformation (5,000 a month free, then US$0.50 per 1,000 on a paid plan; past the free ones
+ * on the Free plan it fails rather than charges). If it fails, the picture is kept as the model made it.
+ */
+export async function smaller(env: Env, picture: Uint8Array): Promise<Uint8Array> {
+  try {
+    const result = await env.IMAGES.input(new Blob([picture]).stream())
+      .transform({ width: COVER_WIDTH })
+      .output({ format: 'image/jpeg', quality: 82 });
+    const bytes = new Uint8Array(await result.response().arrayBuffer());
+    return bytes.byteLength && bytes.byteLength < picture.byteLength ? bytes : picture;
+  } catch (e) {
+    console.warn('covers: kept the picture full size; it couldn’t be made smaller.', (e as Error).message);
+    return picture;
+  }
+}
 
 /** The creator's words for what the picture should show, at most this long. */
 export const MAX_IDEA = 200;
@@ -49,7 +71,7 @@ const CHURCH_SCENE = 'a church interior with warm light';
 const WEST_AFRICAN = ['igbo', 'yoruba', 'hausa'];
 const TEXTILES = 'West African textile patterns (akwete, adire, aso-oke) and their colours woven into the design';
 const STYLE = 'An elegant painterly illustration, rich warm colour, soft light, a simple centred composition';
-const NO_TEXT = 'no text, no letters, no words, no watermark';
+const NO_TEXT = 'no text, no letters, no words, no signature, no watermark';
 
 /**
  * What to ask the image model for: square album-cover artwork for a choir song, from its title and its tags as mood
