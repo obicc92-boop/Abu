@@ -13,7 +13,7 @@
  * to be painted on everyone's Home.
  */
 import { TAG_GROUPS } from '../../abu-app/src/lib/tags';
-import { coverMaker, coverPrompt, pictureType } from './covers';
+import { coverMaker, pictureType, promptFor } from './covers';
 import { newId, nowIso } from './domain/access';
 import { coversToday, COVER_LIMITS } from './domain/covers';
 import type { HomeFeed } from './domain/home';
@@ -68,7 +68,7 @@ export async function autoCoverSong(env: Env, songId: string): Promise<boolean> 
   if (!claim.meta.changes) return false;
   const song = await env.DB.prepare('select title, composer, tags from songs where id = ?').bind(songId).first<{ title: string; composer: string; tags: string }>();
   if (!song) return false;
-  const made = await picture(env, coverPrompt({ ...song, tags: JSON.parse(song.tags) as string[] }));
+  const made = await picture(env, await promptFor(env, { ...song, tags: JSON.parse(song.tags) as string[] }));
   if (!made) return false;
   await countAuto(env.DB);
   const key = `covers/${songId}/${newId()}.${made.ext}`;
@@ -97,7 +97,7 @@ export async function autoCoverTag(env: Env, tag: string): Promise<boolean> {
     .bind(key, name, nowIso(), retryBefore())
     .run();
   if (!claim.meta.changes) return false;
-  const made = await picture(env, coverPrompt({ title: `${name}, a collection of choir songs`, composer: '', tags: [name] }));
+  const made = await picture(env, await promptFor(env, { title: name, composer: '', tags: [name] }, undefined, true));
   if (!made) return false;
   await countAuto(env.DB);
   const file = `covers/${tagFolder(key)}/${newId()}.${made.ext}`;

@@ -5,7 +5,7 @@
 import { env } from 'cloudflare:test';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 
-import { COVER_MODEL, coverMaker, coverPrompt, smaller } from '../src/covers';
+import { COVER_MODEL, coverMaker, coverPrompt, SCENE_MODEL, sceneWriter, smaller } from '../src/covers';
 import { call, send, signUp } from './helpers';
 
 interface Song {
@@ -27,8 +27,11 @@ const NO_TEXT = 'no text, no letters, no words, no signature, no watermark';
 const NAMES = /cloudflare|workers ai|flux|black forest|schnell|anthropic|claude/i;
 
 let make: MockInstance<typeof coverMaker.make>;
+let scene: MockInstance<typeof sceneWriter.write>;
+const SCENE = 'carol singers with lanterns under a starry sky';
 beforeEach(() => {
   make = vi.spyOn(coverMaker, 'make').mockResolvedValue(MADE);
+  scene = vi.spyOn(sceneWriter, 'write').mockResolvedValue(SCENE);
 });
 afterEach(() => vi.restoreAllMocks());
 
@@ -149,11 +152,14 @@ describe('A cover made by AI', () => {
     expect(got.headers.get('content-type')).toBe('image/jpeg');
     expect(new Uint8Array(await got.arrayBuffer())).toEqual(MADE);
 
-    // What the AI was asked for: the idea first, tidied, then the song.
+    // What the AI was asked for: the idea first, tidied, then the scene written from the title, never the title.
     expect(make).toHaveBeenCalledTimes(1);
+    expect(scene.mock.calls[0][1]).toMatchObject({ title: 'Ekeresimesi Erutego', tags: ['Christmas', 'Igbo'] });
+    expect(scene.mock.calls[0][2]).toContain('a choir under a mango tree');
     const prompt = make.mock.calls[0][1];
     expect(prompt.startsWith('Show: a choir under a mango tree at dusk. Square album cover artwork')).toBe(true);
-    expect(prompt).toContain('Ekeresimesi Erutego');
+    expect(prompt).toContain(SCENE);
+    expect(prompt).not.toContain('Ekeresimesi');
     expect(prompt).toContain('the nativity star');
     expect(prompt).toContain('akwete, adire, aso-oke');
     expect(prompt).toContain(NO_TEXT);
@@ -287,10 +293,10 @@ describe('A deleted song', () => {
 describe('What the AI is asked for (coverPrompt)', () => {
   const prompt = (tags: string[], idea?: string, title = 'Gloria in Excelsis') => coverPrompt({ title, composer: 'G. F. Handel', tags }, idea);
 
-  it('asks for square album-cover artwork for a choir song, from its title, with no lettering', () => {
+  it('asks for square album-cover artwork for a choir song, never with its title (it would be written on it), with no lettering', () => {
     const p = prompt([]);
     expect(p).toContain('Square album cover artwork for a choir song');
-    expect(p).toContain('Gloria in Excelsis');
+    expect(p).not.toContain('Gloria');
     expect(p).toContain('An elegant painterly illustration, rich warm colour, soft light, a simple centred composition');
     expect(p.endsWith(`${NO_TEXT}.`)).toBe(true);
     expect(p).not.toContain('Handel');
@@ -331,6 +337,36 @@ describe('What the AI is asked for (coverPrompt)', () => {
     const longest = prompt(all, 'y'.repeat(600), 'T'.repeat(200));
     expect(longest.length).toBeLessThan(1000);
     expect(longest.endsWith(`${NO_TEXT}.`)).toBe(true);
-    expect(prompt([], undefined, 'Line one\nline two')).toContain('inspired by its title: Line one line two.');
+  });
+
+  it('takes the scene written for it, without the title or anything quoted in it', () => {
+    const song = { title: 'Worthy is the Lamb', composer: '', tags: [] };
+    const p = coverPrompt(song, undefined, 'A lamb on a hill at dawn under the words "Worthy is the Lamb", worthy is the lamb glowing.\n');
+    expect(p).toContain('Square album cover artwork for a choir song: A lamb on a hill at dawn under the words, glowing.');
+    expect(p.toLowerCase()).not.toContain('worthy');
+    expect(coverPrompt(song, undefined, '')).toContain('Square album cover artwork for a choir song. Mood: peaceful and uplifting.');
+    expect(coverPrompt(song, undefined, 's'.repeat(900)).length).toBeLessThan(1000);
+  });
+});
+
+describe('The scene written for a cover (sceneWriter)', () => {
+  it('asks the text model for one wordless sentence from what the title means, and gives back the sentence', async () => {
+    vi.restoreAllMocks();
+    const run = vi.fn(async (_model: string, _input: unknown) => ({ choices: [{ message: { content: ' A lamb on a hill at dawn.\n' } }] }));
+    const withAi = { ...env, AI: { run } as unknown as Ai } as Env;
+    expect(await sceneWriter.write(withAi, { title: 'Ekele Diri Chukwu', tags: ['Igbo'] }, 'a market at dawn')).toBe('A lamb on a hill at dawn.');
+    const [model, input] = run.mock.calls[0] as [string, { messages: { content: string }[] }];
+    expect(model).toBe(SCENE_MODEL);
+    const asked = input.messages[0].content;
+    expect(asked).toContain('"Ekele Diri Chukwu"');
+    expect(asked).toContain('translate it first');
+    expect(asked).toContain('a market at dawn');
+    expect(asked).toContain('Never quote or repeat the title');
+    // A collection: by its tag.
+    await sceneWriter.write(withAi, { title: 'Advent', tags: ['Advent'] }, undefined, true);
+    expect((run.mock.calls[1][1] as { messages: { content: string }[] }).messages[0].content).toContain('a collection of choir songs tagged "Advent"');
+    // The model failing: no scene, and the tags set it.
+    run.mockRejectedValueOnce(new Error('busy'));
+    expect(await sceneWriter.write(withAi, { title: 'X', tags: [] })).toBe('');
   });
 });

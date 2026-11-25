@@ -82,7 +82,7 @@ import {
 import { homeFeed } from './domain/home';
 import { newId } from './domain/access';
 import { countCover, mayMakeCover } from './domain/covers';
-import { coverMaker, coverPrompt, MAX_IDEA, oneLine, pictureType } from './covers';
+import { coverMaker, MAX_IDEA, oneLine, pictureType, promptFor } from './covers';
 import { autoCoverSong, coverWhatHomeShowed } from './auto-covers';
 import { scanAllowance, useScan } from './domain/scan';
 import { checkImage, checkLine, cloudflareReady, fixLine, partOf, readHeading, readLine, readLineWords, readMarks, readPage, readWords, scanningReady, scanReaders } from './scan';
@@ -328,7 +328,7 @@ app.post('/songs/:id/cover/make', signedIn, async (c) => {
   await mayMakeCover(c.env.DB, me);
   let picture: Uint8Array;
   try {
-    picture = await coverMaker.make(c.env, coverPrompt(song, idea));
+    picture = await coverMaker.make(c.env, await promptFor(c.env, song, idea));
   } catch (e) {
     console.error('covers: the image model failed', e);
     throw new AppError(503, 'The cover couldn’t be made just now. Try again in a minute.');

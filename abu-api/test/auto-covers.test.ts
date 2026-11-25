@@ -8,7 +8,7 @@ import { env } from 'cloudflare:test';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 
 import { autoCoverSong, autoCoverTag, coverWhatHomeShowed, knownTag, PER_VISIT, RETRY_HOURS } from '../src/auto-covers';
-import { coverMaker } from '../src/covers';
+import { coverMaker, sceneWriter } from '../src/covers';
 import type { HomeFeed } from '../src/domain/home';
 import { call, send, signUp } from './helpers';
 
@@ -18,8 +18,10 @@ const MADE = new Uint8Array([0xff, 0xd8, 0xff, 0xdb, 7, 7, 7]);
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
 
 let make: MockInstance<typeof coverMaker.make>;
+let scene: MockInstance<typeof sceneWriter.write>;
 beforeEach(() => {
   make = vi.spyOn(coverMaker, 'make').mockResolvedValue(MADE);
+  scene = vi.spyOn(sceneWriter, 'write').mockResolvedValue('a village lit by lanterns');
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -47,8 +49,10 @@ describe('A song without a cover', () => {
     expect(song?.cover_key).toMatch(new RegExp(`^covers/${id}/[\\w-]+\\.jpg$`));
     expect(await env.COVERS.get(song!.cover_key!)).not.toBeNull();
     expect(make).toHaveBeenCalledTimes(1);
+    expect(scene.mock.calls[0][1]).toMatchObject({ title: 'Ekeresimesi Elutego', tags: ['Christmas', 'Igbo'] });
     const prompt = make.mock.calls[0][1];
-    expect(prompt).toContain('Ekeresimesi Elutego');
+    expect(prompt).toContain('a village lit by lanterns');
+    expect(prompt).not.toContain('Ekeresimesi');
     expect(prompt).toMatch(/starry night/);
     expect(prompt).toMatch(/West African textile/);
     const after = (await env.DB.prepare('select made from auto_cover_days where day = ?').bind(today()).first<{ made: number }>())!.made;
@@ -130,7 +134,8 @@ describe('A collection', () => {
     await songOf(ada.cookie, 'Carol One', ['Advent']);
     await songOf(ada.cookie, 'Carol Two', ['advent']);
     expect(await autoCoverTag(env, 'advent')).toBe(true);
-    expect(make.mock.calls[0][1]).toMatch(/Advent, a collection of choir songs/);
+    expect(scene.mock.calls[0][1]).toMatchObject({ title: 'Advent' });
+    expect(scene.mock.calls[0][3]).toBe(true);
     expect(make.mock.calls[0][1]).toMatch(/candles/);
     expect(await autoCoverTag(env, 'Advent')).toBe(false);
     const feed = (await send<HomeFeed>('/home', 'GET', undefined)).body;
