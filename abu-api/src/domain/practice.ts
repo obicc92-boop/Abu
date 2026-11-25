@@ -23,9 +23,13 @@ const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const dayOr = (day: string | undefined) => (day && DAY.test(day) && !Number.isNaN(Date.parse(`${day}T00:00:00Z`)) ? day : nowIso().slice(0, 10));
 const addDays = (day: string, n: number) => new Date(Date.parse(`${day}T00:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
 
-/** Count one play-through (the player calls this at the end of a song), on the day it was played. */
+/**
+ * Count one play-through (the player calls this at the end of a song), on the day it was played: for you (your
+ * practice and your week), and for the song, everyone's plays together, for trending on Home.
+ */
 export async function recordPlay(db: D1Database, me: string, songId: string, day?: string): Promise<Practice> {
   await getSong(db, songId, me);
+  const played = dayOr(day);
   await db.batch([
     db
       .prepare(
@@ -35,7 +39,10 @@ export async function recordPlay(db: D1Database, me: string, songId: string, day
       .bind(me, songId, nowIso()),
     db
       .prepare('insert into practice_days (user_id, day, plays) values (?, ?, 1) on conflict (user_id, day) do update set plays = plays + 1')
-      .bind(me, dayOr(day)),
+      .bind(me, played),
+    db
+      .prepare('insert into song_days (song_id, day, plays) values (?, ?, 1) on conflict (song_id, day) do update set plays = plays + 1')
+      .bind(songId, played),
   ]);
   return (await myPractice(db, me)).find((p) => p.song_id === songId)!;
 }

@@ -61,9 +61,11 @@ The database itself guarantees what must never break: a group always keeps a lea
   - Open to everyone: `/api/health`, `/api/songs`, `/api/songs/:id`, and sign-in at `/api/auth/*`.
   - Signed in: `/api/me`, `/api/groups` (create), `/api/groups/preview/:code`, `/api/groups/join`, `/api/groups/:id` (read and settings), and `/api/groups/:id/members` (list, approve, role and part, remove or leave).
   - Songs, open to everyone: `GET /api/songs` (filters `q`, `tag`, `playable=1`), `GET /api/songs/:id`, and `GET /api/songs/:id/sheet` (the original sheet).
+  - Home's feed, open to everyone: `GET /api/home` (optional `tag`; `src/domain/home.ts`): genre chips, trending (plays in the last 14 days, everyone's together, from `song_days`), newest, recent, discover, collections by tag and composers, all built only from the songs the viewer can see (`seenBy`, as the library).
   - Songs, signed in:
     - sharing, editing and deleting: `POST /api/songs`, `PATCH` and `DELETE /api/songs/:id`
     - the sheet: `PUT` (body = the file; PDF, JPEG, PNG or WebP up to 10 MB) and `DELETE /api/songs/:id/sheet`
+    - the cover (whoever can edit the song; not kept as a version): `PUT` (body = a JPEG, PNG or WebP up to 5 MB) and `DELETE /api/songs/:id/cover`, and `POST /api/songs/:id/cover/make` (`idea`, optional, up to 200 characters), made by Workers AI's FLUX.1 [schnell] (`src/covers.ts`; 10 a person a day and 200 for everyone, in `cover_usage`). Served at `GET /api/covers/<song>/<picture>`, a new key for each picture, cached for good; R2 bucket `abu-covers` (binding `COVERS`), to be created before deploying.
     - what you can do with a song: `GET /api/songs/:id/me`
     - practice: `POST /api/songs/:id/plays`, `PUT /api/songs/:id/knows`, `GET /api/me/practice`
   - Repertoire: `GET`, `POST /api/groups/:id/repertoire` and `DELETE /api/groups/:id/repertoire/:songId`. Your own space's repertoire is "My songs".

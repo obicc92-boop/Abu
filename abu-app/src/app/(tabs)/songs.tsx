@@ -2,7 +2,8 @@
  * Songs: the library: songs shared with everyone (all anyone signed out sees), and,
  * signed in, your group's and your own (who can see a song: abu-api/src/domain/songs.ts). Filters: your group's repertoire, My songs, songs with sol-fa, tags.
  * Signed in, a round "+" floats at the bottom right and opens Add a song's sheet
- * (src/components/add-song-sheet.tsx; owner's request, 21 November 2026).
+ * (src/components/add-song-sheet.tsx; owner's request, 21 November 2026). Home opens it on a tag (a collection) or a
+ * search (a composer): src/lib/open-library.ts.
  */
 import { useQuery } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
@@ -16,6 +17,7 @@ import { Shelf, SongTile, type TileSong } from '@/components/shelf';
 import { SongRow } from '@/components/song-row';
 import { Body, Chip, Loading, Page, TopBar } from '@/components/ui';
 import { DEMO_SONGS } from '@/data/demo-songs';
+import { useLibraryAsk } from '@/lib/open-library';
 import { FILTER_TAGS } from '@/lib/tags';
 import { useSession } from '@/state/session';
 import { makeStyles, useColors } from '@/theme/theme';
@@ -32,6 +34,18 @@ export default function Songs() {
   const [tag, setTag] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const search = useRef<TextInputInstance | null>(null);
+  // Home's collections and composers open the library on their tag or name (src/lib/open-library.ts).
+  const ask = useLibraryAsk();
+  const [answered, setAnswered] = useState(0);
+  if (ask.n !== answered) {
+    setAnswered(ask.n);
+    setView('all');
+    setTag(ask.tag);
+    setQuery(ask.query);
+  }
+  // A tag Home opened goes first in the row, where it's seen chosen; the usual ones follow.
+  const sameTag = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+  const tagChips = ask.tag && tag && sameTag(tag, ask.tag) ? [tag, ...FILTER_TAGS.filter((t) => !sameTag(t, tag))] : tag && !FILTER_TAGS.some((t) => sameTag(t, tag)) ? [tag, ...FILTER_TAGS] : FILTER_TAGS;
   const signedIn = s.status === 'signedIn';
   const choir = s.group && s.group.type !== 'personal' && s.group.status === 'active' ? s.group : null;
 
@@ -102,7 +116,7 @@ export default function Songs() {
         <Chip label="Has sol-fa" on={view === 'playable'} onPress={() => setView('playable')} />
       </ScrollView>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-        {FILTER_TAGS.map((t) => (
+        {tagChips.map((t) => (
           <Chip key={t} label={t} on={tag === t} onPress={() => setTag(tag === t ? null : t)} />
         ))}
       </ScrollView>
@@ -135,7 +149,7 @@ export default function Songs() {
         songs.map((x) => (
           <SongRow
             key={x.id}
-            song={{ id: x.id, title: x.title, composer: x.composer, doh: x.doh, time: x.time_signature, playable: !!x.solfa.trim() }}
+            song={{ id: x.id, title: x.title, composer: x.composer, doh: x.doh, time: x.time_signature, playable: !!x.solfa.trim(), cover: x.cover_key }}
             note={x.group_name ?? undefined}
           />
         ))
@@ -179,4 +193,5 @@ const tileOf = (x: Song): TileSong => ({
   time: x.time_signature,
   solfa: x.solfa,
   countable: true,
+  cover: x.cover_key,
 });

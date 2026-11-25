@@ -66,17 +66,23 @@ import {
   getSong,
   listRepertoire,
   listSongs,
+  prepareCover,
   prepareSheet,
   removeFromRepertoire,
+  setCover,
   setSheet,
   bringBackVersion,
   shareSong,
   songForMe,
   songVersions,
   type Audience,
+  type CoverSource,
   type SongInput,
 } from './domain/songs';
+import { homeFeed } from './domain/home';
 import { newId } from './domain/access';
+import { countCover, mayMakeCover } from './domain/covers';
+import { coverMaker, coverPrompt, MAX_IDEA, oneLine, pictureType } from './covers';
 import { scanAllowance, useScan } from './domain/scan';
 import { checkImage, checkLine, cloudflareReady, fixLine, partOf, readHeading, readLine, readLineWords, readMarks, readPage, readWords, scanningReady, scanReaders } from './scan';
 import { AppError, badRequest, notFound } from './errors';
@@ -146,6 +152,25 @@ app.get('/avatars/:user/:file', async (c) => {
   });
 });
 
+/**
+ * A song's cover, by its key (covers/<song>/<picture>.jpg). Served like a profile picture: each picture has a key of
+ * its own that's hard to guess, kept by phones for good, as a new cover gets a new key.
+ */
+app.get('/covers/:song/:file', async (c) => {
+  const key = `covers/${c.req.param('song')}/${c.req.param('file')}`;
+  const file = await c.env.COVERS.get(key);
+  if (!file) throw notFound('No such picture.');
+  return new Response(file.body, {
+    headers: {
+      'content-type': file.httpMetadata?.contentType ?? 'image/jpeg',
+      'cache-control': 'public, max-age=31536000, immutable',
+    },
+  });
+});
+
+/** Home's feed (src/domain/home.ts), for whoever is looking (signed out: only everyone's songs); ?tag= for one tag. */
+app.get('/home', async (c) => c.json(await homeFeed(c.env.DB, await viewer(c), { tag: c.req.query('tag') })));
+
 /* ---------- Signed in ---------- */
 
 const signedIn = createMiddleware<App>(async (c, next) => {
@@ -193,8 +218,9 @@ app.post('/songs', signedIn, async (c) => {
 app.patch('/songs/:id', signedIn, async (c) => c.json(await editSong(c.env.DB, c.get('userId'), c.req.param('id'), songInput(await body(c)))));
 
 app.delete('/songs/:id', signedIn, async (c) => {
-  const sheet = await deleteSong(c.env.DB, c.get('userId'), c.req.param('id'));
+  const { sheet, cover } = await deleteSong(c.env.DB, c.get('userId'), c.req.param('id'));
   if (sheet) await c.env.SHEETS.delete(sheet);
+  if (cover) await c.env.COVERS.delete(cover);
   return c.json({ ok: true });
 });
 
@@ -234,6 +260,78 @@ app.delete('/songs/:id/sheet', signedIn, async (c) => {
   const old = await setSheet(c.env.DB, songId, null, null);
   if (old) await c.env.SHEETS.delete(old);
   return c.json(await getSong(c.env.DB, songId, c.get('userId')));
+});
+
+/*
+ * Covers (Home's redesign, 25 November 2026), in the COVERS bucket: a picture chosen by whoever can edit the song, or
+ * one made by AI (src/covers.ts). Each picture has a key of its own, so it can be kept by phones for good, and the old
+ * one is deleted. A new cover isn't an edit of the song: it keeps no version (see setCover).
+ */
+const COVER_TYPES: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+const MAX_COVER_BYTES = 5 * 1024 * 1024;
+
+/** Puts a new cover in the bucket, records it on the song, and deletes the picture it replaces. */
+async function storeCover(env: Env, songId: string, file: ArrayBuffer | Uint8Array, type: string, ext: string, source: CoverSource): Promise<void> {
+  const key = `covers/${songId}/${newId()}.${ext}`;
+  await env.COVERS.put(key, file, { httpMetadata: { contentType: type } });
+  let old: string | null;
+  try {
+    old = await setCover(env.DB, songId, key, source);
+  } catch (e) {
+    await env.COVERS.delete(key);
+    throw e;
+  }
+  if (old) await env.COVERS.delete(old);
+}
+
+/** A picture chosen for the cover. The body is the picture; Content-Type says what it is. */
+app.put('/songs/:id/cover', signedIn, async (c) => {
+  const songId = c.req.param('id');
+  const type = (c.req.header('content-type') ?? '').split(';')[0].trim().toLowerCase();
+  const ext = COVER_TYPES[type];
+  if (!ext) throw badRequest('Choose a picture (JPEG, PNG or WebP).');
+  if (Number(c.req.header('content-length') ?? 0) > MAX_COVER_BYTES) throw badRequest('That picture is over 5 MB. Try a smaller one.');
+  await prepareCover(c.env.DB, c.get('userId'), songId);
+  const file = await c.req.arrayBuffer();
+  if (!file.byteLength) throw badRequest('That picture is empty.');
+  if (file.byteLength > MAX_COVER_BYTES) throw badRequest('That picture is over 5 MB. Try a smaller one.');
+  await storeCover(c.env, songId, file, type, ext, 'upload');
+  return c.json(await getSong(c.env.DB, songId, c.get('userId')));
+});
+
+app.delete('/songs/:id/cover', signedIn, async (c) => {
+  const songId = c.req.param('id');
+  await prepareCover(c.env.DB, c.get('userId'), songId);
+  const old = await setCover(c.env.DB, songId, null, null);
+  if (old) await c.env.COVERS.delete(old);
+  return c.json(await getSong(c.env.DB, songId, c.get('userId')));
+});
+
+/**
+ * A cover made by AI from the song's title and tags, and `idea`, the creator's own words for what it should show
+ * (optional). Within the daily allowance (src/domain/covers.ts), counted only once the picture is made.
+ */
+app.post('/songs/:id/cover/make', signedIn, async (c) => {
+  const [me, songId] = [c.get('userId'), c.req.param('id')];
+  const idea = oneLine(text(await body(c), 'idea') ?? '');
+  if (idea.length > MAX_IDEA) throw badRequest(`Keep what the cover should show under ${MAX_IDEA} characters.`);
+  const song = await prepareCover(c.env.DB, me, songId);
+  await mayMakeCover(c.env.DB, me);
+  let picture: Uint8Array;
+  try {
+    picture = await coverMaker.make(c.env, coverPrompt(song, idea));
+  } catch (e) {
+    console.error('covers: the image model failed', e);
+    throw new AppError(503, 'The cover couldn’t be made just now. Try again in a minute.');
+  }
+  const kind = pictureType(picture);
+  if (!kind) {
+    console.error('covers: the image model gave something that isn’t a picture', picture.byteLength);
+    throw new AppError(503, 'The cover couldn’t be made just now. Try again in a minute.');
+  }
+  await countCover(c.env.DB, me);
+  await storeCover(c.env, songId, picture, kind.type, kind.ext, 'ai');
+  return c.json(await getSong(c.env.DB, songId, me));
 });
 
 /* ---------- Scanning sheets (src/scan.ts) ---------- */

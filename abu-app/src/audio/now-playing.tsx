@@ -29,6 +29,8 @@ export interface NowPlayingSong {
   parsed: ParsedSong;
   /** A song in the library (not only built in): its plays are counted. */
   countable: boolean;
+  /** Its cover picture's key, if it has one (the bar over the tabs shows it). */
+  cover?: string | null;
 }
 
 type Player = ReturnType<typeof useSongPlayer>;
@@ -58,7 +60,10 @@ export function NowPlayingProvider({ children }: { children: ReactNode }) {
     (next: NowPlayingSong) =>
       setSong((now) => {
         if (!same(now, next)) return next;
-        return now.countable === next.countable && now.title === next.title && now.composer === next.composer ? now : { ...now, countable: next.countable, title: next.title, composer: next.composer };
+        const cover = next.cover === undefined ? now.cover : next.cover;
+        return now.countable === next.countable && now.title === next.title && now.composer === next.composer && now.cover === cover
+          ? now
+          : { ...now, countable: next.countable, title: next.title, composer: next.composer, cover };
       }),
     [],
   );
@@ -111,6 +116,8 @@ export function NowPlayingProvider({ children }: { children: ReactNode }) {
           queryClient.invalidateQueries({ queryKey: ['songForMe', id] }),
           queryClient.invalidateQueries({ queryKey: ['myPractice'] }),
           queryClient.invalidateQueries({ queryKey: ['readiness'] }),
+          // Home's "Back to your songs" and its trending.
+          queryClient.invalidateQueries({ queryKey: ['home'] }),
         ]),
       )
       // No connection: keep the play and send it when the phone is back online.

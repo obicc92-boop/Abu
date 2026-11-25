@@ -6,6 +6,9 @@
  * up and each new bar sliding in (src/lib/tile-bars.ts). A song with no sol-fa to hand gets a pattern drawn from
  * its id (src/lib/song-art.ts). The tile's play button starts the song at once (the app's player,
  * src/audio/now-playing.tsx).
+ *
+ * A song with a cover picture (colleagues' request, 25 November 2026: a Home like Audiomack's) shows its picture
+ * instead while it rests; playing or paused, the bar being sung shows over the picture, darkened.
  */
 import { Link } from 'expo-router';
 import { Fragment, useEffect, useMemo, useRef, type ReactNode } from 'react';
@@ -14,10 +17,12 @@ import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, w
 import Svg, { Defs, Polyline, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { useNowPlaying } from '@/audio/now-playing';
+import { CoverArt } from '@/components/cover-art';
+import { PressScale } from '@/components/motion';
 import { songArt } from '@/lib/song-art';
 import { barAt, restingBar, tileBars, type TileBar } from '@/lib/tile-bars';
 import { displayBeat } from '@/score/layout';
-import { parseSolfa, type ParsedSong } from '@/solfa';
+import { KEY_NAMES, parseSolfa, type ParsedSong } from '@/solfa';
 import { makeStyles, useColors } from '@/theme/theme';
 import { fonts, partColor, partInk } from '@/theme/tokens';
 
@@ -33,6 +38,10 @@ export interface TileSong {
   time: string;
   /** In the library (not only built in): plays are counted. */
   countable?: boolean;
+  /** Its cover picture's key, if it has one. */
+  cover?: string | null;
+  /** It has sol-fa, though not to hand here (so it isn't "Sheet only"). */
+  playable?: boolean;
 }
 
 export function Shelf({ title, note, onSeeAll, children }: { title: string; note?: string; onSeeAll?: () => void; children: ReactNode }) {
@@ -85,7 +94,9 @@ export function SongTile({ song, badge }: { song: TileSong; badge?: 'known' }) {
   const following = (isPlaying || paused) && player.beat >= 0;
   const bar = following ? barAt(bars, player.beat) : parsed ? restingBar(bars, parsed.beatsPerBar) : null;
   const label = !parsed
-    ? 'Sheet only'
+    ? song.playable
+      ? `Doh is ${KEY_NAMES[song.doh] ?? '?'} · ${song.time}`
+      : 'Sheet only'
     : following && bar
       ? isPlaying
         ? `Bar ${bar.number} of ${parsed.bars}`
@@ -95,13 +106,22 @@ export function SongTile({ song, badge }: { song: TileSong; badge?: 'known' }) {
   const start = () => {
     if (!song.solfa || !parsed) return;
     if (isPlaying) return player.pause();
-    play({ id: song.id, title: song.title, composer: song.composer, solfa: song.solfa, key: song.doh, parsed, countable: !!song.countable });
+    play({ id: song.id, title: song.title, composer: song.composer, solfa: song.solfa, key: song.doh, parsed, countable: !!song.countable, cover: song.cover ?? null });
   };
+  // With a cover, the picture shows while the song rests; the bars show over it while it plays or is paused.
+  const pictured = !!song.cover;
+  const showBar = !pictured || following;
   const glow = `g${song.id.replace(/[^a-zA-Z0-9]/g, '')}`;
   return (
     <View style={styles.tile}>
       <Link href={{ pathname: '/song/[id]', params: { id: song.id } }} asChild>
-        <Pressable accessibilityRole="link" accessibilityLabel={song.sub ? `${song.title}, ${song.sub}` : song.title} style={styles.art}>
+        <PressScale accessibilityRole="link" accessibilityLabel={song.sub ? `${song.title}, ${song.sub}` : song.title} style={styles.art}>
+          {pictured ? (
+            <>
+              <CoverArt song={{ id: song.id, title: song.title, cover: song.cover, solfa: song.solfa }} size={TILE} radius={0} style={styles.fill} />
+              {following ? <View style={[styles.fill, styles.dim]} /> : null}
+            </>
+          ) : (
           <View style={styles.fill}>
             <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
               <Defs>
@@ -117,11 +137,14 @@ export function SongTile({ song, badge }: { song: TileSong; badge?: 'known' }) {
               ))}
             </Svg>
           </View>
-          <Text style={styles.label} numberOfLines={1}>
-            {label}
-          </Text>
-          {bar ? <BarView bar={bar} active={isPlaying ? player.beat - bar.start : null} /> : null}
-        </Pressable>
+          )}
+          {showBar ? (
+            <Text style={styles.label} numberOfLines={1}>
+              {label}
+            </Text>
+          ) : null}
+          {showBar && bar ? <BarView bar={bar} active={isPlaying ? player.beat - bar.start : null} /> : null}
+        </PressScale>
       </Link>
       {badge === 'known' ? (
         <View style={styles.known} accessibilityLabel="You know your part">
@@ -236,6 +259,7 @@ const useStyles = makeStyles((colors) => ({
   tile: { width: TILE, gap: 6 },
   art: { width: TILE, height: TILE, borderRadius: 18, overflow: 'hidden', backgroundColor: colors.hero, paddingTop: 12, paddingHorizontal: 11, paddingBottom: 10 },
   fill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  dim: { backgroundColor: `${colors.hero}C7` },
   // Clear of the play button in the corner.
   label: { fontFamily: fonts.heavy, fontSize: 10.5, letterSpacing: 0.3, color: colors.heroKicker, paddingRight: PLAY + 4, minHeight: PLAY - 6 },
   bar: { flex: 1, justifyContent: 'center', gap: 3 },

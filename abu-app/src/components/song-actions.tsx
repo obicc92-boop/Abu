@@ -1,10 +1,11 @@
 /**
  * What you can do with a song: save it to My songs, add it to your group's
- * repertoire (leaders), edit it and see its earlier versions, open the original sheet, share it on WhatsApp,
- * and your own practice ("I know my part"). Practice is private to you.
+ * repertoire (leaders), edit it and see its earlier versions, give it a cover (src/components/cover-sheet.tsx),
+ * open the original sheet, share it on WhatsApp, and your own practice ("I know my part"). Practice is private to you.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
+import { useState } from 'react';
 import { Linking, Switch, Text, View } from 'react-native';
 
 import { api, sheetUrl, songLink, type Song } from '@/api/client';
@@ -12,6 +13,7 @@ import { useSession } from '@/state/session';
 import { makeStyles, useColors } from '@/theme/theme';
 import { fonts } from '@/theme/tokens';
 
+import { CoverSheet } from './cover-sheet';
 import { Body, Button, Card, ErrorText, Kicker } from './ui';
 
 export function SongActions({ songId, song }: { songId: string; song?: Song }) {
@@ -24,6 +26,7 @@ export function SongActions({ songId, song }: { songId: string; song?: Song }) {
   const choir = s.group && s.group.type !== 'personal' && s.group.status === 'active' ? s.group : null;
   const inMySongs = !!s.personal && !!mine.data?.in_groups.includes(s.personal.id);
   const inRepertoire = !!choir && !!mine.data?.in_groups.includes(choir.id);
+  const [covering, setCovering] = useState(false);
 
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: ['songForMe', songId] });
@@ -69,6 +72,7 @@ export function SongActions({ songId, song }: { songId: string; song?: Song }) {
         {mine.data?.can_edit ? (
           <Button small kind="ghost" label="Earlier versions" onPress={() => router.push({ pathname: '/song-versions', params: { id: songId } })} />
         ) : null}
+        {mine.data?.can_edit && song ? <Button small kind="ghost" label={song.cover_key ? 'Change the cover' : 'Add a cover'} onPress={() => setCovering(true)} /> : null}
         {song?.sheet_key ? <Button small kind="ghost" label="Original sheet" onPress={() => Linking.openURL(sheetUrl(songId))} /> : null}
         {/* A song only its sharer can see has no one to send the link to. */}
         {song?.audience !== 'me' ? <Button small kind="ghost" label="Share" onPress={share} /> : null}
@@ -95,6 +99,7 @@ export function SongActions({ songId, song }: { songId: string; song?: Song }) {
         </View>
       ) : null}
       {!signedIn ? <Body muted>Create an account to save songs and keep track of your practice.</Body> : null}
+      {song && mine.data?.can_edit ? <CoverSheet open={covering} onClose={() => setCovering(false)} song={song} /> : null}
       {song && (song.group_name || song.shared_by_name || song.audience !== 'everyone') ? (
         <Body muted>{[song.group_name || song.shared_by_name ? `Shared by ${song.group_name ?? song.shared_by_name}` : null, seenBy(song, s.profile?.id)].filter(Boolean).join(' · ')}</Body>
       ) : null}

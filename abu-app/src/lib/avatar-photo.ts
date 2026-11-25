@@ -1,22 +1,30 @@
 /**
- * Choosing a profile picture (owner's request, 21 November 2026): a photo from the phone (its gallery or camera),
- * cut to a square from its middle and made at most 512 pixels across as a JPEG, tens of kilobytes, for phones on
- * little data; then sent with `api.setAvatar`. On phones without the web's canvas the photo goes as it is.
+ * Choosing a profile picture (owner's request, 21 November 2026) or a song's cover (colleagues' request, 25 November
+ * 2026): a photo from the phone (its gallery or camera), cut to a square from its middle and made at most 512 pixels
+ * across for a profile picture, 800 for a cover, as a JPEG of tens of kilobytes, for phones on little data; then
+ * sent with `api.setAvatar` or `api.setCover`. On phones without the web's canvas the photo goes as it is.
  */
 import * as DocumentPicker from 'expo-document-picker';
 import { Platform } from 'react-native';
 
 export const AVATAR_SIZE = 512;
+/** A cover is shown bigger (Home's tiles and grids, a song's page), so it's kept sharper. */
+export const COVER_SIZE = 800;
 const TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
-/** The chosen photo, ready to send, or null if none was chosen. Throws with a message for a file that won't do. */
-export async function pickAvatar(): Promise<{ image: Blob; type: string } | null> {
+/** The chosen profile picture, ready to send, or null if none was chosen. Throws with a message for a file that won't do. */
+export const pickAvatar = () => pickSquare(AVATAR_SIZE);
+
+/** The chosen cover picture, ready to send, or null if none was chosen. */
+export const pickCover = () => pickSquare(COVER_SIZE);
+
+async function pickSquare(largest: number): Promise<{ image: Blob; type: string } | null> {
   const result = await DocumentPicker.getDocumentAsync({ type: ['image/*'], copyToCacheDirectory: true });
   if (result.canceled) return null;
   const a = result.assets[0];
   const original = a.file ?? (await (await fetch(a.uri)).blob());
   if (Platform.OS === 'web') {
-    const square = await squareJpeg(original);
+    const square = await squareJpeg(original, largest);
     if (square) return { image: square, type: 'image/jpeg' };
   }
   const type = (a.mimeType ?? original.type ?? '').toLowerCase();
@@ -25,12 +33,12 @@ export async function pickAvatar(): Promise<{ image: Blob; type: string } | null
   return { image: original, type };
 }
 
-/** The middle square of a picture, as a JPEG at most AVATAR_SIZE across (upright, as the camera took it). */
-async function squareJpeg(file: Blob): Promise<Blob | null> {
+/** The middle square of a picture, as a JPEG at most `largest` pixels across (upright, as the camera took it). */
+async function squareJpeg(file: Blob, largest: number): Promise<Blob | null> {
   try {
     const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
     const side = Math.min(bitmap.width, bitmap.height);
-    const size = Math.min(AVATAR_SIZE, side);
+    const size = Math.min(largest, side);
     const canvas = document.createElement('canvas');
     canvas.width = size;
     canvas.height = size;
