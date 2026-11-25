@@ -74,7 +74,7 @@ const STYLE = 'An elegant painterly illustration, rich warm colour, soft light, 
 const NO_TEXT = 'no text, no letters, no words, no signature, no watermark';
 
 /**
- * What to ask the image model for: square album-cover artwork for a choir song, from a scene written for it (by
+ * What to ask the image model for: a square painterly picture for a choir song's cover, from a scene written for it (by
  * `sceneWriter`, from its title) and its tags as mood and scene, led by the creator's own idea when they gave one.
  * Never the title itself: the model wrote titles on the pictures, and misspelt them ("Ammazing Grace", 25 November
  * 2026). Always under 1,000 characters, and always asks for no lettering. The composer isn't used: a name in a
@@ -90,7 +90,8 @@ export function coverPrompt(song: { title: string; composer: string; tags: strin
   const picture = withoutTitle(oneLine(scene ?? ''), song.title).slice(0, 300);
   return [
     show && `Show: ${show}.`,
-    picture ? `Square album cover artwork for a choir song: ${picture.replace(/[.\s]+$/, '')}.` : 'Square album cover artwork for a choir song.',
+    // Not "album cover" nor "choir song": the model took those as words to write ("Choir Song" on a cover, 25 November 2026).
+    picture ? `A square painterly picture: ${picture.replace(/[.\s]+$/, '')}.` : 'A square painterly picture.',
     scenes.length ? `Mood and scene: ${scenes.join('; ')}.` : 'Mood: peaceful and uplifting.',
     WEST_AFRICAN.some((t) => tags.has(t)) && `${TEXTILES}.`,
     `${STYLE}; ${NO_TEXT}.`,

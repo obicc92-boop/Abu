@@ -157,7 +157,7 @@ describe('A cover made by AI', () => {
     expect(scene.mock.calls[0][1]).toMatchObject({ title: 'Ekeresimesi Erutego', tags: ['Christmas', 'Igbo'] });
     expect(scene.mock.calls[0][2]).toContain('a choir under a mango tree');
     const prompt = make.mock.calls[0][1];
-    expect(prompt.startsWith('Show: a choir under a mango tree at dusk. Square album cover artwork')).toBe(true);
+    expect(prompt.startsWith('Show: a choir under a mango tree at dusk. A square painterly picture')).toBe(true);
     expect(prompt).toContain(SCENE);
     expect(prompt).not.toContain('Ekeresimesi');
     expect(prompt).toContain('the nativity star');
@@ -167,7 +167,7 @@ describe('A cover made by AI', () => {
 
     // Without an idea, from the song alone.
     expect((await makeCover(song.id, emeka.cookie)).status).toBe(200);
-    expect(make.mock.calls[1][1].startsWith('Square album cover artwork')).toBe(true);
+    expect(make.mock.calls[1][1].startsWith('A square painterly picture')).toBe(true);
     expect(await coversOf(song.id)).toHaveLength(1);
 
     // An idea too long is refused before the AI is asked.
@@ -293,9 +293,10 @@ describe('A deleted song', () => {
 describe('What the AI is asked for (coverPrompt)', () => {
   const prompt = (tags: string[], idea?: string, title = 'Gloria in Excelsis') => coverPrompt({ title, composer: 'G. F. Handel', tags }, idea);
 
-  it('asks for square album-cover artwork for a choir song, never with its title (it would be written on it), with no lettering', () => {
+  it('asks for a square painterly picture, never with its title (it would be written on it), with no lettering', () => {
     const p = prompt([]);
-    expect(p).toContain('Square album cover artwork for a choir song');
+    expect(p).toContain('A square painterly picture');
+    expect(p).not.toMatch(/album|choir song/i);
     expect(p).not.toContain('Gloria');
     expect(p).toContain('An elegant painterly illustration, rich warm colour, soft light, a simple centred composition');
     expect(p.endsWith(`${NO_TEXT}.`)).toBe(true);
@@ -331,7 +332,7 @@ describe('What the AI is asked for (coverPrompt)', () => {
   });
 
   it('leads with the creator’s idea, tidied, and stays under 1,000 characters', () => {
-    expect(prompt(['Easter'], 'three women at\u0000 the\ntomb')).toMatch(/^Show: three women at the tomb\. Square album cover/);
+    expect(prompt(['Easter'], 'three women at\u0000 the\ntomb')).toMatch(/^Show: three women at the tomb\. A square painterly picture/);
     expect(prompt([], '   ')).not.toContain('Show:');
     const all = ['Christmas', 'Easter', 'Lent', 'Communion', 'Thanksgiving', 'Marian', 'Pentecost', 'Praise', 'Advent', 'Entrance', 'Igbo', 'Yoruba'];
     const longest = prompt(all, 'y'.repeat(600), 'T'.repeat(200));
@@ -342,9 +343,9 @@ describe('What the AI is asked for (coverPrompt)', () => {
   it('takes the scene written for it, without the title or anything quoted in it', () => {
     const song = { title: 'Worthy is the Lamb', composer: '', tags: [] };
     const p = coverPrompt(song, undefined, 'A lamb on a hill at dawn under the words "Worthy is the Lamb", worthy is the lamb glowing.\n');
-    expect(p).toContain('Square album cover artwork for a choir song: A lamb on a hill at dawn under the words, glowing.');
+    expect(p).toContain('A square painterly picture: A lamb on a hill at dawn under the words, glowing.');
     expect(p.toLowerCase()).not.toContain('worthy');
-    expect(coverPrompt(song, undefined, '')).toContain('Square album cover artwork for a choir song. Mood: peaceful and uplifting.');
+    expect(coverPrompt(song, undefined, '')).toContain('A square painterly picture. Mood: peaceful and uplifting.');
     expect(coverPrompt(song, undefined, 's'.repeat(900)).length).toBeLessThan(1000);
   });
 });
