@@ -75,6 +75,27 @@ export function SearchIcon({ size = 18, color }: IconProps) {
 
 const line = (color: ColorValue) => ({ fill: 'none', stroke: color, strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const });
 
+/** Making something with AI: a big four-pointed sparkle and a small one. */
+export function SparkleIcon({ size = 22, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d="M10 3.5c.6 3.6 2.4 5.4 6 6-3.6.6-5.4 2.4-6 6-.6-3.6-2.4-5.4-6-6 3.6-.6 5.4-2.4 6-6z" {...line(color)} />
+      <Path d="M18 14.5c.3 1.8 1.2 2.7 3 3-1.8.3-2.7 1.2-3 3-.3-1.8-1.2-2.7-3-3 1.8-.3 2.7-1.2 3-3z" {...line(color)} strokeWidth={1.6} />
+    </Svg>
+  );
+}
+
+/** A picture: a frame with a sun and a hill. */
+export function PictureIcon({ size = 22, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Rect x={3.5} y={4.5} width={17} height={15} rx={2.5} {...line(color)} />
+      <Circle cx={9} cy={9.5} r={1.8} {...line(color)} />
+      <Path d="M4 17l5-4.5 3.5 3 3-2.5L20 17" {...line(color)} />
+    </Svg>
+  );
+}
+
 export function CameraIcon({ size = 22, color }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">

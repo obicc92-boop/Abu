@@ -82,6 +82,48 @@ export interface Song {
   group_name: string | null;
   /** Who can see it: whoever shared it, the group it was shared from, or everyone. */
   audience: Audience;
+  /**
+   * Its cover picture (colleagues' request, 25 November 2026, for a Home like a music app's): one its creator chose,
+   * or one made by AI; `coverUrl` gives its address. Without one, the app draws a cover of its own.
+   */
+  cover_key: string | null;
+  cover_source: 'upload' | 'ai' | null;
+}
+
+/** A song as Home's feed gives it: enough to draw its cover and play it straight from Home. */
+export interface HomeSong {
+  id: string;
+  title: string;
+  composer: string;
+  doh: number;
+  time_signature: string;
+  tags: string[];
+  solfa: string;
+  cover_key: string | null;
+  audience: Audience;
+  /** Plays in the last 14 days, everyone's together. */
+  plays: number;
+}
+
+export interface CoverPick {
+  id: string;
+  title: string;
+  cover_key: string | null;
+}
+
+/** Home's feed (GET /api/home), of only the songs the viewer can see. */
+export interface HomeFeed {
+  /** Tags on those songs, most songs first: the chips at the top. */
+  tags: { tag: string; songs: number }[];
+  trending: HomeSong[];
+  newest: HomeSong[];
+  /** Songs you've played, most recent first (signed out: none). */
+  recent: HomeSong[];
+  /** Songs you haven't played yet. */
+  discover: HomeSong[];
+  /** Tags with a few songs each, as collections, with songs for their pictures. */
+  collections: { tag: string; songs: number; covers: CoverPick[] }[];
+  composers: { name: string; songs: number; cover: CoverPick }[];
 }
 
 /**
@@ -379,6 +421,12 @@ export const api = {
     return request<Song>(`/songs/${id}/sheet`, { method: 'PUT', body, headers: { 'Content-Type': picked.type } });
   },
   removeSheet: (id: string) => request<Song>(`/songs/${id}/sheet`, { method: 'DELETE' }),
+  /** Home's feed, of every song or of one tag's (a chip at the top). */
+  home: (tag?: string | null) => request<HomeFeed>(`/home${tag ? `?tag=${encodeURIComponent(tag)}` : ''}`),
+  /** A song's cover: a square JPEG chosen from the phone (src/lib/avatar-photo.ts), one made by AI, or taken away. */
+  setCover: (id: string, image: Blob, type: string) => request<Song>(`/songs/${encodeURIComponent(id)}/cover`, { method: 'PUT', body: image, headers: { 'Content-Type': type } }),
+  makeCover: (id: string, idea?: string) => request<Song>(`/songs/${encodeURIComponent(id)}/cover/make`, json('POST', idea?.trim() ? { idea: idea.trim() } : {})),
+  removeCover: (id: string) => request<Song>(`/songs/${encodeURIComponent(id)}/cover`, { method: 'DELETE' }),
   /** Scanning a sheet: find the lines of music on a page (a JPEG, with its size in pixels). */
   scanPage: (image: Blob, width: number, height: number) =>
     request<ScanPageReading>(`/scan/page?w=${Math.round(width)}&h=${Math.round(height)}`, { method: 'POST', body: image, headers: { 'Content-Type': 'image/jpeg' } }),
@@ -517,3 +565,6 @@ export function inviteMessage(groupName: string, code: string): string {
 
 /** A profile picture's address, from its key (avatars/<person>/<picture>.jpg); null without one. */
 export const avatarUrl = (key: string | null | undefined): string | null => (key ? `${API_URL}/api/${key}` : null);
+
+/** A song's cover picture's address, from its key (covers/<song>/<picture>.jpg); null without one. */
+export const coverUrl = (key: string | null | undefined): string | null => (key ? `${API_URL}/api/${key}` : null);

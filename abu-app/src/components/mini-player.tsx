@@ -1,5 +1,5 @@
 /**
- * The song playing, in a bar over the tabs, as on Suno (owner's request, 21 November 2026): its parts' colours,
+ * The song playing, in a bar over the tabs, as on Suno (owner's request, 21 November 2026): its cover, or its parts' colours,
  * its name and the bar it's on, play or pause (carrying on where it was), and how far it has got. Tapping it opens
  * the song; while it's paused, × puts it away. Shown once a song has been played (src/audio/now-playing.tsx).
  */
@@ -8,6 +8,7 @@ import { useMemo } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { useNowPlaying } from '@/audio/now-playing';
+import { CoverArt } from '@/components/cover-art';
 import { barAt, songBars } from '@/score/bars';
 import { makeStyles, useColors } from '@/theme/theme';
 import { fonts, partColor } from '@/theme/tokens';
@@ -39,12 +40,16 @@ export function MiniPlayer() {
   return (
     <View style={styles.box}>
       <Pressable onPress={() => router.push({ pathname: '/song/[id]', params: { id: song.id } })} accessibilityRole="button" accessibilityLabel={`Open ${song.title}`} style={styles.body}>
-        {/* The parts' colours, rising and falling with the beat while it plays. */}
-        <View style={styles.art}>
-          {parts.map((p, i) => (
-            <View key={p} style={[styles.level, { backgroundColor: partColor(p), height: player.playing ? 8 + ((player.beat + i * 2) % 4) * 5 : 10 + (i % 2) * 6 }]} />
-          ))}
-        </View>
+        {/* Its cover, with bars dancing while it plays; without one, the parts' colours rising and falling with the beat. */}
+        {song.cover ? (
+          <CoverArt song={{ id: song.id, title: song.title, cover: song.cover }} size={44} radius={10} playing={player.playing} paused={!player.playing} />
+        ) : (
+          <View style={styles.art}>
+            {parts.map((p, i) => (
+              <View key={p} style={[styles.level, { backgroundColor: partColor(p), height: player.playing ? 8 + ((player.beat + i * 2) % 4) * 5 : 10 + (i % 2) * 6 }]} />
+            ))}
+          </View>
+        )}
         <View style={styles.words}>
           <Text style={styles.title} numberOfLines={1}>
             {song.title}

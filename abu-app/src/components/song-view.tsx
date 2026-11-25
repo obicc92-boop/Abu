@@ -14,6 +14,7 @@ import { useSession } from '@/state/session';
 import { makeStyles } from '@/theme/theme';
 import { fonts } from '@/theme/tokens';
 
+import { CoverArt, type CoverSong } from './cover-art';
 import { PartMixer, PlayButton, Stepper, ToggleRow } from './player-controls';
 import { Score, type BarActions } from './score';
 import { SongActions } from './song-actions';
@@ -53,7 +54,7 @@ export function SongView({ id, banner }: { id: string; banner?: ReactNode }) {
   if (!song.solfa.trim()) {
     return (
       <SafeAreaView style={styles.page}>
-        <TopBar title={song.title} subtitle={[song.composer, 'sheet only'].filter(Boolean).join(' · ')} />
+        <TopBar title={song.title} subtitle={[song.composer, 'sheet only'].filter(Boolean).join(' · ')} cover={{ id: song.id, title: song.title, cover: shared.data?.cover_key }} />
         {banner}
         <ScrollView contentContainerStyle={styles.body}>
           <Text style={[styles.hint, { textAlign: 'left', fontSize: 14 }]}>
@@ -77,7 +78,7 @@ function Player({ song, apiSong, banner }: { song: DemoSong; apiSong?: Song; ban
   // The app's own player (src/audio/now-playing.tsx): the song keeps playing when you leave this page, and its
   // plays are counted there.
   const nowSong = useMemo(
-    () => ({ id: song.id, title: song.title, composer: song.composer, solfa: song.solfa, key: song.key, parsed, countable: !!apiSong }),
+    () => ({ id: song.id, title: song.title, composer: song.composer, solfa: song.solfa, key: song.key, parsed, countable: !!apiSong, cover: apiSong?.cover_key ?? null }),
     [song.id, song.title, song.composer, song.solfa, song.key, parsed, apiSong],
   );
   const p = useSongPage(nowSong);
@@ -114,7 +115,12 @@ function Player({ song, apiSong, banner }: { song: DemoSong; apiSong?: Song; ban
 
   return (
     <SafeAreaView style={styles.page} edges={['top', 'left', 'right']}>
-      <TopBar title={song.title} subtitle={[song.composer, `Doh is ${keyName}`, parsed.meta.time].filter(Boolean).join(' · ')} />
+      <TopBar
+        title={song.title}
+        subtitle={[song.composer, `Doh is ${keyName}`, parsed.meta.time].filter(Boolean).join(' · ')}
+        cover={{ id: song.id, title: song.title, cover: apiSong?.cover_key, solfa: song.solfa }}
+        playing={p.playing}
+      />
       {banner}
       <ScrollView
         ref={scrollRef}
@@ -181,7 +187,7 @@ function Player({ song, apiSong, banner }: { song: DemoSong; apiSong?: Song; ban
   );
 }
 
-function TopBar({ title, subtitle }: { title: string; subtitle: string }) {
+function TopBar({ title, subtitle, cover, playing }: { title: string; subtitle: string; cover?: CoverSong; playing?: boolean }) {
   const styles = useStyles();
   return (
     <View style={styles.topbar}>
@@ -194,6 +200,8 @@ function TopBar({ title, subtitle }: { title: string; subtitle: string }) {
       >
         <View style={styles.chevron} />
       </Pressable>
+      {/* The song's cover, as a music app's player shows it (colleagues' request, 25 November 2026). */}
+      {cover ? <CoverArt song={cover} size={48} radius={11} playing={playing} /> : null}
       <View style={styles.titles}>
         <Text style={styles.title} numberOfLines={2}>
           {title}

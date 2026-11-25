@@ -22,6 +22,8 @@ export default defineConfig(async () => {
         },
       }),
     ],
-    test: { setupFiles: ['./test/apply-migrations.ts'] },
+    // Signing up hashes a password with 100,000 rounds of PBKDF2 on purpose (src/auth.ts), so a test that signs up
+    // three people takes a few seconds, and far longer while the machine is busy: vitest's 5 seconds timed out at random.
+    test: { setupFiles: ['./test/apply-migrations.ts'], testTimeout: 30_000 },
   };
 });

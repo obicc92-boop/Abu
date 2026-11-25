@@ -1,5 +1,5 @@
 /**
- * The song library, sharing and editing songs, who can see each song, original sheets, and each group's
+ * The song library, sharing and editing songs, who can see each song, original sheets, covers, and each group's
  * repertoire.
  */
 // The same sol-fa reader as the app, so nothing with broken sol-fa is ever saved.
@@ -19,6 +19,9 @@ export interface Song {
   /** R2 key and file type of the original sheet, if attached. */
   sheet_key: string | null;
   sheet_type: string | null;
+  /** R2 key of the song's cover picture (served at /api/<cover_key>), and where it came from; null without one. */
+  cover_key: string | null;
+  cover_source: CoverSource | null;
   /** Who can see it: whoever shared it, the group it was shared from, or everyone. */
   audience: Audience;
   shared_by: string | null;
@@ -39,12 +42,15 @@ export interface Song {
 export type Audience = 'me' | 'group' | 'everyone';
 export const AUDIENCES: readonly Audience[] = ['me', 'group', 'everyone'];
 
+/** Where a song's cover came from: a picture someone chose, or one made by AI. */
+export type CoverSource = 'upload' | 'ai';
+
 /**
  * The songs someone can see, as SQL on `s` (songs) with its values: everyone's; their own; their group's; and any
  * song in the repertoire or a song order of a group they're in (a leader who could see it put it there). Signed
- * out, only everyone's.
+ * out, only everyone's. Home's feed (src/domain/home.ts) uses the same rule, so it never shows a song the list wouldn't.
  */
-function seenBy(viewer: string | null): { sql: string; values: unknown[] } {
+export function seenBy(viewer: string | null): { sql: string; values: unknown[] } {
   if (!viewer) return { sql: `s.audience = 'everyone'`, values: [] };
   return {
     sql: `(s.audience = 'everyone' or s.shared_by = ?
@@ -288,9 +294,9 @@ export async function bringBackVersion(db: D1Database, me: string, songId: strin
 
 /**
  * Whoever shared it, or a leader of the group it was shared from. Not while a
- * song order uses it. Returns the sheet's R2 key, for the caller to delete.
+ * song order uses it. Returns the R2 keys of its sheet and its cover, for the caller to delete.
  */
-export async function deleteSong(db: D1Database, me: string, songId: string): Promise<string | null> {
+export async function deleteSong(db: D1Database, me: string, songId: string): Promise<{ sheet: string | null; cover: string | null }> {
   const song = await getSong(db, songId, me);
   const leader = song.shared_from_group ? (await membershipOf(db, song.shared_from_group, me))?.role === 'leader' : false;
   if (song.shared_by !== me && !leader) throw forbidden('Only whoever shared this song, or their group’s leader, can delete it.');
@@ -299,7 +305,7 @@ export async function deleteSong(db: D1Database, me: string, songId: string): Pr
   } catch (e) {
     throw friendly(e, 'This song is in a song order, so it can’t be deleted. Take it out of the order first.');
   }
-  return song.sheet_key;
+  return { sheet: song.sheet_key, cover: song.cover_key };
 }
 
 /* ---------- Original sheets (the files live in R2) ---------- */
@@ -316,6 +322,30 @@ export async function setSheet(db: D1Database, songId: string, key: string | nul
   const old = await db.prepare('select sheet_key from songs where id = ?').bind(songId).first<{ sheet_key: string | null }>();
   await db.prepare('update songs set sheet_key = ?, sheet_type = ?, updated_at = ? where id = ?').bind(key, type, nowIso(), songId).run();
   return old?.sheet_key ?? null;
+}
+
+/* ---------- Covers (the pictures live in R2; made by AI in src/covers.ts) ---------- */
+
+/** The song, after checking you may change its cover: whoever can edit the song. */
+export async function prepareCover(db: D1Database, me: string, songId: string): Promise<Song> {
+  const song = await getSong(db, songId, me);
+  if (!(await canEditSong(db, me, song))) throw forbidden(CANT_EDIT);
+  return song;
+}
+
+/**
+ * Records a song's new cover and where it came from, or takes it away (both null). A cover isn't an edit of the
+ * song: no version is kept, and updated_at and updated_by stay as they were. Returns the old cover's key, for the
+ * caller to delete; read in the same transaction as the change, so two new covers at once can't both miss it.
+ */
+export async function setCover(db: D1Database, songId: string, key: string | null, source: CoverSource | null): Promise<string | null> {
+  const [old, update] = await db.batch<{ cover_key: string | null }>([
+    db.prepare('select cover_key from songs where id = ?').bind(songId),
+    db.prepare('update songs set cover_key = ?, cover_source = ? where id = ?').bind(key, source, songId),
+  ]);
+  // Deleted meanwhile: the caller takes back the picture it just put in the bucket.
+  if (!update.meta.changes) throw notFound('That song doesn’t exist, or it isn’t shared with you.');
+  return old.results[0]?.cover_key ?? null;
 }
 
 /* ---------- Repertoire ("Our repertoire", or "My songs" in your own space) ---------- */
