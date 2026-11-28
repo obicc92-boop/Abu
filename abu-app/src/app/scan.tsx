@@ -34,7 +34,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { ActivityIndicator, Image, Pressable, ScrollView, Switch, Text, View, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollViewInstance, type TextInputInstance } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { api, ApiError, type PickedFile, type ScanLineReading } from '@/api/client';
+import { api, ApiError, type PickedFile, type ScanLayoutLine, type ScanLineReading } from '@/api/client';
 import { useSongPlayer } from '@/audio/use-song-player';
 import { MainFill } from '@/components/brand';
 import { PartSheet } from '@/components/part-sheet';
@@ -599,16 +599,18 @@ function Scanner() {
           // 2026: sheets mix three-part choruses, one-part verses, a cantor over the choir, and "it needs some
           // reasoning"). Its answer is kept only if it can be used; otherwise, or past the day's allowance, the
           // app's own lines stay. Not for a boxed sheet, read box by box already.
+          // A page Claude says has no music (verses printed as text) gives no lines, and isn't looked at again.
+          let grouped: ScanLayoutLine[] | null = null;
           if (layout && ai.anthropic && layout.rows.length) {
             try {
               const asked = numberedPage(layout);
-              const grouped = (await api.scanLayout(asked.image, asked.rows)).lines;
-              if (grouped?.length) onPicture = linesFromLayout(grouped, layout.rows, layout.k);
+              grouped = (await api.scanLayout(asked.image, asked.rows)).lines;
+              if (grouped) onPicture = linesFromLayout(grouped, layout.rows, layout.k);
             } catch {
               // The app's own lines.
             }
           }
-          if (!onPicture.length && ai.anthropic) {
+          if (!onPicture.length && !grouped && ai.anthropic) {
             // 3. The last resort: Claude finds the lines.
             const small = await pageForFinding(pages[p]);
             const page = await api.scanPage(small.blob, small.width, small.height);
