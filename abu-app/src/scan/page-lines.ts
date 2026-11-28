@@ -573,27 +573,6 @@ export function groupByBarLines(
     const words = line.filter((i) => !notes[i]).length;
     if (c[0] === last + 1 && rows[c[0]].top - rows[last].bottom <= 1.2 * rowHeight && words + c.length <= line.length - words) line.push(...c);
   }
-  // Where the bar lines stop at the words between a system's upper and lower parts (S A, words, T B, drawn
-  // by hand a pair at a time), two lines of two parts or more side by side, with only words between, closer
-  // together than the lines around them are apart, and no more parts together than a line has, are one. (A
-  // cantor's line over the choir's has its words between its parts: the bar lines run through them.)
-  const gapBetween = (a: number[], b: number[]) => rows[b[0]].top - rows[a[a.length - 1]].bottom;
-  const sideBySide = (l: number[]) => {
-    const n = l.filter((i) => notes[i]);
-    return n[n.length - 1] - n[0] === n.length - 1;
-  };
-  const most = parts || 4;
-  for (let k = 0; k + 1 < lines.length; k++) {
-    const [a, b] = [lines[k], lines[k + 1]];
-    const lastNotes = Math.max(...a.filter((i) => notes[i]));
-    if (count(a) < 2 || count(b) < 2 || count(a) + count(b) > most || !sideBySide(a) || !sideBySide(b)) continue;
-    if (rows.slice(lastNotes + 1, b[0]).some((_, j) => notes[lastNotes + 1 + j])) continue;
-    let inside = 0;
-    for (let i = lastNotes; i < b[0]; i++) inside = Math.max(inside, rows[i + 1].top - rows[i].bottom);
-    const around = [k > 0 ? gapBetween(lines[k - 1], a) : NaN, k + 2 < lines.length ? gapBetween(b, lines[k + 2]) : NaN].filter((g) => !Number.isNaN(g));
-    if (!around.length || inside >= 0.6 * Math.min(...around)) continue;
-    lines.splice(k, 2, Array.from({ length: b[b.length - 1] - a[0] + 1 }, (_, j) => a[0] + j));
-  }
   return { lines, notes };
 }
 

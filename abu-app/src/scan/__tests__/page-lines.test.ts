@@ -430,23 +430,6 @@ describe('grouping rows into lines of music', () => {
       expect(two.lines).toEqual([[0, 1, 2, 3]]);
     });
 
-    it('joins a system whose bar lines stop at the words between its upper and lower parts', () => {
-      // S A, two rows of words, T B (drawn by hand a pair at a time), then S A, words, T B, a wider gap between.
-      const kinds = 'NNWWNNNNWNN';
-      const rows = stack(kinds, [5]);
-      const reads = [...kinds].map((k) => (k === 'N' ? notesRead() : wordsRead('Rise, ye chil-dren')));
-      const isNotes = [...kinds].map((k) => k === 'N');
-      const links = [3, 0, 0, 0, 3, 0, 3, 0, 0, 3];
-      for (const parts of [4, 0]) {
-        const { lines, notes } = groupLines(rows, isNotes, [], [], parts, { links, reads });
-        expect(lines).toEqual([
-          [0, 1, 2, 3, 4, 5],
-          [6, 7, 8, 9, 10],
-        ]);
-        expect(lines.map((l) => l.filter((i) => notes[i]).length)).toEqual([4, 4]);
-      }
-    });
-
     it('keeps lines of two parts apart when they’re as far apart as the lines around them', () => {
       // Three systems of S A and their words, the same gap after each.
       const kinds = 'NNWNNWNNW';
