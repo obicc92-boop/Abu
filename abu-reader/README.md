@@ -322,3 +322,24 @@ cd train && ../.venv/bin/python -I train.py --data ../data/rows/synth-sub ../dat
 - **New tokens:** a token for each sign (`segno`, `coda`, `|:`, `:|`, `1.`, `2.`) and each jump (`D.S.`, `D.C.`, `Fine`, `to coda`, with "al Fine" and "al Coda"), the common dynamics and hairpins, and `(` and `)`, rather than letters, so the vocabulary stays small; and the bridge's `=` back in.
 - **Rows cut taller:** signs and words like "D.C. al Fine" are printed above or below the row, outside the tight box the app cuts each row to (`page-lines.ts`, `boxes.ts`), so the cut would need room above and below.
 - **Measuring:** that the notes don't get worse on the held-out pages, and how often a sign is invented where there's none.
+
+**Printed hymn books: bar lines through each system** (28 November 2026, free, no AI). The owner photographed 16 pages of a printed Igbo hymn book (*Chegha Ria*, *Jesu Kristi Isi Idi Aso*, *Hosanna*, *Ebube Gi Juputara*…; kept in `data/hymnbook/`, with row labels in `labels.json` made by eye against `found-rows.json`) and found that scanning read "only 1 part each as a solo". The reader read the rows well; grouping them into lines was what failed. With "Not sure", `groupRows` took every row of notes for a line of its own, because rows of words read as notes (Igbo words come out as "mma-ta", "dflox'") spoiled the gaps it goes by; with "4", three-part choruses, call-and-response verses and one-part verses were cut four rows at a time.
+
+- **What the pages share:** each system's bar lines are printed down through all its parts, and often its words, and nothing joins one system to the next. `pageRows` now counts the bar lines running from each row into the next (`links`: upright runs of ink, a pixel either way, from the middle of one row to the middle of the next). Where ruled lines don't box the systems, `groupByBarLines` takes the rows they join as a line, each with its own number of parts: a hymn's SATB, a three-part chorus, a cantor's line over the choir's, a part that comes in late (a short row), a melody line with its words. A row of notes nothing joins is a line of its own (a chanted verse). It's used only where the bar lines join most of the page's neighbouring rows of notes (`BARRED`, 75%), so a stray long stroke on a handwritten page doesn't take over; and two lines of two parts side by side with only words between, closer than the lines around them (S A, words, T B, bar lines drawn a pair at a time by hand), are joined.
+- **Rows of words read as notes:** a row whose beats mostly hold something that isn't sol-fa (`garbled`, 60% or more) is words wherever the systems aren't boxed; within joined rows, a row with far fewer beat marks than the system's parts (or, for a short row, as thick with them) is words too.
+
+| Systems cut exactly | Before | After |
+|---|---|---|
+| The 16 hymn-book photos (88 systems), four parts given | 17 | 76 |
+| The same, "Not sure" | 39 | 84 |
+| The 50 labelled handwritten pages (318), four parts given | 284 | 291 |
+| The same, "Not sure" | 274 | 283 |
+
+On the 140 fresh pages, 43 were cut differently; judged blind side by side (old and new shuffled), the new was better on 35, the old on 3, the same on 5, and on the sol-fa pages among them systems right went from 17 to 34 (to about 37 with the joining of S A / T B pairs, added after the judging: page 048 6 → 8 of 8, page 089 1 → 3 of 4 (the old cutting had all 4)). 33 of the 43 aren't sol-fa (staff or number notation), where the new finds fewer junk lines, often none (better on 28, the same on 4, worse on 1); of the 10 sol-fa pages, the new was better on 7, the old on 2. Still wrong: a page with no bar lines and four parts asked for (chanted verses, `p16`), a words row read with the notes above it when the two touch, and rows of three parts run together into one.
+
+```sh
+# from abu-app: find, read and group the rows (the readings are cached), then score against the labels
+# (with --boxes ../abu-reader/data/hymnbook/found-rows.json before the last argument once finding rows changes)
+npx tsx --tsconfig tsconfig.json ../abu-reader/scripts/handwriting/find-lines.ts ../abu-reader/data/hymnbook/pages.json /tmp/hymn4 4
+python3 ../abu-reader/scripts/handwriting/score-lines.py ../abu-reader/data/hymnbook/labels.json /tmp/hymn4/pages.json
+```

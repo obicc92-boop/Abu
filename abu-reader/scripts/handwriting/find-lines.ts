@@ -1,7 +1,8 @@
 // Finds the lines on page pictures as the app's findLinesOwn does (page at most 2400 px, straightened if
 // tilted, shrunk to 1200 px to find its rows, each row read by the reader to tell notes from words, then
-// grouped), caching the row readings, and writes per page: rows, readings, ruled lines, the grouping, and the
-// shrunk straightened page as PNG (for overlays). score-lines.py scores the grouping against row labels.
+// grouped), caching the row readings, and writes per page: rows, readings, ruled lines, the bar lines joining
+// rows, the grouping, and the shrunk straightened page as PNG (for overlays). score-lines.py scores the
+// grouping against row labels.
 // Usage (from abu-app): npx tsx --tsconfig tsconfig.json ../abu-reader/scripts/handwriting/find-lines.ts <pages.json [{file}]> <out dir> [parts=4]
 // MODEL=<rows.onnx> reads with another model (its .json beside it); PAGE_LINES=<module path> finds the rows,
 // tells notes from words and groups them with that copy of page-lines.ts (e.g. an older one, beside the
@@ -136,7 +137,7 @@ async function main() {
       page = rotate(page, tilt);
       small = shrink(page);
     }
-    const { rows, rules, long } = pageRows(small);
+    const { rows, rules, long, links } = pageRows(small);
     const rowsId = createHash('md5').update(JSON.stringify(rows)).digest('hex').slice(0, 8);
     const cacheFile = join(dirname(resolve(pagesFile)), 'pagecache', `${id}-${page.width}x${page.height}-${tilt.toFixed(2)}-${modelId}-${rowsId}.json`);
     mkdirSync(dirname(cacheFile), { recursive: true });
@@ -154,11 +155,13 @@ async function main() {
       }
       writeFileSync(cacheFile, JSON.stringify(reads));
     }
-    const isNotes = notesRows(reads);
-    const lines: number[][] = groupLines(rows, isNotes, rules, long, parts).lines;
+    const grouped = groupLines(rows, notesRows(reads), rules, long, parts, links ? { links, reads } : undefined);
+    const lines = grouped.lines;
+    // An older page-lines.ts (PAGE_LINES) says nothing of which rows it took for notes.
+    const isNotes = grouped.notes ?? notesRows(reads);
     const png = join(outDir, `${id.replace(/\.\w+$/, '')}.png`);
     if (!existsSync(png)) await savePng(small, png);
-    results.push({ n, file: p.file, png, tilt, width: small.width, height: small.height, rows, rules, long, reads, isNotes, lines });
+    results.push({ n, file: p.file, png, tilt, width: small.width, height: small.height, rows, rules, long, links, reads, isNotes, lines });
     console.log(`${String(n).padStart(2)} ${p.file}: ${rows.length} rows, ${isNotes.filter(Boolean).length} notes, ${lines.length} lines`);
   }
   writeFileSync(join(outDir, 'pages.json'), JSON.stringify(results, null, 1));

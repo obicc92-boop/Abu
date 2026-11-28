@@ -178,7 +178,7 @@ export async function findLinesOwn(original: HTMLCanvasElement, parts = 0): Prom
     small = shrink(page);
   }
   const smallGray = grayOf(small);
-  const { rows, rules, long } = pageRows(smallGray);
+  const { rows, rules, long, links } = pageRows(smallGray);
   const big = (r: RowBox): RowBox => ({ top: r.top * k, bottom: r.bottom * k, baseline: r.baseline * k, size: r.size * k, left: r.left * k, right: r.right * k });
   const reads = [];
   for (const row of rows) {
@@ -233,12 +233,13 @@ export async function findLinesOwn(original: HTMLCanvasElement, parts = 0): Prom
     left: Math.min(...g.map((i) => rows[i].left)) * k,
     right: Math.max(...g.map((i) => rows[i].right)) * k,
   });
-  const grouped = groupLines(rows, isNotes, rules, long, parts);
+  // A printed sheet's bar lines say which rows are one line, each with its own number of parts.
+  const grouped = groupLines(rows, isNotes, rules, long, parts, { links, reads });
   const lines = grouped.lines.map((g) => {
     let seen = 0;
     const wordRows: FoundLine['wordRows'] = [];
     for (const i of g) {
-      if (isNotes[i]) seen++;
+      if (grouped.notes[i]) seen++;
       else wordRows.push({ box: boxOf([i]), after: Math.max(0, seen - 1) });
     }
     // No more parts than the person said each line has: a row of words read like notes is left to the line's
