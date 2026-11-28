@@ -141,7 +141,7 @@ The score shows a bridge note as the sheet does (`ˢd`), and "Doh is D" above th
 
 ## Checks the app runs before saving
 
-- Every bar has the number of beats the time signature needs. Errors name the part and bar, e.g. "Tenor, bar 6 has 5 beats; 4/4 needs 4."
+- Every bar has the number of beats the time signature needs. Errors name the part and bar, e.g. "Tenor, bar 6 has 5 beats; 4/4 needs 4." The first bar may be short (an upbeat), and so may the first bar of a named section when it's an upbeat of half a bar at most (`[Verse 1]` starting on its own upbeat after the chorus, as hymn books print it), and the last bar.
 - All parts in a section have the same number of bars.
 - Every syllable is a real sol-fa note, with an octave mark the app understands. A bridge note is two notes joined by `=`.
 - Bridge notes in one key change all go to the same key (a warning if one doesn't).

@@ -521,6 +521,11 @@ describe('checks before saving', () => {
     expect(messages(parse(['S  d :- /m :r | d :- | m :- /- :- |']).errors)).toEqual(['Soprano, bar 2 has 2 beats; 4/4 needs 4.']);
   });
 
+  it('allows a named section to start with an upbeat (a verse after the chorus), but not an unnamed line or a longer short bar', () => {
+    expect(parse(['[Chorus]', 'S  d :- /m :r | d :- /- :- |', '', '[Verse 1]', 'S  s1 | d :- /m :r | d :- /- :- |']).errors).toEqual([]);
+    expect(messages(parse(['S  d :- /m :r | d :- /- :- |', '', 'S  s1 | d :- /m :r | d :- /- :- |']).errors)).toEqual(['Soprano, bar 3 has 1 beat; 4/4 needs 4.']);
+  });
+
   it('checks that every part in a section has the same number of bars', () => {
     const song = parse(['[Verse]', 'S  d :r /m :f | s :- /- :- |', 'A  d :r /m :f |']);
     expect(messages(song.errors)).toEqual(['Verse: Alto has 1 bar but Soprano has 2.']);

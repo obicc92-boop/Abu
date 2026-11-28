@@ -398,7 +398,9 @@ export function parseSolfa(text: string, options: ParseOptions = {}): ParsedSong
         starts.push(beat);
         const n = barNo + bi + 1;
         const line = rs.barLines[p][bi];
-        const pickup = ki === 0 && bi === 0;
+        // A short first bar: the song's upbeat, or a named section's upbeat of half a bar at most (a verse after a
+        // chorus starting on its own upbeat, as hymn books print it: owner's hymn book, 28 November 2026).
+        const pickup = bi === 0 && (ki === 0 || (!!rs.name.trim() && beats.length * 2 <= bpb));
         const ending = ki === kept.length - 1 && bi === bars.length - 1;
         if (beats.length > bpb || (beats.length < bpb && !pickup && !ending)) {
           errors.push({
