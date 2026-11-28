@@ -67,6 +67,104 @@ const PAGE_SCHEMA = {
   additionalProperties: false,
 };
 
+/* ---------- Checking how the app cut a page into lines ---------- */
+
+/**
+ * The app finds a page's rows itself (abu-app/src/scan/page-lines.ts) but can group them wrongly: sheets mix
+ * three-part choruses with one-part verses, a cantor's line over the choir's, words between the parts
+ * (owner's request, 28 November 2026: "it needs some reasoning to adjust the lines, or to know what parts to
+ * transcribe"). Claude sees the page with each row boxed and numbered, and what the app read in each row, and
+ * says which rows are each line's notes, who sings each, and which are its words.
+ */
+export const LAYOUT_SYSTEM = `You look at a photo of a page of a tonic sol-fa choir sheet (printed or handwritten). A program has boxed each row of writing on it and numbered it in red in the margin on the left: R1, R2, … from the top. It also tried to read each row as sol-fa notes; its readings come with the picture (a row of words or a heading reads as nonsense, or as nothing).
+
+Group the rows into lines of music. A line of music (a system) is the rows of notes for all the parts sung together, side by side in time, with their rows of words. A system's bar lines usually run down through all its rows of notes. A system can have 1 row of notes (a melody, a unison verse, a chant, with its words), 2 (soprano and alto; or a cantor's line over the choir's), 3, 4 (soprano, alto, tenor, bass) or more. Rows of words can come between its rows of notes (soprano, alto, words, tenor, bass) or under them. Several systems follow each other down the page; a label such as "ALL", "Chorus" or "Solo" above a system belongs to it.
+
+For each system, from the top of the page, give its rows of notes from the top, each with the part that sings it (S, A, T or B; Solo for a soloist's or cantor's line), and its rows of words. Leave out headings and titles, verses printed as plain text with no notes over them, page numbers and footers. Use each row number at most once.`;
+
+export const LAYOUT_SCHEMA = {
+  type: 'object',
+  properties: {
+    lines: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          notes: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: { row: { type: 'integer' }, part: { type: 'string', enum: ['S', 'A', 'T', 'B', 'Solo'] } },
+              required: ['row', 'part'],
+              additionalProperties: false,
+            },
+          },
+          words: { type: 'array', items: { type: 'integer' } },
+        },
+        required: ['notes', 'words'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['lines'],
+  additionalProperties: false,
+};
+
+/** What the app read in each row (R1 first), as Claude is told it. */
+export function layoutPrompt(rows: { top: number; bottom: number; text: string }[]): string {
+  const listed = rows.map((r, i) => `R${i + 1} (from y ${Math.round(r.top)} to ${Math.round(r.bottom)}): ${r.text.replace(/\s+/g, ' ').trim().slice(0, 120) || '(nothing)'}`);
+  return `The rows, as the program read them:\n${listed.join('\n')}`;
+}
+
+/** A line of music as Claude grouped it: its rows of notes (row numbers from 0, top to bottom) with their parts, and its rows of words. */
+export interface LayoutLine {
+  notes: { row: number; part: string }[];
+  words: number[];
+}
+
+/**
+ * Claude's grouping, checked: row numbers that exist (R1 is row 0), each used once, every line with a row of
+ * notes, lines in the page's order and the parts in each line different (a line can't have two sopranos: then
+ * they're named top to bottom as the app would). Null when it can't be used, so the app keeps its own.
+ */
+export function cleanLayout(raw: unknown, rowCount: number): LayoutLine[] | null {
+  const lines = (raw as { lines?: unknown })?.lines;
+  if (!Array.isArray(lines)) return null;
+  const used = new Set<number>();
+  const out: LayoutLine[] = [];
+  const row = (n: unknown) => (Number.isInteger(n) && (n as number) >= 1 && (n as number) <= rowCount ? (n as number) - 1 : null);
+  for (const l of lines) {
+    const notes: LayoutLine['notes'] = [];
+    for (const n of Array.isArray(l?.notes) ? l.notes : []) {
+      const r = row(n?.row);
+      if (r === null || used.has(r)) return null;
+      used.add(r);
+      notes.push({ row: r, part: partOf(String(n?.part ?? '')) ?? 'S' });
+    }
+    const words: number[] = [];
+    for (const n of Array.isArray(l?.words) ? l.words : []) {
+      const r = row(n);
+      if (r === null || used.has(r)) return null;
+      used.add(r);
+      words.push(r);
+    }
+    if (!notes.length) continue;
+    notes.sort((a, b) => a.row - b.row);
+    // A part named twice (divided altos, first and second sopranos): a line has each part once, so its rows are
+    // named as the app names a line of that many (abu-app's partsFor), for the person to change if need be.
+    if (new Set(notes.map((n) => n.part)).size < notes.length) {
+      const names = ({ 1: ['S'], 2: ['S', 'A'], 3: ['S', 'A', 'B'], 4: ['S', 'A', 'T', 'B'], 5: ['Solo', 'S', 'A', 'T', 'B'] } as Record<number, string[]>)[notes.length];
+      notes.forEach((n, k) => (n.part = names?.[k] ?? `P${k + 1}`));
+    }
+    out.push({ notes, words: words.sort((a, b) => a - b) });
+  }
+  if (!out.length) return null;
+  out.sort((a, b) => a.notes[0].row - b.notes[0].row);
+  // Lines one after another down the page: one's rows don't run into the next's.
+  for (let k = 1; k < out.length; k++) if (out[k].notes[0].row < Math.max(...out[k - 1].notes.map((n) => n.row))) return null;
+  return out;
+}
+
 export interface FoundLine {
   top: number;
   bottom: number;
@@ -633,6 +731,21 @@ export async function readPage(env: Env, image: ArrayBuffer, type: ImageType, wi
   // Haiku finds the lines as well as Opus did on the owner's sheets (abu-reader/README.md), for a twentieth of the cost.
   const raw = await ask(env, CHEAP, PAGE_SYSTEM, PAGE_SCHEMA, image, type, `The image is ${width} by ${height} pixels.`);
   return cleanPage(raw as Parameters<typeof cleanPage>[0], width, height);
+}
+
+/** How hard Opus thinks about a page's lines. */
+const LAYOUT_EFFORT = 'medium';
+
+/**
+ * How a page's rows make lines of music, as Opus sees it (LAYOUT_SYSTEM): the page picture with the app's rows
+ * boxed and numbered, and what the app read in each. Opus, not Haiku or Sonnet: on the owner's 16 hymn-book
+ * photos it grouped all 88 lines right, rows and parts (the app alone 68 to 76, Sonnet 72, Haiku 67), and on 50
+ * handwritten pages 272 of 318 (the app 172); about 3 US cents a page (abu-reader/README.md, 28 November 2026).
+ * Null when its answer can't be used: the app keeps its own lines.
+ */
+export async function readLayout(env: Env, image: ArrayBuffer, type: ImageType, rows: { top: number; bottom: number; text: string }[]): Promise<LayoutLine[] | null> {
+  const raw = await ask(env, STRONG, LAYOUT_SYSTEM, LAYOUT_SCHEMA, image, type, layoutPrompt(rows), LAYOUT_EFFORT);
+  return cleanLayout(raw, rows.length);
 }
 
 /** One line of music, read into SolfaScores sol-fa. */

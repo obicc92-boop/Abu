@@ -345,3 +345,25 @@ On the 140 fresh pages, 43 were cut differently; judged blind side by side (old 
 npx tsx --tsconfig tsconfig.json ../abu-reader/scripts/handwriting/find-lines.ts ../abu-reader/data/hymnbook/pages.json /tmp/hymn4 4
 python3 ../abu-reader/scripts/handwriting/score-lines.py ../abu-reader/data/hymnbook/labels.json /tmp/hymn4/pages.json
 ```
+
+**Claude groups each page's rows into lines** (28 November 2026; the owner asked for it: "it needs some reasoning to adjust the lines, or to know what parts to transcribe", after a printed sheet whose two two-part systems came out as one line of four; measured on the trial key with the owner's approval, US$3.96 in all). The app still finds the rows itself; the page goes to the AI with each row boxed and numbered in a margin (R1, R2…) and what the app's model read in each, and the AI says which rows are each line's notes, who sings each (S, A, T, B or Solo) and which are its words (`LAYOUT_SYSTEM`, `LAYOUT_SCHEMA` and `cleanLayout` in `abu-api/src/scan.ts`; the page drawn by `numberedPage` in `abu-app/src/scan/own-reader.web.ts`, the answer turned into lines by `abu-app/src/scan/layout.ts`). A line naming a part twice (divided altos, first and second sopranos) is named as the app names a line of that many rows; an answer that uses a row twice, names a row that isn't there or runs one line into the next isn't used, and the app keeps its own lines.
+
+| Systems exactly right (their rows of notes, so their number of parts too) | 16 hymn-book photos (88) | 50 handwritten pages (318) | US cents a page | Seconds a page |
+|---|---|---|---|---|
+| The app alone, four parts given / "Not sure" | 68 / 76 | 172 / 170 | free | |
+| Cloudflare: Llama 4 Scout | 33 | | free (the daily allowance) | 15 |
+| Cloudflare: Mistral Small 3.1 | 20 | | free | 6 |
+| Claude Haiku 5.5 | 67 | 206 | 0.17 | 15 |
+| Claude Sonnet 5.5 | 72 | 158 | 0.98 | 3 |
+| Claude Opus 5.5, low effort | 86 | 199 | 1.95 | 4 |
+| **Claude Opus 5.5, medium effort** | **88** | **272** | **2.90** (at most 7.8) | 8 |
+
+  Cloudflare's thinking models (Gemma 4, Qwen 3.8) gave empty answers or timed out. By the looser measure (`score-lines.py`: a line's rows of notes, as labelled, all one system's), Opus medium cuts 304 of the 318 handwritten systems (the app alone 291), and takes 3 of 819 rows of words for notes (the app 138). So the scan screen asks Opus for every photo page that isn't a boxed sheet (read box by box already), when the Worker has Claude's key; it counts as a page in the day's allowance (40 a person, and now 500 for everyone: about US$15 a day, at most about US$40).
+
+```sh
+# the numbered pages (from a find-lines.ts output), then Claude on them (from abu-api; CAP in US dollars)
+.venv/bin/python -I scripts/handwriting/layout-ai.py <found pages.json> <labels.json> <drawn dir> --draw
+CAP=2 npx tsx ../abu-reader/scripts/handwriting/layout-claude.ts <found pages.json> <drawn dir> <out dir> claude-opus-5-5 medium
+python3 ../abu-reader/scripts/handwriting/score-exact.py <labels.json> <out dir>/pages.json [--boxes <labels' pages.json>]
+# Cloudflare's models: the probe (workers-ai, wrangler dev --port 8791), then layout-ai.py --model scout|mistral|gemma4think|qwen38think
+```

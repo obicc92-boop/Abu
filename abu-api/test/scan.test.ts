@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ensureUser } from '../src/domain/groups';
 import { scanAllowance, useScan } from '../src/domain/scan';
 import { api as app } from '../src/index';
-import { CHECK_SYSTEM, checkLine, cleanPage, fixLine, keyName, keyOf, LINE_SCHEMA, LINE_SYSTEM, lineText, MARK_RULES, MARKS_SYSTEM, SIGN_FIX, readHeading, readLine, readLineWords, readMarks, readPage, readWords, rowsAnswer, sectionAnswer, sectionOf, tempoOf, tidyMarks, tidySlurs, timeOf, WORDS_LINE_SYSTEM, WORDS_MARKS_SYSTEM } from '../src/scan';
+import { CHECK_SYSTEM, checkLine, cleanLayout, cleanPage, fixLine, keyName, keyOf, LINE_SCHEMA, LINE_SYSTEM, LAYOUT_SCHEMA, LAYOUT_SYSTEM, layoutPrompt, lineText, MARK_RULES, MARKS_SYSTEM, SIGN_FIX, readHeading, readLayout, readLine, readLineWords, readMarks, readPage, readWords, rowsAnswer, sectionAnswer, sectionOf, tempoOf, tidyMarks, tidySlurs, timeOf, WORDS_LINE_SYSTEM, WORDS_MARKS_SYSTEM } from '../src/scan';
 import { call, ORIGIN, signUp } from './helpers';
 
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
@@ -37,7 +37,7 @@ afterEach(() => vi.restoreAllMocks());
 describe('the daily allowance', () => {
   it('counts pages and lines per person, and refuses past the limit', async () => {
     await ensureUser(env.DB, { id: 'scan-a', name: 'Scanner A' });
-    const limits = { pages: 2, lines: 3, allLines: 100 };
+    const limits = { pages: 2, lines: 3, allLines: 100, allPages: 100 };
     await useScan(env.DB, 'scan-a', 'page', limits);
     await useScan(env.DB, 'scan-a', 'page', limits);
     await expect(useScan(env.DB, 'scan-a', 'page', limits)).rejects.toMatchObject({ status: 429, message: expect.stringContaining('2 pages') });
@@ -46,12 +46,22 @@ describe('the daily allowance', () => {
     expect(await scanAllowance(env.DB, 'scan-a', limits)).toEqual({ pages: 0, lines: 0 });
   });
 
+  it('stops everyone’s pages once SolfaScores’ daily total of pages is reached', async () => {
+    await ensureUser(env.DB, { id: 'scan-d', name: 'Scanner D' });
+    await ensureUser(env.DB, { id: 'scan-e', name: 'Scanner E' });
+    const day = new Date().toISOString().slice(0, 10);
+    const before = await env.DB.prepare(`select coalesce(sum(pages), 0) as n from scan_usage where day = ?`).bind(day).first<{ n: number }>();
+    const limits = { pages: 10, lines: 10, allLines: 1000, allPages: (before?.n ?? 0) + 1 };
+    await useScan(env.DB, 'scan-d', 'page', limits);
+    await expect(useScan(env.DB, 'scan-e', 'page', limits)).rejects.toMatchObject({ status: 429, message: expect.stringContaining('pages') });
+  });
+
   it('stops everyone once SolfaScores’ daily total is reached', async () => {
     await ensureUser(env.DB, { id: 'scan-b', name: 'Scanner B' });
     await ensureUser(env.DB, { id: 'scan-c', name: 'Scanner C' });
     const day = new Date().toISOString().slice(0, 10);
     const before = await env.DB.prepare(`select coalesce(sum(lines), 0) as n from scan_usage where day = ?`).bind(day).first<{ n: number }>();
-    const limits = { pages: 10, lines: 10, allLines: (before?.n ?? 0) + 2 };
+    const limits = { pages: 10, lines: 10, allLines: (before?.n ?? 0) + 2, allPages: 1000 };
     await useScan(env.DB, 'scan-b', 'line', limits);
     await useScan(env.DB, 'scan-b', 'line', limits);
     await expect(useScan(env.DB, 'scan-c', 'line', limits)).rejects.toMatchObject({ status: 429, message: expect.stringContaining('today') });
@@ -353,6 +363,60 @@ describe('reading with Claude', () => {
   it('says plainly when a picture can’t be read', async () => {
     claudeReplies({}, 'refusal');
     await expect(readLine(withKey, JPEG.buffer, 'image/jpeg', { parts: ['S'] })).rejects.toMatchObject({ status: 422 });
+  });
+});
+
+describe('how a page’s rows make lines, as Claude sees it', () => {
+  const answer = {
+    lines: [
+      { notes: [{ row: 6, part: 'S' }, { row: 7, part: 'A' }, { row: 8, part: 'B' }], words: [9] },
+      { notes: [{ row: 2, part: 'S' }, { row: 3, part: 'A' }, { row: 4, part: 'B' }], words: [5] },
+      { notes: [{ row: 10, part: 'S' }], words: [11] },
+    ],
+  };
+
+  it('takes its lines in the page’s order, with rows counted from 0', () => {
+    expect(cleanLayout(answer, 12)).toEqual([
+      { notes: [{ row: 1, part: 'S' }, { row: 2, part: 'A' }, { row: 3, part: 'B' }], words: [4] },
+      { notes: [{ row: 5, part: 'S' }, { row: 6, part: 'A' }, { row: 7, part: 'B' }], words: [8] },
+      { notes: [{ row: 9, part: 'S' }], words: [10] },
+    ]);
+  });
+
+  it('can’t be used when a row is used twice, isn’t on the page, or one line runs into the next', () => {
+    expect(cleanLayout({ lines: [{ notes: [{ row: 1, part: 'S' }], words: [2] }, { notes: [{ row: 2, part: 'S' }], words: [] }] }, 5)).toBeNull();
+    expect(cleanLayout({ lines: [{ notes: [{ row: 9, part: 'S' }], words: [] }] }, 5)).toBeNull();
+    expect(cleanLayout({ lines: [{ notes: [{ row: 1, part: 'S' }, { row: 4, part: 'A' }], words: [] }, { notes: [{ row: 2, part: 'S' }], words: [] }] }, 5)).toBeNull();
+    expect(cleanLayout({ lines: [] }, 5)).toBeNull();
+    expect(cleanLayout('nonsense', 5)).toBeNull();
+  });
+
+  it('names a line’s divided parts as the app names a line of that many rows', () => {
+    const divided = cleanLayout({ lines: [{ notes: ['S', 'A', 'A', 'T', 'B'].map((part, k) => ({ row: k + 1, part })), words: [] }] }, 6);
+    expect(divided?.[0].notes.map((n) => n.part)).toEqual(['Solo', 'S', 'A', 'T', 'B']);
+    const six = cleanLayout({ lines: [{ notes: ['S', 'S', 'A', 'A', 'T', 'B'].map((part, k) => ({ row: k + 1, part })), words: [] }] }, 6);
+    expect(six?.[0].notes.map((n) => n.part)).toEqual(['P1', 'P2', 'P3', 'P4', 'P5', 'P6']);
+  });
+
+  it('asks Opus, with the page, the rows the app read and the answer’s shape', async () => {
+    const fetch = claudeReplies(answer);
+    const rows = Array.from({ length: 12 }, (_, i) => ({ top: 20 * i, bottom: 20 * i + 15, text: i === 1 ? 's :s :m | s :- :- |' : '' }));
+    expect(await readLayout(withKey, JPEG.buffer, 'image/jpeg', rows)).toEqual(cleanLayout(answer, 12));
+    const request = JSON.parse(String(fetch.mock.calls[0][1]?.body));
+    expect(request.model).toBe('claude-opus-5-5');
+    expect(request.system[0].text).toBe(LAYOUT_SYSTEM);
+    expect(request.output_config.format.schema).toEqual(LAYOUT_SCHEMA);
+    expect(request.messages[0].content[1].text).toBe(layoutPrompt(rows));
+    expect(layoutPrompt(rows)).toContain('R2 (from y 20 to 35): s :s :m | s :- :- |');
+    expect(layoutPrompt(rows)).toContain('R1 (from y 0 to 15): (nothing)');
+  });
+
+  it('needs Claude’s key and the page’s rows before counting a page', async () => {
+    const { cookie } = await signUp('Layout Scanner');
+    const off = await call('/scan/layout', { method: 'POST', body: JSON.stringify({ image: 'AAAA', rows: [{ top: 0, bottom: 10, text: '' }] }), headers: { 'content-type': 'application/json' }, cookie });
+    expect(off.status).toBe(503);
+    const left = await call('/scan/allowance', { cookie });
+    expect(await left.json()).toMatchObject({ pages: 40 });
   });
 });
 
