@@ -433,6 +433,26 @@ function Scanner() {
     // Bar lines every part lost alike go back, at the same beats in every part, even when the line still
     // fails for something else (only bar lines move): the person and the AIs then start from bars in step.
     if (!passes(own)) own = withBarsInStep(own, beats) ?? own;
+    // A typed sheet's line read from its picture (a photo or a scan): Opus reads it afresh even when the app's own
+    // reading adds up (owner's call, 28 November 2026: on a printed hymn book, own readings that added up had still
+    // dropped upbeats and last notes and changed notes; Opus read nearly every line right). Kept only if it adds up
+    // and keeps every part; otherwise the app's own reading goes on as before, and Opus isn't asked again.
+    let askedOpus = false;
+    if (!again && !line.handwritten && line.via === 'own' && ai.anthropic) {
+      askedOpus = true;
+      try {
+        const semitone = parseKey(head.key)?.semitone;
+        const r = await api.scanLine(line.blob, { parts: line.parts, time: songTime || undefined, key: semitone === undefined ? undefined : KEY_PARAM[semitone] });
+        let text = withWords(r.text, wordsPreferring(wordsOf(r.text), wordTexts));
+        if (!passes(text)) text = bestFree([text], passes, beats);
+        if (passes(text) && (!own.trim() || keepsParts(text, own))) {
+          update(line.id, { status: 'read', text, doubts: r.doubts, checked: false, via: 'strong', ...keyFrom(line, text, r.key), ...sectionFrom(line, r.section ?? printed.section) });
+          return text;
+        }
+      } catch {
+        // Out of the day's allowance, or Opus out of reach: the app's own reading, as before.
+      }
+    }
     if (!again && passes(own)) {
       const { text, key, section } = line.handwritten ? await withOpusWords(line, own, ai, passes) : { text: await typedMarks(line, own, ai, passes), key: undefined, section: undefined };
       update(line.id, { status: 'read', text, checked: false, ...keyFrom(line, text, key), ...sectionFrom(line, section ?? printed.section) });
@@ -445,7 +465,7 @@ function Scanner() {
     const tries: [NonNullable<Line['via']>, () => Promise<ScanLineReading>][] = [];
     if (ai.cloudflare && draft.trim()) tries.push(['cloudflare', () => api.scanFix(line.blob, { ...opts, draft })]);
     if (ai.anthropic && draft.trim() && !line.handwritten) tries.push(['haiku', () => api.scanCheck(line.blob, { ...opts, draft })]);
-    if (ai.anthropic) tries.push(['strong', () => api.scanLine(line.blob, opts)]);
+    if (ai.anthropic && !askedOpus) tries.push(['strong', () => api.scanLine(line.blob, opts)]);
     let problem = '';
     let opusWords: LineWords[] = [];
     let opusSection: string | undefined;
