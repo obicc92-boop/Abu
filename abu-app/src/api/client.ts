@@ -189,6 +189,12 @@ export interface PickedFile {
 }
 
 /** A scanned page: its heading, and where its lines of music are (in the picture's pixels). */
+/** A line of music on a page as Claude grouped the app's rows (numbered from 0): its rows of notes with who sings each, and its rows of words. */
+export interface ScanLayoutLine {
+  notes: { row: number; part: string }[];
+  words: number[];
+}
+
 export interface ScanPageReading {
   title: string;
   composer: string;
@@ -430,6 +436,12 @@ export const api = {
   /** Scanning a sheet: find the lines of music on a page (a JPEG, with its size in pixels). */
   scanPage: (image: Blob, width: number, height: number) =>
     request<ScanPageReading>(`/scan/page?w=${Math.round(width)}&h=${Math.round(height)}`, { method: 'POST', body: image, headers: { 'Content-Type': 'image/jpeg' } }),
+  /**
+   * How a page's rows make lines of music, judged by Claude: `image` is the page with the app's rows boxed and
+   * numbered (a base64 JPEG), `rows` each row's place in it and what the app read there. Null lines: keep the app's.
+   */
+  scanLayout: (image: string, rows: { top: number; bottom: number; text: string }[]) =>
+    request<{ lines: ScanLayoutLine[] | null }>('/scan/layout', json('POST', { image, rows })),
   /** Read one line of music (a JPEG) into sol-fa. */
   scanLine: (image: Blob, o: { parts: string[]; time?: string; key?: string }) => {
     const q = new URLSearchParams({ parts: o.parts.join(',') });

@@ -5,6 +5,7 @@
  * line's rows of notes; Haiku then checks the reading against the picture.
  */
 import { boxedSystems, notesIn, pageRules, readBoxedSystem, ruleY, type RowReading } from './boxes';
+import { numbering } from './layout';
 import { groupLines, notesRows, pageRows, partsFor, skewOf } from './page-lines';
 import { barsFromTable, evenPaper, findRows, greedy, notesLikeness, ruledBorders, tableBorders, toText, type Gray, type RowBox } from './rows';
 import type { Box, FoundLine } from './types';
@@ -150,7 +151,7 @@ const BOXED_ENOUGH = 0.6;
  * words says which part's row it comes after (0 for the first), so its words
  * can go there.
  */
-export async function findLinesOwn(original: HTMLCanvasElement, parts = 0): Promise<{ page: HTMLCanvasElement; lines: FoundLine[] }> {
+export async function findLinesOwn(original: HTMLCanvasElement, parts = 0): Promise<{ page: HTMLCanvasElement; lines: FoundLine[]; layout?: PageLayout }> {
   const { ort, session, meta } = await reader();
   const k = Math.max(1, Math.max(original.width, original.height) / FIND_EDGE);
   const shrink = (from: HTMLCanvasElement) => {
@@ -248,7 +249,44 @@ export async function findLinesOwn(original: HTMLCanvasElement, parts = 0): Prom
     const n = grouped.parts ? Math.min(seen, grouped.parts) : seen;
     return { box: boxOf(g), parts: partsFor(n), words: g.length - n, wordRows: wordRows.map((w) => ({ ...w, after: Math.min(w.after, n - 1) })) };
   });
-  return { page, lines };
+  // For Claude to check how the rows were grouped (layout.ts): the rows on the shrunk page, and what each read.
+  return { page, lines, layout: { small, rows, texts: reads.map((r) => r.text), k } };
+}
+
+/** What a page's lines were found from, for Claude to group again (layout.ts): the shrunk page, its rows and their readings. */
+export interface PageLayout {
+  small: HTMLCanvasElement;
+  rows: RowBox[];
+  texts: string[];
+  /** How many times the page was shrunk to find the rows. */
+  k: number;
+}
+
+/**
+ * The shrunk page as Claude sees it to group its rows (abu-api/src/scan.ts, LAYOUT_SYSTEM): each row boxed in red
+ * and numbered R1, R2… in a white margin on the left, as a base64 JPEG; and each row's place and reading.
+ */
+export function numberedPage(layout: PageLayout): { image: string; rows: { top: number; bottom: number; text: string }[] } {
+  const { small, rows, texts } = layout;
+  const { size, margin } = numbering(rows);
+  const c = document.createElement('canvas');
+  c.width = small.width + margin;
+  c.height = small.height;
+  const ctx = c.getContext('2d')!;
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, c.width, c.height);
+  ctx.drawImage(small, margin, 0);
+  ctx.strokeStyle = 'rgb(220, 30, 30)';
+  ctx.lineWidth = 1;
+  ctx.fillStyle = 'rgb(220, 30, 30)';
+  ctx.font = `bold ${size}px Arial, Helvetica, sans-serif`;
+  ctx.textBaseline = 'middle';
+  rows.forEach((r, i) => {
+    ctx.strokeRect(margin + r.left - 2 + 0.5, r.top - 1 + 0.5, r.right - r.left + 4, r.bottom - r.top + 2);
+    ctx.fillText(`R${i + 1}`, 2, (r.top + r.bottom) / 2);
+  });
+  const image = c.toDataURL('image/jpeg', 0.85).split(',')[1];
+  return { image, rows: rows.map((r, i) => ({ top: r.top, bottom: r.bottom, text: texts[i] ?? '' })) };
 }
 
 export const ownReaderHere = true;

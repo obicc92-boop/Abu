@@ -14,6 +14,11 @@ export const LIMITS = {
   lines: 400,
   /** Lines read for everyone together in a day: about US$32 at most, if every one went to Claude. */
   allLines: 1200,
+  /**
+   * Pages for everyone together in a day: Claude groups each photo page's rows into lines (about 3 US cents a
+   * page, at most about 8: 28 November 2026), so about US$15 a day, and at most about US$40.
+   */
+  allPages: 500,
 };
 
 export type ScanUse = 'page' | 'line';
@@ -33,6 +38,10 @@ export async function useScan(db: D1Database, userId: string, use: ScanUse, limi
   if (use === 'line') {
     const all = await db.prepare(`select coalesce(sum(lines), 0) as lines from scan_usage where day = ?`).bind(day).first<{ lines: number }>();
     if ((all?.lines ?? 0) >= limits.allLines) throw new AppError(429, 'SolfaScores has read as many lines as it can today. Try again tomorrow.');
+  }
+  if (use === 'page') {
+    const all = await db.prepare(`select coalesce(sum(pages), 0) as pages from scan_usage where day = ?`).bind(day).first<{ pages: number }>();
+    if ((all?.pages ?? 0) >= limits.allPages) throw new AppError(429, 'SolfaScores has scanned as many pages as it can today. Try again tomorrow.');
   }
   await db
     .prepare(

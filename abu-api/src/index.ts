@@ -85,7 +85,7 @@ import { countCover, mayMakeCover } from './domain/covers';
 import { coverMaker, MAX_IDEA, oneLine, pictureType, promptFor } from './covers';
 import { autoCoverSong, coverWhatHomeShowed } from './auto-covers';
 import { scanAllowance, useScan } from './domain/scan';
-import { checkImage, checkLine, cloudflareReady, fixLine, partOf, readHeading, readLine, readLineWords, readMarks, readPage, readWords, scanningReady, scanReaders } from './scan';
+import { checkImage, checkLine, cloudflareReady, fixLine, partOf, readHeading, readLayout, readLine, readLineWords, readMarks, readPage, readWords, scanningReady, scanReaders } from './scan';
 import { AppError, badRequest, notFound } from './errors';
 import { sitePage } from './share';
 
@@ -415,6 +415,29 @@ app.post('/scan/page', signedIn, async (c) => {
   const type = checkImage(contentType(c), image.byteLength);
   await useScan(c.env.DB, c.get('userId'), 'page');
   return c.json(await readPage(c.env, image, type, Math.round(width), Math.round(height)));
+});
+
+/**
+ * How a page's rows make lines of music, judged by Claude: the body is JSON, `image` (the page with the app's
+ * rows boxed and numbered, a base64 JPEG) and `rows` (each row's top and bottom in that picture, and what the
+ * app read in it). Answers `{ lines }`, or `{ lines: null }` when Claude's answer can't be used.
+ */
+app.post('/scan/layout', signedIn, async (c) => {
+  scanningReady(c.env);
+  const body = await c.req.json<{ image?: unknown; rows?: unknown }>().catch(() => ({}) as { image?: unknown; rows?: unknown });
+  const rows = Array.isArray(body.rows) ? body.rows : [];
+  if (!rows.length || rows.length > 200) throw badRequest('Send the page’s rows.');
+  const clean = rows.map((r) => ({ top: Number(r?.top) || 0, bottom: Number(r?.bottom) || 0, text: String(r?.text ?? '').slice(0, 300) }));
+  if (typeof body.image !== 'string' || !body.image) throw badRequest('Send the page’s picture.');
+  let bytes: Uint8Array;
+  try {
+    bytes = Uint8Array.from(atob(body.image), (ch) => ch.charCodeAt(0));
+  } catch {
+    throw badRequest('Send the page’s picture as base64.');
+  }
+  const type = checkImage('image/jpeg', bytes.byteLength);
+  await useScan(c.env.DB, c.get('userId'), 'page');
+  return c.json({ lines: await readLayout(c.env, bytes.buffer as ArrayBuffer, type, clean) });
 });
 
 /** Reads one line of music. The body is the picture; ?parts=S,A,T,B, and ?time= and ?key= when known. */

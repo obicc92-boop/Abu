@@ -59,7 +59,8 @@ import { readSetting, writeSetting } from '@/lib/storage';
 import { placeCursor } from '@/lib/field-cursor';
 import { applyKey, type Key, type Selection } from '@/lib/solfa-keys';
 import { useUndo } from '@/lib/undo';
-import { findLinesOwn, readLineOwn } from '@/scan/own-reader';
+import { linesFromLayout } from '@/scan/layout';
+import { findLinesOwn, numberedPage, readLineOwn, type PageLayout } from '@/scan/own-reader';
 import { barAt, rangeLabel, songBars } from '@/score/bars';
 import { cutLine, cutPieces, loadPages, MAX_PAGES, pageForFinding, scanningHere, takePhoto } from '@/scan/pages';
 import { readTypedSheet, type PageText } from '@/scan/pdf-text';
@@ -584,13 +585,28 @@ function Scanner() {
         } else {
           // 2. A photo or scanned page: the lines found by where the ink is, with SolfaScores' own model.
           let onPicture: FoundLine[] = [];
+          let layout: PageLayout | undefined;
           try {
             const found = await findLinesOwn(pages[p].canvas, partsWanted);
             // A tilted photo comes back straightened: its lines are cut from that.
             pages[p] = { ...pages[p], canvas: found.page };
             onPicture = found.lines;
+            layout = found.layout;
           } catch {
             // SolfaScores' reader didn't load: Claude finds the lines if it can.
+          }
+          // Claude groups the rows the app found into lines and parts, seeing the page (owner's request, 28 November
+          // 2026: sheets mix three-part choruses, one-part verses, a cantor over the choir, and "it needs some
+          // reasoning"). Its answer is kept only if it can be used; otherwise, or past the day's allowance, the
+          // app's own lines stay. Not for a boxed sheet, read box by box already.
+          if (layout && ai.anthropic && layout.rows.length) {
+            try {
+              const asked = numberedPage(layout);
+              const grouped = (await api.scanLayout(asked.image, asked.rows)).lines;
+              if (grouped?.length) onPicture = linesFromLayout(grouped, layout.rows, layout.k);
+            } catch {
+              // The app's own lines.
+            }
           }
           if (!onPicture.length && ai.anthropic) {
             // 3. The last resort: Claude finds the lines.
