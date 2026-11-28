@@ -34,8 +34,11 @@ for a in added:
 if not go:
     print('dry run: nothing sent (add --go to add them)')
     sys.exit(0)
-for a in added:
+# One song at a time, its PDF first: a song's words can hold a semicolon, so no file holds more than one statement.
+for n, (a, statement) in enumerate(zip(added, sql), 1):
     subprocess.run(['npx', 'wrangler', 'r2', 'object', 'put', f"abu-sheets/{a['sheet_key']}", '--file', str(pdfs_dir / a['pdf']), '--content-type', 'application/pdf', '--remote'], check=True, capture_output=True)
-    print('  uploaded', a['pdf'])
-subprocess.run(['npx', 'wrangler', 'd1', 'execute', 'abu', '--remote', '--file', str(songs_dir / 'add.sql')], check=True)
+    one = songs_dir / f'add-{n:02d}.sql'
+    one.write_text(statement + '\n')
+    subprocess.run(['npx', 'wrangler', 'd1', 'execute', 'abu', '--remote', '--yes', '--file', str(one)], check=True, capture_output=True)
+    print(f"  added {a['title']}")
 print(f'added {len(added)} songs')
