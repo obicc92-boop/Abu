@@ -125,7 +125,8 @@ export interface LayoutLine {
 /**
  * Claude's grouping, checked: row numbers that exist (R1 is row 0), each used once, every line with a row of
  * notes, lines in the page's order and the parts in each line different (a line can't have two sopranos: then
- * they're named top to bottom as the app would). Null when it can't be used, so the app keeps its own.
+ * they're named top to bottom as the app would). None when the page has no music (verses printed as text);
+ * null when the answer can't be used, so the app keeps its own.
  */
 export function cleanLayout(raw: unknown, rowCount: number): LayoutLine[] | null {
   const lines = (raw as { lines?: unknown })?.lines;
@@ -158,7 +159,7 @@ export function cleanLayout(raw: unknown, rowCount: number): LayoutLine[] | null
     }
     out.push({ notes, words: words.sort((a, b) => a - b) });
   }
-  if (!out.length) return null;
+  // No lines at all is an answer too: a page of verses printed as text, with no music on it.
   out.sort((a, b) => a.notes[0].row - b.notes[0].row);
   // Lines one after another down the page: one's rows don't run into the next's.
   for (let k = 1; k < out.length; k++) if (out[k].notes[0].row < Math.max(...out[k - 1].notes.map((n) => n.row))) return null;

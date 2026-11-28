@@ -387,8 +387,11 @@ describe('how a page’s rows make lines, as Claude sees it', () => {
     expect(cleanLayout({ lines: [{ notes: [{ row: 1, part: 'S' }], words: [2] }, { notes: [{ row: 2, part: 'S' }], words: [] }] }, 5)).toBeNull();
     expect(cleanLayout({ lines: [{ notes: [{ row: 9, part: 'S' }], words: [] }] }, 5)).toBeNull();
     expect(cleanLayout({ lines: [{ notes: [{ row: 1, part: 'S' }, { row: 4, part: 'A' }], words: [] }, { notes: [{ row: 2, part: 'S' }], words: [] }] }, 5)).toBeNull();
-    expect(cleanLayout({ lines: [] }, 5)).toBeNull();
     expect(cleanLayout('nonsense', 5)).toBeNull();
+  });
+
+  it('takes no lines for a page with no music on it (verses printed as text)', () => {
+    expect(cleanLayout({ lines: [] }, 5)).toEqual([]);
   });
 
   it('names a line’s divided parts as the app names a line of that many rows', () => {
