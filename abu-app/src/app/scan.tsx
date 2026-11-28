@@ -40,6 +40,7 @@ import { MainFill } from '@/components/brand';
 import { PartSheet } from '@/components/part-sheet';
 import { AgainIcon, CameraIcon, CheckIcon, CloseIcon, FileIcon, PlusIcon, ScanIcon, ZoomIcon } from '@/components/icons';
 import { LineRows } from '@/components/line-rows';
+import { hasWords, WordsSheet } from '@/components/words-sheet';
 import { PlayButton } from '@/components/player-controls';
 import { BarToolbar, type BarActions } from '@/components/score';
 import { SectionPicker, sectionLabel } from '@/components/section-picker';
@@ -1251,6 +1252,8 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
   };
   // Who sings a row (a bass solo read as soprano, say): its colour or its name in the list is tapped.
   const [partRow, setPartRow] = useState<number | null>(null);
+  // Lining the words up with their notes (src/components/words-sheet.tsx).
+  const [aligning, setAligning] = useState(false);
   const setPart = (i: number, part: string) => {
     const next: LineRow[] = rows.map((r, k) => (k === i ? { ...r, part } : r));
     update(line.id, { text: joinLine(next), checked: false });
@@ -1361,6 +1364,7 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
                 ))}
               </View>
               <PartSheet open={partRow !== null} onClose={() => setPartRow(null)} current={partRow !== null ? (rows[partRow]?.part ?? null) : null} onChoose={(p) => partRow !== null && setPart(partRow, p)} />
+              <WordsSheet open={aligning} onClose={() => setAligning(false)} rows={rows} parsed={parsed} startRow={editingRow >= 0 && !rows[editingRow]?.part ? editingRow : null} onChange={setRow} />
             </View>
             {canPlay ? (
               // The line's Play, and what's playing of it ("Looping bar 6").
@@ -1466,6 +1470,14 @@ function CheckStep({ lines, current, setCurrent, time, setTime, doh, note, updat
               <Pressable onPress={() => readAgain(line)} disabled={line.status === 'reading'} accessibilityRole="button" accessibilityLabel="Ask the AI to read it again" style={styles.tool}>
                 {line.status === 'reading' ? <ActivityIndicator size="small" color={colors.muted} /> : <AgainIcon color={colors.muted} />}
                 <Text style={styles.toolText}>{line.status === 'reading' ? 'Reading…' : 'Ask the AI'}</Text>
+              </Pressable>
+            ) : null}
+            {hasWords(rows) ? (
+              <Pressable onPress={() => setAligning(true)} accessibilityRole="button" style={styles.tool}>
+                <Text style={styles.toolGlyph} aria-hidden>
+                  ⇆
+                </Text>
+                <Text style={styles.toolText}>Line up words</Text>
               </Pressable>
             ) : null}
             <Pressable onPress={() => update(line.id, { skipped: !line.skipped, checked: false })} accessibilityRole="button" style={styles.tool}>

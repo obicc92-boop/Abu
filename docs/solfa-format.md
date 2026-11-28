@@ -30,7 +30,7 @@ document.
 | Parts | Up to 5 rows: Solo + S A T B | Each line starts with a part name. A solo sung by one part is `SoloS`, `SoloA`, `SoloT` or `SoloB` (a bass solo: shown as a solo, sung where the basses sing); `Solo` alone is sung where sopranos sing |
 | A line where some parts rest (a solo) | Only the singing parts' rows are printed | Lines of music are separated by a blank line. Once a section has a line with two or more parts, a part left out of a line rests through it, and a part first seen partway through rests through the lines before it |
 | Tenor | Written an octave above where it sounds | Written as on paper. The app plays it an octave lower |
-| Words | Under the soprano, often under each part | A `W` line follows the part it belongs to. `W:` with no part applies to all parts |
+| Words | Under the soprano, often under each part | A `W` line follows the part it belongs to. `W:` with no part applies to all parts. A syllable to each note, in order (`Chi-ne-ke`); `-` holds the syllable before over one more note; two words sung on one note are tied, `ka‿o` |
 | Sections | `CHORUS`, `CODA`, `Solo` | `[Verse]`, `[Chorus]`, `[Coda]` |
 | Repeats and jumps | `D.S.`, `D.C.`, `Fine`, the segno 𝄋 (by hand like `$` or `§`), the coda sign 𝄌, `To Coda`, repeat bar lines `‖:` `:‖`, 1st and 2nd endings | In braces. Signs before the first note they mark: `{segno}`, `{coda}`, `{\|:}`, `{1.}`, `{2.}`. Jumps and ends right after the last note of their bar: `{D.S.}`, `{D.S. al Fine}`, `{D.S. al Coda}`, `{D.C.}`, `{D.C. al Fine}`, `{D.C. al Coda}`, `{Fine}`, `{to coda}`, `{:\|}`. Shown as printed, and played as sheets mean them: see "Repeats and jumps" below |
 | Tempo and mood | `Joyfully`, `Adagio` | `tempo: 72` or a word, e.g. `tempo: Adagio` |
