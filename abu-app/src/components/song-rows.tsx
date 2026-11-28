@@ -20,7 +20,6 @@ import { fonts, partColor } from '@/theme/tokens';
 import { CheckIcon, CloseIcon, PlusIcon } from './icons';
 import { LineRows } from './line-rows';
 import { PartSheet } from './part-sheet';
-import { hasWords, WordsSheet } from './words-sheet';
 import { SectionPicker, sectionLabel } from './section-picker';
 import { BarToolbar, type BarActions } from './score';
 import { Button, Chip } from './ui';
@@ -102,8 +101,6 @@ export function SongLine({
   const carriesOn = own || k < 0 ? null : sectionOf(pieces, k);
   // A row whose part is being changed (its colour tapped, or Change part).
   const [partOf, setPartOf] = useState<number | null>(null);
-  // Lining the words up with their notes (src/components/words-sheet.tsx).
-  const [aligning, setAligning] = useState(false);
   // A bar number tapped, to play what's written.
   const [picked, setPicked] = useState<number | null>(null);
   const playable = !!barActions?.canPlay;
@@ -156,9 +153,9 @@ export function SongLine({
           label={`line ${n}`}
           placeholder={(r) => (r.part ? 'Tap to write' : 'Words')}
           onStart={(i, shown) => onActive({ line, row: i, value: shown })}
-          onType={(i, typed) => {
+          onType={(i, typed, saved) => {
             onActive({ line, row: i, value: typed });
-            onChange(withRow(text, k, i, p.rows[i].part ? tidyNotes(typed) : typed));
+            onChange(withRow(text, k, i, p.rows[i].part ? tidyNotes(typed) : (saved ?? typed)));
           }}
           onSelection={onSelection}
           onLeave={(i) => onLeave(line, i)}
@@ -184,14 +181,6 @@ export function SongLine({
           <Pressable onPress={() => setPartOf(here!.row)} accessibilityRole="button" style={styles.action}>
             <View style={[styles.dot, { backgroundColor: partColor(row.part) }]} />
             <Text style={styles.actionText}>Change part</Text>
-          </Pressable>
-        ) : null}
-        {hasWords(p.rows) && check ? (
-          <Pressable onPress={() => setAligning(true)} accessibilityRole="button" style={styles.action}>
-            <Text style={styles.actionGlyph} aria-hidden>
-              ⇆
-            </Text>
-            <Text style={styles.actionText}>Line up words</Text>
           </Pressable>
         ) : null}
         <Pressable onPress={() => setSectioning(!sectioning)} accessibilityRole="button" accessibilityState={{ expanded: sectioning }} style={styles.action}>
@@ -237,16 +226,6 @@ export function SongLine({
             <Button small kind="ghost" label="Keep it" onPress={() => setRemoving(false)} />
           </View>
         </View>
-      ) : null}
-      {check ? (
-        <WordsSheet
-          open={aligning}
-          onClose={() => setAligning(false)}
-          rows={p.rows}
-          parsed={check}
-          startRow={here && !p.rows[here.row]?.part ? here.row : null}
-          onChange={(i, words) => onChange(withRow(text, k, i, words))}
-        />
       ) : null}
       <PartSheet
         open={partOf !== null}

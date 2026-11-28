@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 
-import { alignedRows, barColumns, bestFree, changedShare, freeRepair, joinLine, keepsParts, namesNotWords, noteColumns, problemsByPart, sectionBeforeWords, sectionInWords, splitLine, tidyNotes, tidyTitle, withBarLinesInStep, withBarsInStep, withBridgeNotes, withFullEmptyBars, withGapsAsBars, withHalfBarsAsBars, withoutNameColumn, withRestingEdges, withShortBarsJoined, withSpacedBeats, withWords, wordsAsSpaced, wordsOf, wordsPreferring, wordsUnderNotes } from '../line-text';
+import { alignedRows, barColumns, bestFree, changedShare, freeRepair, joinLine, keepsParts, namesNotWords, noteColumns, problemsByPart, sectionBeforeWords, sectionInWords, splitLine, tidyNotes, tidyTitle, withBarLinesInStep, withBarsInStep, withBridgeNotes, withFullEmptyBars, withGapsAsBars, withHalfBarsAsBars, withoutNameColumn, withRestingEdges, withShortBarsJoined, withSpacedBeats, withWords, wordsAsSpaced, wordsFromSpaced, wordsOf, wordsPreferring, wordsUnderNotes } from '../line-text';
 import { parseSolfa, splitWords } from '@/solfa';
 
 describe('tidyNotes', () => {
@@ -401,6 +401,55 @@ describe('a row of words to type in', () => {
       free = at + w.length;
     });
     expect(splitWords(spaced)).toEqual(syllables);
+  });
+
+  // Free to space along (owner's request, 28 November 2026: words spaced under their notes went back to the left
+  // when saved). Notes at columns 0, 3, 6, 9, 12 and 18.
+  const notes = 'd :r |m :f |s :- |d :- ||';
+
+  it('keeps a word spaced along with the note it is under, the notes passed over with no syllable', () => {
+    expect(noteColumns(notes)).toEqual([0, 3, 6, 9, 12, 18]);
+    expect(wordsFromSpaced('Chi- ne-     Nna', notes)).toBe('Chi- ne- - - Nna');
+    // As the checker pairs them: Nna on s.
+    const song = parseSolfa(`S  ${notes}\nW  ${wordsFromSpaced('Chi- ne-     Nna', notes)}`, { time: '2/4' });
+    expect(song.events.S.filter((e) => e.lyric).map((e) => [e.text, e.lyric])).toEqual([
+      ['d', 'Chi-'],
+      ['r', 'ne-'],
+      ['s', 'Nna'],
+    ]);
+    // Spaced in from the start, and to the nearest note when between two.
+    expect(wordsFromSpaced('      Chi- ne-', notes)).toBe('- - Chi- ne-');
+    expect(wordsFromSpaced('Chi-  ne-', notes)).toBe('Chi- - ne-');
+    expect(wordsFromSpaced('Chi-      ne-', notes)).toBe('Chi- - - ne-');
+  });
+
+  it('gives a word a single space after the one before, and a word’s next syllable, the next note', () => {
+    expect(wordsFromSpaced('Chineke Nna', notes)).toBe('Chineke Nna');
+    expect(wordsFromSpaced('Chi-ne-ke', notes)).toBe('Chi- ne- ke');
+    // Never a note before the syllable before's: past the last note, it's one of the words left over.
+    expect(wordsFromSpaced('a- b- c- d  e', 'd :r :m :f')).toBe('a- b- c- d e');
+    expect(wordsFromSpaced('  Glory  ', '')).toBe('Glory');
+  });
+
+  it('shows the words as they were left, and reads them back the same', () => {
+    expect(wordsAsSpaced('Chi- ne- - - Nna', notes)).toBe('Chi- ne-    Nna');
+    expect(wordsAsSpaced('- - Chi- ne-', notes)).toBe('      Chi- ne-');
+    // A long syllable runs over the note passed over: the "-" is written, to keep Nna's place.
+    expect(wordsAsSpaced('Chineke - Nna', 'd :r |m :f |')).toBe('Chineke - Nna');
+    const rows: [string, string][] = [
+      ['Chineke Nna kpa- ra', notes],
+      ['Chi- ne- - - Nna', notes],
+      ['- - Chi- ne- ke', notes],
+      ['Chineke - Nna', 'd :r |m :f |'],
+      ['Glo-ry - be to God', "(m'.d') :d' | s :- | m :r |d :- |"],
+      ['a b c d e f g', 'd :r |m :- |'],
+      ['Bless-ing and hon-our', "m :- .f |s :l |t :d' |"],
+    ];
+    for (const [words, under] of rows) {
+      const kept = splitWords(words);
+      while (kept.length && kept[kept.length - 1] === '-') kept.pop();
+      expect(splitWords(wordsFromSpaced(wordsAsSpaced(words, under), under))).toEqual(kept);
+    }
   });
 });
 

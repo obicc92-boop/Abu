@@ -554,9 +554,16 @@ const System = memo(function System(props: SystemProps) {
                       </Text>
                     );
                     return onCell ? (
-                      <Pressable key={seg.beat} onPress={() => onCell(ri, seg.beat, true)} accessible={false} style={[styles.lyricBox, { flex }]}>
+                      // Each beat under the words its own place to tap, past the last syllable too, so typing starts
+                      // under the note tapped (words go where they're typed: src/components/line-rows.tsx).
+                      <View key={seg.beat} style={[styles.lyricBox, { flex }]}>
                         {text}
-                      </Pressable>
+                        <View style={styles.lyricTaps}>
+                          {Array.from({ length: seg.span }, (_, b) => (
+                            <Pressable key={b} onPress={() => onCell(ri, seg.beat + b, true)} accessible={false} style={{ flex: widths[from + b] ?? 1 }} />
+                          ))}
+                        </View>
+                      </View>
                     ) : (
                       <View key={seg.beat} style={[styles.lyricBox, { flex }, big && { paddingBottom: 6 }]}>
                         {text}
@@ -1046,6 +1053,7 @@ const styles = StyleSheet.create({
   note: { fontFamily: fonts.mono },
   noteNow: { fontFamily: fonts.monoBold },
   lyricBox: { minWidth: 0, paddingTop: 1, paddingBottom: 3, paddingLeft: 2 },
+  lyricTaps: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, flexDirection: 'row' },
   lyric: { fontFamily: fonts.body },
   lyricNow: { fontFamily: fonts.heavy },
   markLine: { fontFamily: fonts.body, letterSpacing: 0.3, paddingLeft: 2, marginBottom: 1 },

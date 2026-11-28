@@ -32,10 +32,10 @@ import Svg, { Path } from 'react-native-svg';
 import { keepCursor, placeCursor } from '@/lib/field-cursor';
 import { lowMarksShown, lowMarksTyped, type Selection } from '@/lib/solfa-keys';
 import { barNumbers, checkRows } from '@/scan/bar-check';
-import { alignedRows, barColumns, wordsAsSpaced, wordsUnderNotes, type LineRow } from '@/scan/line-text';
+import { alignedRows, barColumns, wordsAsSpaced, wordsFromSpaced, wordsUnderNotes, type LineRow } from '@/scan/line-text';
 import { beatOffset } from '@/score/bars';
 import { rowsLine } from '@/score/layout';
-import { partName, type ParsedSong } from '@/solfa';
+import { partName, splitWords, type ParsedSong } from '@/solfa';
 import { makeStyles, useColors } from '@/theme/theme';
 import { fonts, partColor, partInk } from '@/theme/tokens';
 
@@ -80,8 +80,11 @@ export interface LineRowsProps {
   activeBeat?: number;
   /** A row is touched: it's to be typed in, starting from its text as shown. */
   onStart(row: number, shown: string): void;
-  /** The row's text as typed. */
-  onType(row: number, text: string): void;
+  /**
+   * The row's text as typed; and for a row of words, the words to keep (`saved`): each syllable with the note it's
+   * typed under (`wordsFromSpaced`), so words spaced under their notes stay there.
+   */
+  onType(row: number, text: string, saved?: string): void;
   onSelection(sel: Selection): void;
   /** The row is left (not just the keys touched, or the keyboards switched). */
   onLeave(row: number): void;
@@ -140,15 +143,25 @@ export function LineRows(props: LineRowsProps) {
     const j = notesAbove(i);
     return j >= 0 ? wordsUnderNotes(valueOf(i), valueOf(j), WORDS_CHAR) : null;
   });
-  // A row of words tapped to type in starts as it's laid out, each syllable under its note, in the notes' type:
-  // typing keeps them there. Leaving it, the spaces are tidied away (they don't change the words).
+  // A row of words tapped to type in starts as it's laid out, each syllable under its note, in the notes' type.
+  // It's free text: spaces move a word along, and each syllable is kept with the note it's typed under (owner's
+  // request, 28 November 2026: words spaced under their notes went back to the left when saved).
   const startText = (i: number) => {
     if (rows[i].part) return shown[i] ?? '';
     const j = notesAbove(i);
     return j >= 0 ? wordsAsSpaced(rows[i].text, valueOf(j)) : (shown[i] ?? '');
   };
+  const savedWords = (i: number, typed: string) => {
+    const j = notesAbove(i);
+    return j >= 0 ? wordsFromSpaced(typed, valueOf(j)) : typed.replace(/\s+/g, ' ').trim();
+  };
+  const type = (i: number, typed: string) => handlers.onType(i, typed, rows[i].part ? undefined : savedWords(i, typed));
   const leave = (i: number) => {
-    if (!rows[i].part && editing?.row === i && /\s{2}/.test(editing.value)) handlers.onType(i, editing.value.replace(/\s+/g, ' ').trim());
+    // Kept as typed already; but in case the words were put back some other way.
+    if (!rows[i].part && editing?.row === i) {
+      const saved = savedWords(i, editing.value);
+      if (splitWords(saved).join(' ') !== splitWords(rows[i].text).join(' ')) handlers.onType(i, editing.value, saved);
+    }
     handlers.onLeave(i);
   };
   // Each row's bars as shown, with the ones that don't add up.
@@ -193,8 +206,15 @@ export function LineRows(props: LineRowsProps) {
   useEffect(() => {
     const p = pending.current;
     if (!p || !editing || editing.row !== p.row) return;
+    const words = !rows[p.row]?.part;
+    const at = words ? beatOffset(valueOf(p.notes), p.beat) : beatOffset(editing.value, p.beat);
+    // A row of words tapped under a note past its last word: spaced out to there, to type under that note (the
+    // cursor's placed once it's that long).
+    if (words && at > editing.value.length) {
+      type(p.row, editing.value.padEnd(at));
+      return;
+    }
     pending.current = null;
-    const at = rows[p.row]?.part ? beatOffset(editing.value, p.beat) : Math.min(editing.value.length, beatOffset(valueOf(p.notes), p.beat));
     const sel = { start: at, end: at };
     requestAnimationFrame(() => {
       placeCursor(fields.current[p.row], sel);
@@ -360,6 +380,7 @@ export function LineRows(props: LineRowsProps) {
                       handlers.onField(k, f);
                     }}
                     onLeave={leave}
+                    onType={type}
                     editing={editing}
                     label={label}
                     i={i}

@@ -236,19 +236,80 @@ export function wordsUnderNotes(words: string, notes: string, width = 1): { text
   return out;
 }
 
+const isHold = (w: string) => w === '-' || w === '_';
+
+/** The note whose column is nearest `at` (the first of two as near). */
+function nearestNote(columns: number[], at: number): number {
+  let best = 0;
+  columns.forEach((c, k) => {
+    if (Math.abs(c - at) < Math.abs(columns[best] - at)) best = k;
+  });
+  return best;
+}
+
 /**
  * A row of words as text to type in, each syllable starting in its note's column, with spaces between (owner's
  * report, 21 November 2026: tapping a row of words to fix it lost how it lined up under the notes). In the notes'
- * type, so typing keeps the syllables in place; spaces don't change the words (`splitWords`).
+ * type, so typing keeps the syllables in place. A note with no syllable of its own (a `-` in the words) is left
+ * as space, so the row reads as a sheet does; `wordsFromSpaced` reads it back the same. Only where a syllable
+ * can't sit at its own note's column (a long one before it runs over) is the `-` written, to keep its place.
  */
 export function wordsAsSpaced(words: string, notes: string): string {
   const columns = noteColumns(notes);
   let out = '';
+  // The notes of `-` passed over, not written yet.
+  let skipped: number[] = [];
+  let last = -1;
+  const put = (text: string, at: number) => {
+    out = out ? out.padEnd(at) + text : ' '.repeat(at) + text;
+  };
   splitWords(words).forEach((w, k) => {
-    const at = Math.max(k < columns.length ? columns[k] : 0, out ? out.length + 1 : 0);
-    out = out.padEnd(at) + w;
+    if (isHold(w)) {
+      skipped.push(k);
+      return;
+    }
+    const own = k < columns.length ? columns[k] : null;
+    if (own !== null && (!out || own >= out.length + 2)) {
+      // Where it's typed decides its note (two spaces or more before it): at its note's column.
+      put(w, own);
+    } else if (out && !skipped.length) {
+      // One space after the syllable before: the next note.
+      put(w, out.length + 1);
+    } else {
+      // The notes passed over written as `-`, each the next note on.
+      [...skipped, k].forEach((n, i) => put(n === k ? w : '-', !out && i === 0 ? (columns[n] ?? 0) : out.length + 1));
+    }
+    skipped = [];
+    last = k;
   });
-  return out;
+  return last < 0 ? '' : out;
+}
+
+/**
+ * A row of words typed under its notes, as the words to keep: each syllable with the note it's typed under (owner's
+ * request, 28 November 2026: "just give the editor the space… the words can be anywhere under the solfa", after
+ * words spaced under their notes went back to the left when saved). A word typed two spaces or more after the
+ * one before (or the row's first) goes with the note nearest where it starts; one typed a single space after the
+ * one before, and each syllable of a word after its first (`Chi-ne-ke`), with the next note. Notes passed over
+ * get a `-`: no syllable of their own. Never a note before the syllable before's.
+ */
+export function wordsFromSpaced(typed: string, notes: string): string {
+  const columns = noteColumns(notes);
+  if (!columns.length) return typed.replace(/\s+/g, ' ').trim();
+  const out: string[] = [];
+  let end = 0;
+  for (const m of typed.matchAll(/\S+/g)) {
+    const start = m.index ?? 0;
+    splitWords(m[0]).forEach((piece, p) => {
+      const free = p === 0 && (!out.length || start - end >= 2);
+      const k = free ? Math.max(out.length, nearestNote(columns, start)) : out.length;
+      while (out.length < k) out.push('-');
+      out.push(piece);
+    });
+    end = start + m[0].length;
+  }
+  while (out.length && isHold(out[out.length - 1])) out.pop();
+  return out.join(' ');
 }
 
 /**
