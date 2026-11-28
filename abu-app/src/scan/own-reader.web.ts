@@ -6,7 +6,7 @@
  */
 import { boxedSystems, notesIn, pageRules, readBoxedSystem, ruleY, type RowReading } from './boxes';
 import { groupLines, notesRows, pageRows, partsFor, skewOf } from './page-lines';
-import { barsFromTable, findRows, greedy, notesLikeness, ruledBorders, tableBorders, toText, type Gray, type RowBox } from './rows';
+import { barsFromTable, evenPaper, findRows, greedy, notesLikeness, ruledBorders, tableBorders, toText, type Gray, type RowBox } from './rows';
 import type { Box, FoundLine } from './types';
 
 interface Meta {
@@ -102,7 +102,8 @@ function band(canvas: HTMLCanvasElement, row: RowBox, meta: Meta): { data: Float
 /** A line's rows of notes, read by SolfaScores' own model: one row of SolfaScores text per part, and how sure it was. */
 export async function readLineOwn(canvas: HTMLCanvasElement, parts: string[], wordsRows = 1): Promise<{ text: string; sure: number }> {
   const { ort, session, meta } = await reader();
-  const gray = grayOf(canvas);
+  // A photo's grey paper brought up to white first: rows and borders are found by a fixed darkness.
+  const gray = evenPaper(grayOf(canvas));
   const rows = findRows(gray, parts.length + wordsRows, parts.length);
   const borders = rows.length >= 2 ? tableBorders(gray, rows) : [];
   const ruled = rows.length >= 2 ? ruledBorders(gray) : [];

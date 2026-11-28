@@ -22,6 +22,62 @@ export interface RowBox {
   right: number;
 }
 
+/** Paper at least this bright (the picture's middle pixel) is left as it is: the ink here is under 150. */
+const WHITE_ENOUGH = 200;
+/** The blocks the paper's brightness is judged in, in pixels. */
+const PAPER_BLOCK = 32;
+
+/**
+ * A photo's paper brought up to white, its ink kept dark (owner's hymn-book photos, 28 November 2026: their
+ * grey paper, 134 to 163 bright, was darker than the 150 that rows and borders here take for ink, so every
+ * line read as nothing). Each pixel is scaled by the paper's brightness around it: the 90th percentile of
+ * each 32-pixel block (mostly paper, even among writing), blended between blocks, so a shadow across the page
+ * goes too. A picture whose paper is near white already comes back as it was.
+ */
+export function evenPaper(img: Gray): Gray {
+  const { data, width: w, height: h } = img;
+  const counts = new Uint32Array(256);
+  for (let i = 0; i < data.length; i++) counts[data[i]]++;
+  let seen = 0;
+  let paper = 255;
+  for (let v = 0; v < 256; v++) {
+    seen += counts[v];
+    if (seen >= data.length / 2) {
+      paper = v;
+      break;
+    }
+  }
+  if (paper >= WHITE_ENOUGH || !data.length) return img;
+  const bw = Math.ceil(w / PAPER_BLOCK);
+  const bh = Math.ceil(h / PAPER_BLOCK);
+  const level = new Float32Array(bw * bh);
+  const block = new Uint8Array(PAPER_BLOCK * PAPER_BLOCK);
+  for (let by = 0; by < bh; by++)
+    for (let bx = 0; bx < bw; bx++) {
+      let n = 0;
+      for (let y = by * PAPER_BLOCK; y < Math.min(h, (by + 1) * PAPER_BLOCK); y++)
+        for (let x = bx * PAPER_BLOCK; x < Math.min(w, (bx + 1) * PAPER_BLOCK); x++) block[n++] = data[y * w + x];
+      const sorted = block.subarray(0, n).sort();
+      level[by * bw + bx] = Math.max(1, sorted[Math.floor(0.9 * (n - 1))]);
+    }
+  const out = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    const fy = Math.min(bh - 1, Math.max(0, (y + 0.5) / PAPER_BLOCK - 0.5));
+    const y0 = Math.floor(fy);
+    const y1 = Math.min(bh - 1, y0 + 1);
+    const ty = fy - y0;
+    for (let x = 0; x < w; x++) {
+      const fx = Math.min(bw - 1, Math.max(0, (x + 0.5) / PAPER_BLOCK - 0.5));
+      const x0 = Math.floor(fx);
+      const x1 = Math.min(bw - 1, x0 + 1);
+      const tx = fx - x0;
+      const around = (level[y0 * bw + x0] * (1 - tx) + level[y0 * bw + x1] * tx) * (1 - ty) + (level[y1 * bw + x0] * (1 - tx) + level[y1 * bw + x1] * tx) * ty;
+      out[y * w + x] = Math.min(255, Math.round((255 * data[y * w + x]) / around));
+    }
+  }
+  return { data: out, width: w, height: h };
+}
+
 /**
  * Rows of writing, top to bottom, by where the ink is. A table's lines are
  * ignored and thin bands (slurs, specks) dropped. When fewer rows are found

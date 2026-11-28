@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 
-import { agreedBorders, barsFromBorders, barsFromTable, borderX, findRows, greedy, notesLikeness, ruledBorders, runsThrough, tableBorders, toText, type Border, type Gray } from '../rows';
+import { agreedBorders, barsFromBorders, barsFromTable, borderX, evenPaper, findRows, greedy, notesLikeness, ruledBorders, runsThrough, tableBorders, toText, type Border, type Gray } from '../rows';
 
 /** A white picture with dark blocks standing in for rows of writing, and a table's lines. */
 function picture(width: number, height: number, blocks: [number, number][], tableLines: number[] = []): Gray {
@@ -86,6 +86,34 @@ function lay(...parts: string[]): { tokens: string[]; xs: number[] } {
   });
   return { tokens, xs };
 }
+
+describe('a photo of grey paper', () => {
+  /** The picture above on paper `paper` bright, its ink `ink`, the light falling off towards the bottom. */
+  const photo = (paper: number, ink: number) => {
+    const img = picture(400, 200, [[20, 40], [70, 90], [120, 140]]);
+    const data = img.data.map((v, i) => Math.round((v ? paper : ink) * (1 - (0.15 * Math.floor(i / 400)) / 200)));
+    return { ...img, data: Uint8Array.from(data) };
+  };
+
+  it('brings the paper up to white, keeping the ink dark, so the rows are found', () => {
+    // Paper 140 bright and darker at the foot (as the owner's hymn-book photos), the ink 50.
+    const grey = photo(140, 50);
+    expect(findRows(grey)).not.toHaveLength(3);
+    const even = evenPaper(grey);
+    expect(even.data[5 * 400 + 5]).toBeGreaterThan(240);
+    expect(even.data[30 * 400 + 20]).toBeLessThan(120);
+    expect(findRows(even).map((r) => [r.top, r.bottom])).toEqual([
+      [19, 41],
+      [69, 91],
+      [119, 141],
+    ]);
+  });
+
+  it('leaves a picture on white paper as it is', () => {
+    const white = picture(400, 200, [[20, 40]]);
+    expect(evenPaper(white)).toBe(white);
+  });
+});
 
 describe('a sheet set in a table', () => {
   const ROWS: [number, number][] = [
