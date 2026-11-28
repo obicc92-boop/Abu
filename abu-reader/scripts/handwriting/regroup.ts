@@ -12,8 +12,10 @@ async function main() {
   const mod = process.env.GROUP ? await import(resolve(process.env.GROUP)) : app;
   const pages = JSON.parse(readFileSync(from, 'utf8'));
   for (const p of pages) {
-    p.isNotes = (mod.notesRows ?? app.notesRows)(p.reads);
-    p.lines = (mod.groupLines ?? app.groupLines)(p.rows, p.isNotes, p.rules, p.long, parts).lines;
+    // The bar lines joining rows, where find-lines.ts wrote them (since 28 November 2026).
+    const grouped = (mod.groupLines ?? app.groupLines)(p.rows, (mod.notesRows ?? app.notesRows)(p.reads), p.rules, p.long, parts, p.links ? { links: p.links, reads: p.reads } : undefined);
+    p.lines = grouped.lines;
+    p.isNotes = grouped.notes ?? (mod.notesRows ?? app.notesRows)(p.reads);
   }
   writeFileSync(to, JSON.stringify(pages));
 }

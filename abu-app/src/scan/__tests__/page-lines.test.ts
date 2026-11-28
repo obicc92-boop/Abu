@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 
-import { groupLines, groupRows, notesRows, pageRows, partsFor, skewOf } from '../page-lines';
+import { garbled, groupByBarLines, groupLines, groupRows, notesRows, pageRows, partsFor, skewOf, type RowRead } from '../page-lines';
 import type { Gray, RowBox } from '../rows';
 
 /** A white page with rows of "writing" (short strokes, every third column) and ruled lines across it. */
@@ -62,6 +62,23 @@ describe('rows on a page', () => {
     const { rows, long } = pageRows(img);
     expect(rows).toHaveLength(8);
     expect(long.some((y) => y > 130 && y < 150)).toBe(true);
+  });
+
+  it('counts the bar lines running down from each row into the next', () => {
+    // Two systems of three rows; each system's bar lines run from its first row's top to its last row's
+    // bottom (as a printed hymn book draws them), at five places across.
+    const rows = layout(2, 3, 14, 6, 30, 40);
+    const img = page(600, 300, rows);
+    for (const [first, last] of [
+      [0, 2],
+      [3, 5],
+    ])
+      for (const x of [100, 200, 300, 400, 500]) for (let y = rows[first][0]; y < rows[last][1]; y++) img.data[y * 600 + x] = 20;
+    const { rows: found, links } = pageRows(img);
+    expect(found).toHaveLength(6);
+    expect(links).toEqual([5, 5, 0, 5, 5]);
+    // Rows with no bar lines aren't joined: their letters stop at each row.
+    expect(pageRows(page(600, 300, rows)).links).toEqual([0, 0, 0, 0, 0]);
   });
 
   it('sets ruled lines aside as places to split', () => {
@@ -322,7 +339,7 @@ describe('grouping rows into lines of music', () => {
     it('groups as before when every box holds one part (a staff under each part’s row of sol-fa)', () => {
       const { rows, long } = boxed([2, 2, 2, 2, 2, 2, 2, 2]);
       const isNotes = rows.map((_, i) => i % 2 === 1);
-      expect(groupLines(rows, isNotes, long, long, 4)).toEqual({ lines: groupRows(rows, isNotes, long, 4), parts: 4 });
+      expect(groupLines(rows, isNotes, long, long, 4)).toEqual({ lines: groupRows(rows, isNotes, long, 4), parts: 4, notes: isNotes });
     });
 
     it('keeps a system with a row of words under every part as one line, though it is taller', () => {
@@ -335,8 +352,148 @@ describe('grouping rows into lines of music', () => {
       const rows = layout(2, 4).map(([t, b]) => box(t, b));
       const isNotes = rows.map(() => true);
       const under = rows.slice(0, -1).map((r) => r.bottom + 3);
-      expect(groupLines(rows, isNotes, under, under, 4)).toEqual({ lines: groupRows(rows, isNotes, under, 4), parts: 4 });
+      expect(groupLines(rows, isNotes, under, under, 4)).toEqual({ lines: groupRows(rows, isNotes, under, 4), parts: 4, notes: isNotes });
     });
+  });
+
+  describe('on a printed page whose bar lines run down through each system', () => {
+    const NOTES = 's :s :m | s :- :- | m\' :r\' :d\' | s :- :l |';
+    const notesRead = (text = NOTES, width = 0.8): RowRead => ({ score: 0.98, beats: (text.match(/:/g) ?? []).length, text, height: 14, width });
+    const wordsRead = (text = '', width = 0.8): RowRead => ({ score: text ? 0.9 : 0, beats: (text.match(/:/g) ?? []).length, text, height: 14, width });
+    /** Rows top to bottom, with the gaps after each: close in a system, wider between. */
+    const stack = (kinds: string, between: number[]) => {
+      const rows: RowBox[] = [];
+      let y = 20;
+      [...kinds].forEach((_, i) => {
+        rows.push(box(y, y + 14));
+        y += 14 + (between.includes(i) ? 24 : 6);
+      });
+      return rows;
+    };
+
+    it('takes the rows the bar lines join as a line, each with its own number of parts', () => {
+      // A three-part chorus (S A B, words), a four-part one (S A T B, words), then a verse's melody and its
+      // words, its bar lines through both. N notes, W words.
+      const kinds = 'NNNWNNNNWNW';
+      const rows = stack(kinds, [3, 8]);
+      const reads = [...kinds].map((k) => (k === 'N' ? notesRead() : wordsRead('Che ta-nu ihe')));
+      const isNotes = [...kinds].map((k) => k === 'N');
+      const links = [5, 5, 0, 0, 5, 5, 5, 0, 0, 4];
+      for (const parts of [4, 0]) {
+        const { lines, notes } = groupLines(rows, isNotes, [], [], parts, { links, reads });
+        expect(lines).toEqual([
+          [0, 1, 2, 3],
+          [4, 5, 6, 7, 8],
+          [9, 10],
+        ]);
+        expect(lines.map((l) => l.filter((i) => notes[i]).length)).toEqual([3, 4, 1]);
+      }
+      // Without the bar lines, "not sure" takes every row of notes for a line of its own.
+      expect(groupLines(rows, isNotes, [], [], 0).lines).toHaveLength(8);
+    });
+
+    it('takes a row of words that read as notes for words: its beat marks are few, or it isn’t sol-fa', () => {
+      const kinds = 'NNNWNNNW';
+      const rows = stack(kinds, [3]);
+      const reads = [notesRead(), notesRead(), notesRead(), notesRead('dflox\' :-de :m\' |'), notesRead(), notesRead(), notesRead(), notesRead('mma-ta | m-dm\' :- | ma |')];
+      const isNotes = rows.map(() => true);
+      const links = [5, 5, 3, 0, 5, 5, 4];
+      const { lines, notes } = groupLines(rows, isNotes, [], [], 0, { links, reads });
+      expect(lines).toEqual([
+        [0, 1, 2, 3],
+        [4, 5, 6, 7],
+      ]);
+      expect(notes).toEqual([true, true, true, false, true, true, true, false]);
+    });
+
+    it('keeps a part that comes in late, with a short row as thick with beat marks', () => {
+      // Hosanna: S and A from the start, T and B only in the last bar.
+      const kinds = 'NNNNW';
+      const rows = stack(kinds, []);
+      const late = 'm | d :d :- |';
+      const reads = [notesRead(), notesRead(), notesRead(late, 0.25), notesRead(late, 0.25), wordsRead('Ho- sa nna dị- rị O-nye')];
+      const { lines, notes } = groupLines(rows, rows.map((_, i) => i < 4), [], [], 4, { links: [4, 4, 4, 0], reads });
+      expect(lines).toEqual([[0, 1, 2, 3, 4]]);
+      expect(notes).toEqual([true, true, true, true, false]);
+    });
+
+    it('gives a line the words close under it, but not verses printed further down', () => {
+      const kinds = 'NNNNWWWW';
+      const rows = stack(kinds, []);
+      const reads = [...kinds].map((k) => (k === 'N' ? notesRead() : wordsRead()));
+      const isNotes = [...kinds].map((k) => k === 'N');
+      const { lines } = groupLines(rows, isNotes, [], [], 4, { links: [3, 3, 3, 0, 0, 0, 0], reads });
+      // At most one row of words for each part: four here, so the fifth row of text on isn't the line's.
+      expect(lines).toEqual([[0, 1, 2, 3, 4, 5, 6, 7]]);
+      const more = stack('NNWWWW', []);
+      const two = groupLines(more, [true, true, false, false, false, false], [], [], 4, { links: [3, 0, 0, 0, 0], reads: [notesRead(), notesRead(), wordsRead(), wordsRead(), wordsRead(), wordsRead()] });
+      expect(two.lines).toEqual([[0, 1, 2, 3]]);
+    });
+
+    it('joins a system whose bar lines stop at the words between its upper and lower parts', () => {
+      // S A, two rows of words, T B (drawn by hand a pair at a time), then S A, words, T B, a wider gap between.
+      const kinds = 'NNWWNNNNWNN';
+      const rows = stack(kinds, [5]);
+      const reads = [...kinds].map((k) => (k === 'N' ? notesRead() : wordsRead('Rise, ye chil-dren')));
+      const isNotes = [...kinds].map((k) => k === 'N');
+      const links = [3, 0, 0, 0, 3, 0, 3, 0, 0, 3];
+      for (const parts of [4, 0]) {
+        const { lines, notes } = groupLines(rows, isNotes, [], [], parts, { links, reads });
+        expect(lines).toEqual([
+          [0, 1, 2, 3, 4, 5],
+          [6, 7, 8, 9, 10],
+        ]);
+        expect(lines.map((l) => l.filter((i) => notes[i]).length)).toEqual([4, 4]);
+      }
+    });
+
+    it('keeps lines of two parts apart when they’re as far apart as the lines around them', () => {
+      // Three systems of S A and their words, the same gap after each.
+      const kinds = 'NNWNNWNNW';
+      const rows = stack(kinds, [2, 5]);
+      const reads = [...kinds].map((k) => (k === 'N' ? notesRead() : wordsRead('All my in-ten-tion')));
+      const isNotes = [...kinds].map((k) => k === 'N');
+      expect(groupLines(rows, isNotes, [], [], 4, { links: [3, 0, 0, 3, 0, 0, 3, 0], reads }).lines).toEqual([
+        [0, 1, 2],
+        [3, 4, 5],
+        [6, 7, 8],
+      ]);
+      // A cantor's line over the choir's, words between each one's rows (the bar lines run through them).
+      const call = stack('NWNWNWNW', [3]);
+      const callReads = [...'NWNWNWNW'].map((k) => (k === 'N' ? notesRead() : wordsRead('Sọ Chukwu k’a-na')));
+      const callNotes = [...'NWNWNWNW'].map((k) => k === 'N');
+      expect(groupLines(call, callNotes, [], [], 4, { links: [4, 4, 4, 0, 4, 4, 4], reads: callReads }).lines).toEqual([
+        [0, 1, 2, 3],
+        [4, 5, 6, 7],
+      ]);
+    });
+
+    it('leaves the grouping to the gaps where the bar lines run from one system into the next (a table)', () => {
+      const rows = layout(3, 5).map(([t, b]) => box(t, b));
+      const isNotes = rows.map((_, i) => i % 5 !== 2);
+      const reads = rows.map((_, i) => (isNotes[i] ? notesRead() : wordsRead()));
+      const links = rows.slice(1).map(() => 6);
+      expect(groupByBarLines(rows, isNotes, reads, links, [], 4)).toBeNull();
+      expect(groupLines(rows, isNotes, [], [], 4, { links, reads }).lines).toEqual(groupRows(rows, isNotes, [], 4));
+    });
+
+    it('leaves the grouping to the ruled lines on a page that boxes its systems', () => {
+      const rows = layout(3, 5, 14, 6, 6).map(([t, b]) => box(t, b));
+      const isNotes = rows.map((_, i) => i % 5 !== 2);
+      const long = [rows[4].bottom + 3, rows[9].bottom + 3];
+      const reads = rows.map((_, i) => (isNotes[i] ? notesRead() : wordsRead()));
+      // Bar lines that would join the first system's first two rows only.
+      const links = rows.slice(1).map((_, i) => (i === 0 ? 5 : 0));
+      expect(groupLines(rows, isNotes, long, long, 4, { links, reads }).lines).toEqual(groupLines(rows, isNotes, long, long, 4).lines);
+    });
+  });
+
+  it('tells a reading that isn’t sol-fa', () => {
+    expect(garbled("s :s.d' :t.l | s :- :- | d1 :s1.l1 :s1.f1 |")).toBe(0);
+    expect(garbled('m :- :- | : : | m :- :d.m | - :.,d |')).toBe(0);
+    expect(garbled("dflox' :-de :m' |")).toBeGreaterThanOrEqual(0.6);
+    expect(garbled("mma-ta | m-dm' :- | x :m'-ta |")).toBeGreaterThanOrEqual(0.6);
+    expect(garbled('')).toBe(0);
   });
 
   it('names the parts', () => {

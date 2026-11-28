@@ -11,9 +11,11 @@
  *    words (own-reader.web.ts).
  * 3. `groupLines`: on a page whose systems are boxed by ruled lines across
  *    it, the lines are cut there, each with its own number of parts (a
- *    semi-chorus of three among lines of four). Otherwise `groupRows`: rows
- *    grouped into lines with the same number of parts each, breaking at the
- *    clearest gaps.
+ *    semi-chorus of three among lines of four). Otherwise, where bar lines
+ *    run down through each system's parts (a printed hymn book),
+ *    `groupByBarLines`: the rows they join, each line with its own number of
+ *    parts. Otherwise `groupRows`: rows grouped into lines with the same
+ *    number of parts each, breaking at the clearest gaps.
  */
 import type { Gray, RowBox } from './rows';
 
@@ -219,12 +221,55 @@ function drawnLines(ink: Uint8Array, skip: Uint8Array, w: number, h: number, lea
   return lines;
 }
 
+/** Bar lines joining two rows: fewer may be a letter's long stroke that touches the row below. */
+const LINKED = 2;
+
+/**
+ * How many bar lines run from each row down into the next (one number for each row but the last). A
+ * printed sheet draws each system's bar lines down through all its parts (and often its words), so rows
+ * they join are one line of music, and rows nothing joins belong to different lines (owner's hymn-book
+ * photos, 28 November 2026). A bar line here is an upright run of ink (a pixel either way, gaps of up to
+ * two pixels) from the middle of one row to the middle of the next; runs within 3 pixels of each other
+ * count once. Table borders drawn through a handwritten sheet join its rows the same way.
+ */
+function barLinks(ink: Uint8Array, w: number, h: number, rows: RowBox[]): number[] {
+  if (rows.length < 2) return [];
+  const least = 1.2 * (median(rows.map((r) => r.bottom - r.top)) || 1);
+  const runs: { x: number; top: number; bottom: number }[] = [];
+  for (let x = 0; x < w; x++) {
+    let start = -1;
+    let last = -1;
+    for (let y = 0; y <= h; y++) {
+      const on = y < h && (ink[y * w + x] || (x > 0 && ink[y * w + x - 1]) || (x + 1 < w && ink[y * w + x + 1]));
+      if (on) {
+        if (start < 0) start = y;
+        last = y;
+      } else if (start >= 0 && (y - last > 2 || y === h)) {
+        if (last - start + 1 >= least) runs.push({ x, top: start, bottom: last });
+        start = -1;
+      }
+    }
+  }
+  return rows.slice(0, -1).map((a, i) => {
+    const b = rows[i + 1];
+    let n = 0;
+    let prev = -Infinity;
+    for (const r of runs) {
+      if (r.top > (a.top + a.bottom) / 2 || r.bottom < (b.top + b.bottom) / 2) continue;
+      if (r.x - prev > 3) n++;
+      prev = r.x;
+    }
+    return n;
+  });
+}
+
 /**
  * The page's rows of writing, top to bottom, and the ruled lines across it
  * (their y): `rules` all of them, `long` the ones across enough of the page
- * to box a system (a slur or an underline is shorter).
+ * to box a system (a slur or an underline is shorter). `links`: the bar lines
+ * running from each row down into the next (`barLinks`).
  */
-export function pageRows(img: Gray): { rows: RowBox[]; rules: number[]; long: number[] } {
+export function pageRows(img: Gray): { rows: RowBox[]; rules: number[]; long: number[]; links: number[] } {
   const { width: w, height: h } = img;
   const ink = inkOf(img);
   // Long ruled lines aren't writing: vertical ones (a table's borders, through several rows) and
@@ -293,7 +338,7 @@ export function pageRows(img: Gray): { rows: RowBox[]; rules: number[]; long: nu
   for (let y = 0; y < h; y++) profile[y] = (raw[Math.max(0, y - 1)] + raw[y] + raw[Math.min(h - 1, y + 1)]) / 3;
   const positive = Array.from(profile).filter((v) => v > 0);
   const top = positive.length ? percentile(positive, 0.98) : 0;
-  if (top <= 0) return { rows: [], rules, long };
+  if (top <= 0) return { rows: [], rules, long, links: [] };
 
   let bands: [number, number][] = [];
   for (let y = 0; y < h; y++) {
@@ -369,7 +414,7 @@ export function pageRows(img: Gray): { rows: RowBox[]; rules: number[]; long: nu
     const size = Math.min((b - t) * 1.6, Math.max((b - t) * 0.7, (coreBottom - coreTop + 1) * 1.9));
     rows.push({ top: t, bottom: b, baseline: coreBottom + 1, size, left, right });
   }
-  return { rows, rules, long };
+  return { rows, rules, long, links: barLinks(ink, w, h, rows) };
 }
 
 /** How each row read: whether it's notes is judged against the page's other rows. */
@@ -431,6 +476,125 @@ export function notesRows(reads: RowRead[]): boolean[] {
       WEIGHTS.notes * Math.min(3, (text.match(NOTE_NAME)?.length ?? 0) / Math.max(1, usual));
     return 1 / (1 + Math.exp(-z)) >= NOTES_AT;
   });
+}
+
+const NOTE_READ = "(?:de|re|fe|se|le|ta|ra|ma|lo|ba|[drmfslt])[',12]*";
+const BEAT_READ = new RegExp(`^(?:[.,]*(?:-|x|${NOTE_READ})(?:\\s*[.,]+\\s*(?:-|x|${NOTE_READ}))*\\.?)?$`);
+
+/**
+ * How much of a row's reading isn't sol-fa: the share of its beats (between beat marks and bar lines)
+ * holding something other than notes and holds (letters run together, "mma-ta", "dflox'", as a row of
+ * words read as notes comes out). Rows of notes read 0 to 0.2 on the owner's hymn-book photos and nearly
+ * all under 0.5 on 50 handwritten pages; rows of words that the reader gave beat marks, mostly 0.5 or more.
+ */
+export function garbled(text: string): number {
+  const beats = text
+    .split(/[:|/]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return beats.length ? beats.filter((s) => !BEAT_READ.test(s)).length / beats.length : 0;
+}
+/** A row reading this garbled is words, however it weighs in `notesRows`. */
+const GARBLED = 0.6;
+/** The share of a page's rows of notes that bar lines must join for its lines to be found by them. */
+const BARRED = 0.75;
+
+/**
+ * Lines of music where a sheet's bar lines run down through each system's parts (`barLinks`), as in a
+ * printed hymn book (owner's request, 28 November 2026: its four parts were read one part to a line):
+ * rows the bar lines join are one line, each with its own number of parts (a hymn's SATB, a three-part
+ * chorus, a verse's melody and its words, a cantor's line over the choir's), and a row of notes nothing
+ * joins is a line of its own. Rows of words close under a line are its words (one under each part at most,
+ * so verses printed below aren't). Within joined rows, a row of words read as notes is told by its beat
+ * marks: the parts of one system have about as many, but for a part that comes in late (a short row, as
+ * thick with them). Null when the bar lines don't join most of the page's rows of notes in systems, or join
+ * more rows of notes than a system has (a handwritten table's borders running from one system into the next).
+ * `notes` is which rows are notes, so judged.
+ */
+export function groupByBarLines(
+  rows: RowBox[],
+  isNotes: boolean[],
+  reads: RowRead[],
+  links: number[],
+  long: number[],
+  parts = 0,
+): { lines: number[][]; notes: boolean[] } | null {
+  if (rows.length < 2 || links.length !== rows.length - 1 || reads.length !== rows.length) return null;
+  // A page drawn so: bar lines join most rows of notes that come one after another (the parts of a system;
+  // a hymn's unison verses between, a melody and its words, needn't be), or most rows of notes to a row next
+  // to them (a melody line with its words under it, again and again). On handwritten sheets a long stroke or
+  // a border here and there joins a few rows only.
+  const joined = (i: number) => i >= 0 && i < links.length && links[i] >= LINKED;
+  const pairs = links.map((_, i) => i).filter((i) => isNotes[i] && isNotes[i + 1]);
+  const noted = isNotes.flatMap((n, i) => (n ? [i] : []));
+  const share = Math.max(
+    pairs.length >= 2 ? pairs.filter(joined).length / pairs.length : 0,
+    noted.filter((i) => joined(i - 1) || joined(i)).length / Math.max(1, noted.length),
+  );
+  if (share < BARRED) return null;
+  const chains: number[][] = [[0]];
+  for (let i = 0; i + 1 < rows.length; i++) {
+    const ruled = long.some((y) => rows[i].bottom - 3 <= y && y <= rows[i + 1].top + 3);
+    if (links[i] >= LINKED && !ruled) chains[chains.length - 1].push(i + 1);
+    else chains.push([i + 1]);
+  }
+  const notes = [...isNotes];
+  const wordsLike = (i: number) => reads[i].text !== undefined && garbled(reads[i].text!) >= GARBLED;
+  for (const c of chains) {
+    const sure = c.filter((i) => isNotes[i] && reads[i].beats >= 1);
+    if (c.length < 2 || !sure.length) continue;
+    const usual = median(sure.map((i) => reads[i].beats));
+    const thick = (i: number) => reads[i].beats / Math.max(1e-6, reads[i].width ?? 1);
+    const thickest = Math.max(...sure.filter((i) => reads[i].beats >= 0.75 * usual).map(thick));
+    const widest = Math.max(...c.map((i) => reads[i].width ?? 1));
+    for (const i of c) {
+      const r = reads[i];
+      const full = r.beats >= 0.75 * usual;
+      const late = (r.width ?? 1) < 0.6 * widest && thick(i) >= 0.6 * thickest;
+      notes[i] = r.beats >= 1 && r.score >= 0.3 && (full || late) && !wordsLike(i);
+    }
+  }
+  const count = (c: number[]) => c.filter((i) => notes[i]).length;
+  const systems = chains.filter((c) => count(c) >= 2);
+  const inSystems = systems.reduce((n, c) => n + count(c), 0);
+  if (!(systems.length >= 2 || (systems.length === 1 && inSystems >= 0.5 * notes.filter(Boolean).length))) return null;
+  if (systems.some((c) => count(c) > Math.max(parts || 4, 4) + 2)) return null;
+  const rowHeight = median(rows.map((r) => r.bottom - r.top)) || 1;
+  const lines: number[][] = [];
+  for (const c of chains) {
+    if (count(c)) {
+      // From its first row of notes (a heading the bar lines touch isn't part of it).
+      lines.push(c.slice(c.findIndex((i) => notes[i])));
+      continue;
+    }
+    const line = lines[lines.length - 1];
+    if (!line) continue;
+    const last = line[line.length - 1];
+    const words = line.filter((i) => !notes[i]).length;
+    if (c[0] === last + 1 && rows[c[0]].top - rows[last].bottom <= 1.2 * rowHeight && words + c.length <= line.length - words) line.push(...c);
+  }
+  // Where the bar lines stop at the words between a system's upper and lower parts (S A, words, T B, drawn
+  // by hand a pair at a time), two lines of two parts or more side by side, with only words between, closer
+  // together than the lines around them are apart, and no more parts together than a line has, are one. (A
+  // cantor's line over the choir's has its words between its parts: the bar lines run through them.)
+  const gapBetween = (a: number[], b: number[]) => rows[b[0]].top - rows[a[a.length - 1]].bottom;
+  const sideBySide = (l: number[]) => {
+    const n = l.filter((i) => notes[i]);
+    return n[n.length - 1] - n[0] === n.length - 1;
+  };
+  const most = parts || 4;
+  for (let k = 0; k + 1 < lines.length; k++) {
+    const [a, b] = [lines[k], lines[k + 1]];
+    const lastNotes = Math.max(...a.filter((i) => notes[i]));
+    if (count(a) < 2 || count(b) < 2 || count(a) + count(b) > most || !sideBySide(a) || !sideBySide(b)) continue;
+    if (rows.slice(lastNotes + 1, b[0]).some((_, j) => notes[lastNotes + 1 + j])) continue;
+    let inside = 0;
+    for (let i = lastNotes; i < b[0]; i++) inside = Math.max(inside, rows[i + 1].top - rows[i].bottom);
+    const around = [k > 0 ? gapBetween(lines[k - 1], a) : NaN, k + 2 < lines.length ? gapBetween(b, lines[k + 2]) : NaN].filter((g) => !Number.isNaN(g));
+    if (!around.length || inside >= 0.6 * Math.min(...around)) continue;
+    lines.splice(k, 2, Array.from({ length: b[b.length - 1] - a[0] + 1 }, (_, j) => a[0] + j));
+  }
+  return { lines, notes };
 }
 
 /**
@@ -496,8 +660,10 @@ export function groupRows(rows: RowBox[], isNotes: boolean[], rules: number[], p
  * notes can't be counted on), and one holding more is split at its clearest
  * gaps near where each system should end. Boxes of two rows of notes are
  * lines of two parts, even with four asked for (two-part hymns are common).
- * Where the ruled lines don't box systems (none, or one under every row),
- * `groupRows` groups them as before. Boxes most of which hold one part and
+ * Where the ruled lines don't box systems (none, or one under every row), the
+ * bar lines joining each system's rows group them (`groupByBarLines`, given
+ * `bars`: the page's `links` and each row's reading), or else `groupRows`
+ * as before; `notes` says which rows were taken for notes. Boxes most of which hold one part and
  * its words are lines of their own when some box holds a system (a cantor's
  * verses after a refrain), and a box is cut into several systems only when
  * it has the rows of notes for them (a system with words under every part is
@@ -505,9 +671,28 @@ export function groupRows(rows: RowBox[], isNotes: boolean[], rules: number[], p
  * 2026): 284 of 318 systems cut exactly with four parts given (274 with "Not
  * sure"), against 263 (258) the day before; on 140 other pages, judged by eye
  * where the cutting changed, 39 → 63 systems right on the 17 pages changed.
+ * With bar lines and garbled readings (28 November 2026): 291 of 318 (283 with
+ * "Not sure"), and on the owner's 16 hymn-book photos, 17 of 88 → 76 (39 → 84
+ * with "Not sure").
  */
-export function groupLines(rows: RowBox[], isNotes: boolean[], rules: number[], long: number[], parts = 0): { lines: number[][]; parts: number } {
-  const before = () => ({ lines: groupRows(rows, isNotes, rules, parts), parts });
+export function groupLines(
+  rows: RowBox[],
+  isNotes: boolean[],
+  rules: number[],
+  long: number[],
+  parts = 0,
+  bars?: { links: number[]; reads: RowRead[] },
+): { lines: number[][]; parts: number; notes: boolean[] } {
+  // Where ruled lines don't box the systems: by the bar lines that join each system's rows, if they do
+  // (`groupByBarLines`), else by the gaps (`groupRows`). Given the rows' readings, a row reading as
+  // anything but sol-fa is words there (`garbled`).
+  const before = () => {
+    if (!bars) return { lines: groupRows(rows, isNotes, rules, parts), parts, notes: isNotes };
+    const notes = isNotes.map((n, i) => n && !(bars.reads[i]?.text !== undefined && garbled(bars.reads[i].text!) >= GARBLED));
+    const barred = groupByBarLines(rows, notes, bars.reads, bars.links, long, parts);
+    if (barred) return { ...barred, parts };
+    return { lines: groupRows(rows, notes, rules, parts), parts, notes };
+  };
   const crossed = (i: number, ys: number[]) => ys.some((y) => rows[i].bottom - 3 <= y && y <= rows[i + 1].top + 3);
   const rowHeight = median(rows.map((r) => r.bottom - r.top)) || 1;
   const boxes: number[][] = [[]];
@@ -604,7 +789,7 @@ export function groupLines(rows: RowBox[], isNotes: boolean[], rules: number[], 
     pieces[0] = [...b.rows.filter((i) => i < b.notes[0]), ...pieces[0]];
     lines.push(...pieces);
   }
-  return { lines, parts };
+  return { lines, parts, notes: isNotes };
 }
 
 /** Part names for a line with `n` rows of notes, top to bottom. */
